@@ -28,7 +28,7 @@ enum class HeaderCasing { LOWERCASE, CANONICAL }
 /** A failure injected with [FakeNotesServer.failNext]; consumed by the next request(s). */
 enum class FakeFailure { NETWORK_ERROR, SERVER_ERROR, UNAUTHORIZED }
 
-enum class Endpoint { LIST, GET_NOTE, CREATE, UPDATE, DELETE, SETTINGS, CAPABILITIES, UNKNOWN }
+enum class Endpoint { LIST, GET_NOTE, CREATE, UPDATE, DELETE, SETTINGS, CAPABILITIES, CLOUD_USER, DAV_GET, UNKNOWN }
 
 data class RecordedRequest(
     val method: HttpMethod,
@@ -90,6 +90,26 @@ class FakeNotesServer(
     var beforeDispatch: ((Endpoint) -> Unit)? = null
 
     var notesPath: String = "Notes"
+
+    /** The Nextcloud user id (`cloud/user`); WebDAV files live under it. May differ from the login name. */
+    var userId: String = "alice"
+    private val files = LinkedHashMap<String, Pair<ByteArray, Int>>()
+
+    /** Puts a file in the Vault at [vaultPath] (`media/a b.png`); the etag changes on every put. */
+    fun putFile(
+        vaultPath: String,
+        bytes: ByteArray,
+    ) {
+        val key = "$notesPath/$vaultPath"
+        files[key] = bytes to ((files[key]?.second ?: 0) + 1)
+    }
+
+    fun removeFile(vaultPath: String) {
+        files.remove("$notesPath/$vaultPath")
+    }
+
+    fun fileEtag(vaultPath: String): String? = files["$notesPath/$vaultPath"]?.let { hash("${it.first.size}/${it.second}") }
+
     var fileSuffix: String = ".md"
 
     val engine: MockEngine = MockEngine { request -> handle(request) }
@@ -251,6 +271,14 @@ class FakeNotesServer(
                 Endpoint.CAPABILITIES
             }
 
+            rest == CLOUD_USER -> {
+                Endpoint.CLOUD_USER
+            }
+
+            rest.startsWith(DAV_FILES) && method == HttpMethod.Get -> {
+                Endpoint.DAV_GET
+            }
+
             noteId != null -> {
                 when (method) {
                     HttpMethod.Get -> Endpoint.GET_NOTE
@@ -353,10 +381,50 @@ class FakeNotesServer(
                 )
             }
 
+            Endpoint.CLOUD_USER -> {
+                json("""{"ocs":{"meta":{"status":"ok","statuscode":200},"data":{"id":"$userId"}}}""")
+            }
+
+            Endpoint.DAV_GET -> {
+                davGet(request, path)
+            }
+
             Endpoint.UNKNOWN -> {
                 text(HttpStatusCode.NotFound, "not found")
             }
         }
+
+    private fun MockRequestHandleScope.davGet(
+        request: HttpRequestData,
+        path: String,
+    ): HttpResponseData {
+        val rest = path.removePrefix(basePath).removePrefix(DAV_FILES)
+        val user = percentDecodeForFake(rest.substringBefore('/'))
+        if (user != userId) return text(HttpStatusCode.NotFound, "no such user")
+        val key = percentDecodeForFake(rest.substringAfter('/', ""))
+        val (bytes, version) = files[key] ?: return text(HttpStatusCode.NotFound, "no such file")
+        val etag = hash("${bytes.size}/$version")
+        val headers = HeadersBuilder()
+        headers.name("ETag", etag)
+        if (request.headers["If-None-Match"] == etag) return respond(ByteArray(0), HttpStatusCode.NotModified, headers.build())
+        headers.name("Content-Type", "application/octet-stream")
+        return respond(bytes, HttpStatusCode.OK, headers.build())
+    }
+
+    private fun percentDecodeForFake(s: String): String {
+        val out = java.io.ByteArrayOutputStream()
+        var i = 0
+        while (i < s.length) {
+            if (s[i] == '%') {
+                out.write(s.substring(i + 1, i + 3).toInt(16))
+                i += 3
+            } else {
+                out.write(s[i].toString().toByteArray())
+                i++
+            }
+        }
+        return out.toString("UTF-8")
+    }
 
     /** Like Nextcloud, a title already used in the folder becomes `Title (2)`, `Title (3)`... */
     private fun freeTitle(
@@ -494,6 +562,8 @@ class FakeNotesServer(
     private companion object {
         const val NOTES_API = "/index.php/apps/notes/api/v1"
         const val CAPABILITIES = "/ocs/v2.php/cloud/capabilities"
+        const val CLOUD_USER = "/ocs/v2.php/cloud/user"
+        const val DAV_FILES = "/remote.php/dav/files/"
     }
 }
 

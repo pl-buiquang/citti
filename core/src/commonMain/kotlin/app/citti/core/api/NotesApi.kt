@@ -169,6 +169,28 @@ class NotesApi(
             }
         }
 
+    /** The Nextcloud user id, which can differ from the login name (e-mail or LDAP logins). Needed for WebDAV URLs. */
+    suspend fun userId(): ApiResult<String> =
+        call("GET /cloud/user", {
+            client.get(config.url("ocs/v2.php/cloud/user")) {
+                parameter("format", "json")
+                header("OCS-APIRequest", "true")
+            }
+        }) { response ->
+            if (!response.status.isOk()) return@call fail(response)
+            parse {
+                apiJson
+                    .parseToJsonElement(response.bodyAsText())
+                    .jsonObject["ocs"]
+                    ?.jsonObject
+                    ?.get("data")
+                    ?.jsonObject
+                    ?.get("id")
+                    ?.let { (it as? JsonPrimitive)?.contentOrNull }
+                    ?: throw IllegalArgumentException("no user id in the answer")
+            }
+        }
+
     suspend fun settings(): ApiResult<NotesSettings> =
         call("GET /settings", { client.get(notesUrl("/settings")) }) { response ->
             if (!response.status.isOk()) return@call fail(response)

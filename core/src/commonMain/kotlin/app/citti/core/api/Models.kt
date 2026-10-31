@@ -124,6 +124,9 @@ sealed interface ApiError {
         val cause: Throwable,
     ) : ApiError
 
+    /** A WebDAV request before the first sync stored the user id and the Notes folder. */
+    data object DavNotReady : ApiError
+
     /** Login: the credentials work but the Notes app is not installed or enabled on the server. */
     data object NotesAppMissing : ApiError
 

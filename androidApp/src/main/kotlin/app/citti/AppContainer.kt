@@ -15,6 +15,10 @@ import app.citti.core.auth.Credentials
 import app.citti.core.auth.LoginFlow
 import app.citti.core.auth.prepareForSignIn
 import app.citti.core.auth.signOut
+import app.citti.core.dav.DavClient
+import app.citti.core.dav.DavSetup
+import app.citti.core.dav.ImageResolver
+import app.citti.core.dav.ObsidianConfig
 import app.citti.core.db.CittiDatabase
 import app.citti.core.note.ExcerptBackfill
 import app.citti.core.note.noteBadgeOf
@@ -94,6 +98,8 @@ class AppContainer(
         val client: HttpClient,
         val engine: SyncEngine,
         val afterEdit: AfterEditPush,
+        val dav: DavClient,
+        val images: ImageResolver,
     )
 
     private val stackLock = Mutex()
@@ -245,6 +251,7 @@ class AppContainer(
             val config = NotesApiConfig(credentials.serverUrl, credentials.user, credentials.appPassword)
             val client = createNotesHttpClient(config)
             val api = NotesApi(client, config, AndroidSyncLog)
+            val davSetup = DavSetup(api, database, credentials.serverUrl)
             val now = { System.currentTimeMillis() / 1000 }
             // SyncEngine reads settings in its constructor, so build it off the main thread.
             val engine =
@@ -255,11 +262,17 @@ class AppContainer(
                         database,
                         AndroidSyncLog,
                         api.stats,
+                        dav = davSetup,
                         now = now,
                     )
                 }
-            SyncStack(client, engine, AfterEditPush(appScope, engine)).also { stack.value = it }
+            val dav = DavClient(client, { davSetup.root() }, AndroidSyncLog, api.stats)
+            val images = ImageResolver(dav, ObsidianConfig(dav, database))
+            SyncStack(client, engine, AfterEditPush(appScope, engine), dav, images).also { stack.value = it }
         }
+
+    /** Image links of Notes (M4 UI). Null while signed out. */
+    fun imageResolver(): ImageResolver? = stack.value?.images
 
     /** Called by the editor after each successful save; pushes about 2 s after the last one. No-op while signed out. */
     fun scheduleAfterEditPush() {

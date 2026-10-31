@@ -3,6 +3,7 @@ package app.citti.core.sync
 import app.citti.core.api.ApiError
 import app.citti.core.api.RequestStats
 import app.citti.core.api.logText
+import app.citti.core.dav.DavSetup
 import app.citti.core.db.CittiDatabase
 import app.citti.core.log.SyncLog
 import kotlinx.coroutines.CancellationException
@@ -117,6 +118,8 @@ class SyncEngine(
     /** Pause before the one start-up retry (see [sync]); injected so tests run in virtual time. */
     private val startupRetryDelayMillis: Long = DEFAULT_STARTUP_RETRY_DELAY,
     private val sleep: suspend (Long) -> Unit = { delay(it) },
+    /** Stores the WebDAV user id and Notes folder; refreshed after an app-open sync, or when nothing is stored yet. */
+    private val dav: DavSetup? = null,
     private val now: () -> Long,
 ) {
     private val settings = db.settingQueries
@@ -175,6 +178,7 @@ class SyncEngine(
                 }
             val ms = started.elapsedNow().inWholeMilliseconds
             log.info("sync done trigger=$trigger ${summary(outcome)} duration=${ms}ms$traffic")
+            refreshDav(trigger, outcome)
             pushRequestedMeanwhile()
             return outcome
         } catch (e: CancellationException) {
@@ -249,6 +253,16 @@ class SyncEngine(
         val traffic = if (before != null && after != null) " requests=${after.requests - before.requests}" else ""
         log.info("push done trigger=$trigger ${summary(outcome)} duration=${started.elapsedNow().inWholeMilliseconds}ms$traffic")
         return outcome
+    }
+
+    /** Outside the request count of the sync: a no-change sync stays one request. A failure is ignored. */
+    private suspend fun refreshDav(
+        trigger: SyncTrigger,
+        outcome: SyncOutcome,
+    ) {
+        val setup = dav ?: return
+        if (outcome is SyncOutcome.Failed || outcome == SyncOutcome.AlreadyRunning) return
+        if (trigger == SyncTrigger.AppOpen || !setup.isStored) setup.refresh()
     }
 
     private fun shouldRetryStart(
