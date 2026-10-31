@@ -9,3 +9,5 @@ captures/
 *.keystore
 .DS_Store
 CLAUDE.local.md
+nextcloud.env
+*.env
