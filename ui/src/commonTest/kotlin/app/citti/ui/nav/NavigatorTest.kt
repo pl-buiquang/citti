@@ -98,4 +98,19 @@ class NavigatorTest {
         assertNull(Navigator.decode("""[{"type":"app.citti.ui.nav.Route.Gone"}]"""))
         assertNull(Navigator.decode("""{"a":1}"""))
     }
+
+    @Test
+    fun anM4StackWithoutFocusDecodes() {
+        val m4 =
+            "[{\"type\":\"app.citti.ui.nav.Route.List\"}," +
+                "{\"type\":\"app.citti.ui.nav.Route.Note\",\"localId\":3,\"preview\":true,\"searchQuery\":\"q\"}]"
+        assertEquals(listOf(Route.List(), Route.Note(3, preview = true, searchQuery = "q")), Navigator.decode(m4))
+    }
+
+    @Test
+    fun focusRoundTripsAndIsPartOfTheSameEntry() {
+        val nav = Navigator(listOf(Route.List(), Route.Note(3, focus = true)))
+        assertEquals(nav.stack.value, Navigator.decode(nav.encode()))
+        assertEquals(Route.Note(3).entryId, Route.Note(3, focus = true).entryId)
+    }
 }

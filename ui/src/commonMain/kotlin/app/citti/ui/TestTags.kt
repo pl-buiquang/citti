@@ -22,6 +22,19 @@ object TestTags {
     /** The blocks of Preview mode. */
     const val NOTE_PREVIEW = "note.preview"
 
+    /** The New note button; Index's label and the dialog title both read "New note". */
+    const val NEW_NOTE_BUTTON = "browse.newNote"
+    const val NEW_NOTE_TITLE = "newNote.title"
+    const val NEW_NOTE_CHANGE_FOLDER = "newNote.changeFolder"
+    const val NEW_NOTE_CREATE = "newNote.create"
+    const val TITLE_CLASH_OPEN = "titleClash.open"
+    const val TITLE_CLASH_CREATE = "titleClash.create"
+
+    /** The Folder rows of the Folder picker. */
+    const val FOLDER_PICKER = "folderPicker.rows"
+    const val FOLDER_PICKER_NEW_FOLDER = "folderPicker.newFolder"
+    const val FOLDER_PICKER_CONFIRM = "folderPicker.confirm"
+
     const val SETTINGS_HOME = "settings.home"
     const val SETTINGS_PICKER = "settings.picker"
     const val SETTINGS_FOLDER_PATH = "settings.folder.path"

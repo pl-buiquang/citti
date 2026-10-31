@@ -6,6 +6,7 @@ import android.text.InputType
 import android.text.Spanned
 import android.text.TextWatcher
 import android.view.Gravity
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import app.citti.core.markdown.Selection
 
@@ -266,6 +267,14 @@ internal class CittiEditText(
             val line = layout.getLineForOffset(offset.coerceIn(0, text.length))
             val room = (layout.height + totalPaddingTop + totalPaddingBottom - height).coerceAtLeast(0)
             scrollTo(0, layout.getLineTop(line).coerceAtMost(room))
+        }
+    }
+
+    // Posted: the view attaches before it is enabled and laid out, and the IME ignores a view not yet in a window.
+    override fun focusAndShowKeyboard() {
+        post {
+            if (!requestFocus()) return@post
+            context.getSystemService(InputMethodManager::class.java)?.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
         }
     }
 

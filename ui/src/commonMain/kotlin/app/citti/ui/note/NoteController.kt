@@ -148,11 +148,23 @@ class NoteController(
                 .distinctUntilChanged()
                 .collect { shown -> if (shown) parse() else model.update { it.copy(doc = null) } }
         }
+        scope.launch {
+            combine(this@NoteController.route, model.map { it.ready }.distinctUntilChanged()) { r, ready -> r.focus && ready }
+                .distinctUntilChanged()
+                .collect { if (it) applyFocus() }
+        }
     }
 
     /** The screen reports its current route (it changes with the Edit/Preview toggle). */
     fun show(route: Route.Note) {
         this.route.value = route
+    }
+
+    /** `Route.Note.focus`: focus the editor once the text is here, then clear the flag so it is applied only once. */
+    private fun applyFocus() {
+        if (model.value.row?.readonly != true) editor.requestFocus()
+        val top = navigator.top
+        if (top is Route.Note && top.localId == localId && top.focus) navigator.replaceTop(top.copy(focus = false))
     }
 
     // ---- the row ----

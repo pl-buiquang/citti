@@ -20,8 +20,10 @@ import app.citti.core.dav.ObsidianConfig
 import app.citti.core.db.CittiDatabase
 import app.citti.core.note.ExcerptBackfill
 import app.citti.core.note.LinkResolver
+import app.citti.core.note.NoteCreator
 import app.citti.core.note.NoteEditor
 import app.citti.core.search.NoteSearch
+import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.ImageSettings
 import app.citti.core.settings.SyncSettingsRepository
@@ -36,6 +38,8 @@ import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
 import app.citti.ui.browse.NoteRowItem
 import app.citti.ui.browse.toRowItem
+import app.citti.ui.components.PickerFolders
+import app.citti.ui.components.pickerFolders
 import app.citti.ui.image.ImageCache
 import app.citti.ui.image.VaultImageFetcherFactory
 import app.citti.ui.image.VaultImageKeyer
@@ -54,6 +58,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -157,6 +162,7 @@ class AppContainer(
         val afterEdit: AfterEditPush,
         val dav: DavClient,
         val images: ImageResolver,
+        val creator: NoteCreator,
     )
 
     private val stackLock = Mutex()
@@ -291,6 +297,21 @@ class AppContainer(
             .mapToList(Dispatchers.IO)
             .map { rows -> rows.map { it.toRowItem() } }
 
+    /** Notes per Folder, Hidden ones included, with the exclusions: what the Folder picker lists. */
+    fun pickerFolders(collator: Comparator<String>): Flow<PickerFolders> =
+        combine(
+            database.noteQueries
+                .countByFolder()
+                .asFlow()
+                .mapToList(Dispatchers.IO)
+                .map { rows -> rows.map { it.category to it.notes } },
+            exclusions.flow(ExclusionKind.HIDDEN),
+            exclusions.flow(ExclusionKind.UNSYNCED),
+        ) { counts, hidden, unsynced -> pickerFolders(counts, hidden, unsynced, collator) }
+
+    /** Every Note creation goes through it (ADR 0006); null while signed out. */
+    fun noteCreator(): NoteCreator? = stack.value?.creator
+
     /** The data of one open Note for its [app.citti.ui.note.NoteController]. */
     fun noteGateway(localId: Long): NoteGateway =
         DbNoteGateway(
@@ -324,10 +345,9 @@ class AppContainer(
                 }
             val dav = DavClient(client, { davSetup.root() }, AndroidSyncLog, api.stats)
             val images = ImageResolver(dav, ObsidianConfig(dav, database))
-            SyncStack(client, engine, AfterEditPush(appScope, engine, config.afterEditPushDelay.inWholeMilliseconds), dav, images).also {
-                stack.value =
-                    it
-            }
+            val afterEdit = AfterEditPush(appScope, engine, config.afterEditPushDelay.inWholeMilliseconds)
+            val creator = NoteCreator(database, engine, appScope, exclusions, afterEdit::schedule, now)
+            SyncStack(client, engine, afterEdit, dav, images, creator).also { stack.value = it }
         }
 
     /** No sync is running and no push after an edit is pending (signed out counts as idle). For the E2E idling resource. */

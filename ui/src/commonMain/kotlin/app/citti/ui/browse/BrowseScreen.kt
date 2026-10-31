@@ -1,7 +1,10 @@
 package app.citti.ui.browse
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +24,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -43,6 +49,7 @@ import app.citti.ui.components.NoteRow
 import app.citti.ui.components.SearchBar
 import app.citti.ui.components.SearchLeading
 import app.citti.ui.components.colored
+import app.citti.ui.create.NewNoteButton
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.action_back
 import app.citti.ui.resources.action_details
@@ -63,6 +70,7 @@ import app.citti.ui.resources.sync_syncing
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
+import app.citti.ui.theme.ThemeFamily
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
@@ -92,6 +100,8 @@ class BrowseActions(
     val onBack: () -> Unit,
     val onSyncNow: () -> Unit,
     val onSignInAgain: () -> Unit,
+    /** The New note button; null hides it. */
+    val onNewNote: (() -> Unit)? = null,
 )
 
 /**
@@ -107,6 +117,8 @@ fun BrowseScreen(
     dates: RowDateFormatter,
     listState: LazyListState,
     actions: BrowseActions,
+    /** The New note check is running: the button shows a progress ring. */
+    newNoteBusy: Boolean = false,
 ) {
     val now by produceState(nowSeconds()) {
         while (true) {
@@ -115,12 +127,53 @@ fun BrowseScreen(
         }
     }
     val favoritesOnly = view is BrowseView.List && view.favoritesOnly
-    Column(
+    val onNewNote = actions.onNewNote
+    // Signal floats the button over the rows; Paper and Index put it at the end of a bottom bar.
+    val floating = CittiTheme.family == ThemeFamily.Signal
+    Box(
         Modifier
             .fillMaxSize()
             .background(CittiTheme.colors.bg)
             .safeDrawingPadding(),
     ) {
+        BrowseColumn(
+            view,
+            state,
+            now,
+            dates,
+            listState,
+            actions,
+            favoritesOnly,
+            bottomBar = onNewNote != null && !floating,
+            newNoteBusy,
+            fabRoom =
+                onNewNote != null && floating,
+        )
+        if (onNewNote != null && floating) {
+            NewNoteButton(
+                onNewNote,
+                Modifier.align(Alignment.BottomEnd).padding(end = NotesSpacing.space5, bottom = NotesSpacing.space8),
+                busy = newNoteBusy,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BrowseColumn(
+    view: BrowseView,
+    state: BrowseUiState,
+    now: Long,
+    dates: RowDateFormatter,
+    listState: LazyListState,
+    actions: BrowseActions,
+    favoritesOnly: Boolean,
+    bottomBar: Boolean,
+    newNoteBusy: Boolean,
+    // The floating button covers the end of the last rows: let the list scroll them clear of it.
+    fabRoom: Boolean,
+) {
+    Column(Modifier.fillMaxSize()) {
         if (favoritesOnly) {
             CittiTopBar(stringResource(Res.string.drawer_favorites), onBack = actions.onBack)
         } else {
@@ -142,13 +195,36 @@ fun BrowseScreen(
             Breadcrumb(view.folder, onOpen = actions.onOpenBreadcrumb, modifier = Modifier.padding(vertical = NotesSpacing.space1))
         }
         CittiPullRefresh(refreshing = state.syncing, onRefresh = actions.onSyncNow, modifier = Modifier.weight(1f)) {
-            LazyColumn(Modifier.fillMaxSize().testTag(TestTags.BROWSE_ROWS), state = listState) {
+            LazyColumn(
+                Modifier.fillMaxSize().testTag(TestTags.BROWSE_ROWS),
+                state = listState,
+                contentPadding = if (fabRoom) PaddingValues(bottom = NotesSize.fabSignal + NotesSpacing.space8) else PaddingValues(),
+            ) {
                 when (view) {
                     is BrowseView.List -> listRows(view, state, now, dates, actions)
                     is BrowseView.Tree -> treeRows(view, state, now, dates, actions)
                 }
             }
         }
+        val onNewNote = actions.onNewNote
+        if (bottomBar && onNewNote != null) BottomBar { NewNoteButton(onNewNote, busy = newNoteBusy) }
+    }
+}
+
+/** The bottom bar of Paper and Index: a `line` hairline on top, the New note button at the end. */
+@Composable
+private fun BottomBar(content: @Composable () -> Unit) {
+    val line = CittiTheme.colors.line
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = NotesSize.barHeight)
+            .drawBehind { drawLine(line, Offset.Zero, Offset(size.width, 0f), strokeWidth = Stroke.HairlineWidth) }
+            .padding(horizontal = CittiTheme.shape.gutter, vertical = NotesSpacing.space1),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.End,
+    ) {
+        content()
     }
 }
 

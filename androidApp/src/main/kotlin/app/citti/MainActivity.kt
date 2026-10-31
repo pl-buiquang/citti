@@ -43,6 +43,11 @@ import app.citti.ui.components.SnackbarHost
 import app.citti.ui.components.SnackbarState
 import app.citti.ui.components.breadcrumbPaths
 import app.citti.ui.components.rememberCittiDrawerState
+import app.citti.ui.create.CoreNoteCreation
+import app.citti.ui.create.NewNoteController
+import app.citti.ui.create.NewNoteHost
+import app.citti.ui.create.actions
+import app.citti.ui.create.newNoteFolder
 import app.citti.ui.image.ImageEnv
 import app.citti.ui.login.LoginController
 import app.citti.ui.login.LoginFlowBackend
@@ -94,6 +99,8 @@ class MainActivity : ComponentActivity() {
     private var fullyDrawn = false
 
     private val titleCollator by lazy { localeTitleCollator() }
+    private val pickerFolders by lazy { container.pickerFolders(titleCollator) }
+    private val noteCreation by lazy { CoreNoteCreation(container::noteCreator, container.exclusions, Dispatchers.IO) }
     private val rowDates by lazy { JavaTimeRowDateFormatter(zone = container.config.timeZone) }
 
     // POST_NOTIFICATIONS: asked once, never blocks anything; the sync works without it.
@@ -160,7 +167,7 @@ class MainActivity : ComponentActivity() {
         Box(Modifier.fillMaxSize()) {
             saved.SaveableStateProvider(entryKey(index, route)) {
                 when (route) {
-                    is Route.List, is Route.Tree -> BrowseRoute(navigator, route)
+                    is Route.List, is Route.Tree -> BrowseRoute(navigator, index, route)
                     Route.Settings -> SettingsRoute(navigator, index)
                     is Route.Search -> SearchRoute(navigator, index, route)
                     is Route.Note -> NoteRoute(navigator, index, route, root)
@@ -205,10 +212,14 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun BrowseRoute(
         navigator: Navigator,
+        index: Int,
         route: Route,
     ) {
         val controller = remember { browseController ?: newBrowseController().also { browseController = it } }
         val state by controller.state.collectAsState()
+        // One New note flow per List or Tree entry, so its dialog survives recomposition.
+        val newNote = remember(index, route) { routes.controller(index, route) { NewNoteController(it, noteCreation, navigator) } }
+        val newNoteState by newNote.state.collectAsState()
         LaunchedEffect(controller) {
             controller.onShown()
             askNotificationPermissionOnce()
@@ -232,6 +243,7 @@ class MainActivity : ComponentActivity() {
         val account by produceState<AccountInfo?>(null) { value = container.accountInfo() }
         // CittiDrawer does not handle Back: an open drawer closes before the stack pops.
         BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
+        BackHandler(enabled = newNoteState != null, onBack = newNote::back)
         val fromDrawer: (() -> Unit) -> Unit = { go ->
             scope.launch {
                 drawer.close()
@@ -289,9 +301,12 @@ class MainActivity : ComponentActivity() {
                         onBack = { navigator.pop() },
                         onSyncNow = controller::syncNow,
                         onSignInAgain = { signInAgain() },
+                        onNewNote = { newNote.open(newNoteFolder(route)) },
                     ),
+                newNoteBusy = newNoteState?.checking == true,
             )
         }
+        NewNoteHost(newNoteState, pickerFolders, remember(newNote) { newNote.actions() })
     }
 
     @Composable

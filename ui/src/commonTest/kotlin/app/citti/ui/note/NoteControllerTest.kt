@@ -111,6 +111,12 @@ private class FakeHost(
 
     override fun scrollToOffset(offset: Int) = Unit
 
+    var focusRequests = 0
+
+    override fun focusAndShowKeyboard() {
+        focusRequests++
+    }
+
     fun type(s: String) {
         val before = sel
         text = text.substring(0, before.start) + s + text.substring(before.end)
@@ -174,6 +180,24 @@ class NoteControllerTest {
             assertEquals(12, f.controller.editor.selection.start)
             assertEquals("Title", state.title)
             assertEquals(SaveIndicator.Saved, state.save)
+        }
+
+    @Test
+    fun aFocusRouteFocusesTheEditorOnceAndClearsTheFlag() =
+        runTest {
+            val f = open(doc(""), route = Route.Note(1, focus = true))
+            f.controller.show(f.navigator.top as Route.Note)
+            runCurrent()
+            assertEquals(Route.Note(1), f.navigator.top)
+            assertFalse(f.controller.state.value.preview)
+            // The view attaches after the focus was asked for: it takes it then, once.
+            f.attach()
+            assertEquals(1, f.host.focusRequests)
+            f.controller.show(f.navigator.top as Route.Note)
+            runCurrent()
+            f.controller.editor.detach(f.host)
+            f.attach()
+            assertEquals(1, f.host.focusRequests)
         }
 
     @Test

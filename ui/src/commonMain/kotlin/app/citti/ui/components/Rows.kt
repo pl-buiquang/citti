@@ -120,6 +120,8 @@ fun FolderRow(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     chevron: Boolean = onClick != null,
+    /** The outline Hidden badge (pickers list Hidden folders; Tree mode never shows them). */
+    hidden: Boolean = false,
 ) {
     val colors = CittiTheme.colors
     Row(
@@ -145,6 +147,7 @@ fun FolderRow(
                 style = CittiTheme.typography.ui.colored(),
             )
             BasicText(stringResource(Res.string.folder_count, count), style = CittiTheme.typography.meta.colored(muted = true))
+            if (hidden) StateLabel(stringResource(Res.string.badge_hidden), colors.inkMuted, outline = true)
         }
         if (chevron) Icon(CittiIcon.Chevron, color = colors.inkMuted)
     }

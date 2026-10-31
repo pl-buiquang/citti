@@ -46,6 +46,9 @@ interface EditorHost {
 
     /** Scrolls so that the line holding [offset] is at the top (as far as the text allows). */
     fun scrollToOffset(offset: Int)
+
+    /** Takes the focus and raises the keyboard. */
+    fun focusAndShowKeyboard() = Unit
 }
 
 /**
@@ -66,6 +69,9 @@ class EditorState(
 
     // Where the view scrolls to when it attaches; null is the caret (a Note opens at its end).
     private var pendingScroll: Int? = null
+
+    // Set by [requestFocus] before the view attaches.
+    private var pendingFocus = false
     private val history = EditorHistory()
 
     private val _changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -101,6 +107,10 @@ class EditorState(
         host.setAll(document.text(), pendingCaret.coerceIn(0, document.length))
         host.scrollToOffset(pendingScroll ?: pendingCaret)
         pendingScroll = null
+        if (pendingFocus) {
+            pendingFocus = false
+            host.focusAndShowKeyboard()
+        }
     }
 
     fun detach(host: EditorHost) {
@@ -154,6 +164,12 @@ class EditorState(
 
     fun focusChanged(focused: Boolean) {
         _focused.value = focused
+    }
+
+    /** Focuses the view and raises the keyboard, now or when the view attaches (a New note opens ready to type). */
+    fun requestFocus() {
+        val h = host
+        if (h == null) pendingFocus = true else h.focusAndShowKeyboard()
     }
 
     /** Applies [edit] to the view as one undo step. */

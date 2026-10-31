@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,6 +25,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -32,6 +35,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -67,6 +71,8 @@ fun CittiButton(
     modifier: Modifier = Modifier,
     kind: ButtonKind = ButtonKind.Primary,
     enabled: Boolean = true,
+    /** Shows an inline [ProgressRing] next to the label and ignores taps (a server check is running). */
+    busy: Boolean = false,
 ) {
     val colors = CittiTheme.colors
     val shape = RoundedCornerShape(CittiTheme.shape.control)
@@ -83,16 +89,19 @@ fun CittiButton(
             .heightIn(min = NotesSize.touchMin)
             .background(fill, shape)
             .let { if (kind == ButtonKind.Quiet) it.border(Dp.Hairline, colors.line, shape) else it }
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled && !busy, onClick = onClick)
             .padding(horizontal = NotesSpacing.space4),
         contentAlignment = Alignment.Center,
     ) {
-        BasicText(
-            shown,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            style = CittiTheme.typography.ui.copy(color = if (enabled) text else colors.inkFaint),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NotesSpacing.space2)) {
+            if (busy) ProgressRing(color = text)
+            BasicText(
+                shown,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = CittiTheme.typography.ui.copy(color = if (enabled) text else colors.inkFaint),
+            )
+        }
     }
 }
 
@@ -125,6 +134,12 @@ fun CittiTextField(
     enabled: Boolean = true,
     secret: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
+    /** Shown under the field in `danger`. */
+    error: String? = null,
+    /** With [onImeAction], the keyboard's action key (Done) runs it. */
+    imeAction: ImeAction = ImeAction.Default,
+    onImeAction: (() -> Unit)? = null,
+    focusRequester: FocusRequester? = null,
 ) {
     val colors = CittiTheme.colors
     val shape = RoundedCornerShape(CittiTheme.shape.control)
@@ -143,10 +158,13 @@ fun CittiTextField(
                 KeyboardOptions(
                     keyboardType = if (secret) KeyboardType.Password else keyboardType,
                     autoCorrectEnabled = false,
+                    imeAction = imeAction,
                 ),
+            keyboardActions = KeyboardActions(onAny = { onImeAction?.invoke() }),
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
                     .background(colors.surface, shape)
                     .border(Dp.Hairline, if (focused) colors.focus else colors.line, shape)
                     .onFocusChanged { focused = it.isFocused }
@@ -160,6 +178,7 @@ fun CittiTextField(
                 }
             },
         )
+        if (error != null) BasicText(error, style = CittiTheme.typography.meta.copy(color = colors.danger))
     }
 }
 

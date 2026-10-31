@@ -207,6 +207,13 @@ FROM note
 WHERE sync_state != 'DELETED' AND hidden = 0
 GROUP BY category;
 
+-- The Folder picker: Notes per Folder, Hidden ones included (the picker lists Hidden folders, Tree mode does not).
+countByFolder:
+SELECT category, count(*) AS notes
+FROM note
+WHERE sync_state != 'DELETED'
+GROUP BY category;
+
 -- Tree mode: the Notes directly in one Folder. Uses note_category_title. Kotlin sorts them with the collator.
 selectFolderNotes:
 SELECT local_id, title, category, excerpt, favorite, modified, sync_state, conflict_of

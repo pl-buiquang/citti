@@ -50,7 +50,10 @@ val LocalCittiTypography =
         error("CittiTheme is missing")
     }
 
-/** Entry points for components: `CittiTheme.colors`, `.typography`, `.shape`. */
+/** The theme family, for the components whose layout differs per family (the New note button). */
+val LocalThemeFamily = staticCompositionLocalOf { ThemeFamily.Signal }
+
+/** Entry points for components: `CittiTheme.colors`, `.typography`, `.shape`, `.family`. */
 object CittiTheme {
     val colors: NotesColors
         @Composable @ReadOnlyComposable
@@ -61,6 +64,9 @@ object CittiTheme {
     val shape: NotesShape
         @Composable @ReadOnlyComposable
         get() = LocalNotesShape.current
+    val family: ThemeFamily
+        @Composable @ReadOnlyComposable
+        get() = LocalThemeFamily.current
 }
 
 @Composable
@@ -81,6 +87,7 @@ fun CittiTheme(
         LocalNotesColors provides notesColors(family, dark),
         LocalNotesShape provides notesShape(family),
         LocalCittiTypography provides typography,
+        LocalThemeFamily provides family,
         content = content,
     )
 }
