@@ -26,4 +26,9 @@ dependencies {
     implementation(project(":ui"))
     implementation(project(":core"))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.ktor.client.core)
+    implementation(libs.sqldelight.runtime)
+    implementation(libs.sqldelight.coroutines)
+    implementation(libs.sqldelight.android.driver)
 }
