@@ -18,6 +18,8 @@
     "attachments/by-attachment.png",
     "attachments/by-note.png",
     "attachments/by-root.png",
+    "journal/2026-08-20.md",
+    "journal/2026-09-15.md",
     "journal/2026-10-29.md",
     "journal/2026-10-30.md",
     "links.md",
@@ -82,6 +84,12 @@
     },
     "archive/Taxes 2023.md": {
       "modified": 1793149200
+    },
+    "journal/2026-08-20.md": {
+      "modified": 1787252400
+    },
+    "journal/2026-09-15.md": {
+      "modified": 1789498800
     },
     "journal/2026-10-29.md": {
       "modified": 1793275200

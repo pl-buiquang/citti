@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performTextReplacement
 import app.citti.core.settings.ExclusionKind
 import app.citti.e2e.rules.E2eRules
 import app.citti.ui.TestTags
+import kotlin.test.assertFalse
 
 class SettingsRobot(
     e2e: E2eRules,
@@ -27,6 +28,49 @@ class SettingsRobot(
         addFolder(ExclusionKind.UNSYNCED, path)
         waitFor(hasTestTag(TestTags.SETTINGS_CONFIRM)).performClick()
         assertShown()
+    }
+
+    /**
+     * Adding [path] as an Unsynced folder, confirmed, is refused with [error] (the refusal comes after the "Delete
+     * local Notes?" confirmation, and the picker stays open); Back leaves it.
+     */
+    fun addUnsyncedFolderRefused(
+        path: String,
+        error: String,
+    ) {
+        addFolder(ExclusionKind.UNSYNCED, path)
+        waitFor(hasTestTag(TestTags.SETTINGS_CONFIRM)).performClick()
+        waitFor(hasText(error))
+        click(Strings.BACK)
+        assertShown()
+    }
+
+    fun assertFolderNotListed(
+        kind: ExclusionKind,
+        path: String,
+    ) {
+        assertShown()
+        assertFalse(exists(hasTestTag(TestTags.settingsRemove(kind, path))), "$path is listed as $kind")
+    }
+
+    // ---- Daily notes ----
+
+    // The report dialog merges its content: its tag is in the unmerged tree only.
+
+    /** Import from Obsidian: the report dialog shows. */
+    fun importFromObsidian() {
+        waitFor(hasTestTag(TestTags.SETTINGS_IMPORT)).performScrollTo().performClick()
+        waitFor(hasTestTag(TestTags.SETTINGS_IMPORT_REPORT), unmerged = true)
+    }
+
+    /** The Import report contains [line]. */
+    fun assertImportReport(line: String) {
+        waitFor(hasTestTag(TestTags.SETTINGS_IMPORT_REPORT) and hasText(line, substring = true), unmerged = true)
+    }
+
+    fun dismissImportReport() {
+        click(Strings.IMPORT_OK)
+        waitGone(hasTestTag(TestTags.SETTINGS_IMPORT_REPORT), unmerged = true)
     }
 
     fun removeHiddenFolder(path: String) = remove(ExclusionKind.HIDDEN, path)

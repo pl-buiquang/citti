@@ -75,4 +75,35 @@ object Strings {
     const val INFO_PENDING = "Pending"
     const val YES = "Yes"
     const val NO = "No"
+
+    const val TODAY_NOTE = "Today's note"
+    const val MODE_CALENDAR = "Calendar"
+    const val CALENDAR_PREVIOUS_MONTH = "Previous month"
+    const val CALENDAR_NEXT_MONTH = "Next month"
+    const val DROPPED_TODAY = "Today's note already existed on the server"
+
+    /** A Calendar day cell, read by TalkBack: "30 October, daily note". */
+    fun calendarDayNote(day: String) = "$day, daily note"
+
+    fun calendarDayNone(day: String) = "$day, no note"
+
+    /** The Calendar's past day dialog: "Create daily note for 28 Oct?". */
+    fun createPastDay(day: String) = "Create daily note for $day?"
+
+    fun templateMissing(path: String) = "Template “$path” not found"
+
+    const val SETTINGS_IMPORT = "Import from Obsidian"
+
+    /** Adding an Unsynced folder that covers the Journal folder. */
+    fun exclusionJournalRefused(journal: String) = "The Journal folder “$journal” is inside it. Change the Journal folder first."
+
+    /** A line of the Import from Obsidian report: a value refused, and why. */
+    fun importRefused(
+        value: String,
+        reason: String,
+    ) = "Not applied: $value ($reason)"
+
+    fun journalUnsyncedRefused(path: String) = "“$path” is an Unsynced folder"
+
+    const val IMPORT_OK = "OK"
 }

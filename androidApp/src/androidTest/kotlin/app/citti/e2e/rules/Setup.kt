@@ -1,6 +1,9 @@
 package app.citti.e2e.rules
 
+import app.citti.AppContainer
 import app.citti.core.auth.Credentials
+import app.citti.core.daily.OBSIDIAN_DAILY_NOTES
+import app.citti.core.fake.Endpoint
 import app.citti.core.fake.FixtureVault
 import app.citti.core.fake.seed
 import app.citti.core.settings.AddResult
@@ -9,8 +12,10 @@ import app.citti.core.sync.SyncOutcome
 import app.citti.core.sync.SyncTrigger
 import app.citti.e2e.E2e
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.rules.ExternalResource
 
 /**
@@ -55,11 +60,26 @@ class Setup private constructor(
         if (sync) {
             val outcome = E2e.sync(SyncTrigger.AppOpen)
             check(outcome is SyncOutcome.Synced) { "setup sync ended with $outcome" }
+            awaitDailyImport(container)
         }
         E2e.server.clearRequests()
     }
 
+    /**
+     * The first Sync starts the automatic Import from Obsidian in the background: its DAV `GET` belongs to the setup,
+     * and the settings it writes must not land in the middle of a test.
+     */
+    private fun awaitDailyImport(container: AppContainer) =
+        runBlocking {
+            E2e.server.awaitRequest(Endpoint.DAV_GET, IMPORT_TIMEOUT_MS) { it.path.endsWith(OBSIDIAN_DAILY_NOTES) }
+            withTimeout(IMPORT_TIMEOUT_MS) {
+                withContext(Dispatchers.IO) { while (!container.dailySettings.importDone()) delay(10) }
+            }
+        }
+
     companion object {
+        private const val IMPORT_TIMEOUT_MS = 5_000L
+
         /** Signed in, exclusions set, first sync done: where most flows start. */
         fun signedInAndSynced(
             fixture: String = "vault",

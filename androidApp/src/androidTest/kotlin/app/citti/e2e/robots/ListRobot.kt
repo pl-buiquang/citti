@@ -86,6 +86,11 @@ class ListRobot(
 
     fun showList() = click(Strings.MODE_LIST)
 
+    fun showCalendar(): CalendarRobot {
+        click(Strings.MODE_CALENDAR)
+        return CalendarRobot(e2e).also { it.assertShown() }
+    }
+
     fun assertTreeShown() {
         waitFor(hasText(Strings.MODE_TREE, ignoreCase = true) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
     }
