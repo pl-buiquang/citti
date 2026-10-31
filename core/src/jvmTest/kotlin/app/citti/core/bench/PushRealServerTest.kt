@@ -17,7 +17,11 @@ import app.citti.core.sync.PushResult
 import app.citti.core.sync.PushSync
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.runBlocking
+import okhttp3.Credentials
 import okhttp3.Interceptor
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.io.IOException
@@ -79,6 +83,24 @@ class PushRealServerTest {
             chain.proceed(request)
         }
 
+    /** Read only: counts the Nextcloud trash bin items whose name starts with [prefix] (WebDAV PROPFIND). */
+    private fun trashCount(prefix: String): Int? {
+        val url = cfg.baseUrl.trimEnd('/') + "/remote.php/dav/trashbin/${cfg.user}/trash/"
+        val request =
+            Request
+                .Builder()
+                .url(url)
+                .header("Authorization", Credentials.basic(cfg.user, cfg.appPassword))
+                .header("Depth", "1")
+                .method("PROPFIND", "".toRequestBody())
+                .build()
+        OkHttpClient().newCall(request).execute().use { response ->
+            if (response.code != 207) return null.also { println("trash PROPFIND answered ${response.code}") }
+            // One <d:href> per item, ending with the file name (the prefix has no characters to escape).
+            return Regex("<d:href>[^<]*/$prefix[^<]*</d:href>").findAll(response.body.string()).count()
+        }
+    }
+
     private class Row(
         val name: String,
         val ok: Boolean,
@@ -103,6 +125,7 @@ class PushRealServerTest {
         var cleanupLeft = -1
         var cleanupDeleted = 0
         var smokeOk = false
+        var trashed: Int? = null
         try {
             // Smoke test: read only, abort cleanly on any error. Also checks that the Folder `scratch` exists.
             val smoke = runBlocking { api.capabilities() }
@@ -272,6 +295,29 @@ class PushRealServerTest {
                 assertEquals("# $prefix b\n\nqueued offline\n", remote(row.remote_id ?: fail("no remote id")).content)
                 "first push Network failure (queue intact), second push created it"
             }
+
+            scenario("7. delete with a stale If-Match") {
+                val c = newNote("$prefix c", "# $prefix c\n\nfirst\n")
+                check(push().let { it is PushResult.Done && it.created == 1 }) { "create failed" }
+                track()
+                val remoteC = rowOf(c).remote_id ?: fail("no remote id")
+                val stale = rowOf(c).etag!!
+                val edit = runBlocking { api.updateNote(remoteC, UpdateNote(content = "# $prefix c\n\nserver edit\n"), "\"$stale\"") }
+                check((edit as? ApiResult.Success)?.value is UpdateResult.Updated) { "direct server edit failed: $edit" }
+                val direct = runBlocking { api.deleteNote(remoteC, "\"$stale\"") }
+                val answer = ((direct as? ApiResult.Success)?.value ?: fail("delete failed: $direct"))::class.simpleName
+                val stillThere = runBlocking { api.getNote(remoteC) } is ApiResult.Success
+                if (!stillThere) return@scenario "If-Match IGNORED on DELETE: answered $answer, note deleted; keep verifyBeforeDelete"
+                assertEquals("DeletePreconditionFailed", answer)
+                // If-Match alone guards the push delete.
+                q.markDeleted(c)
+                val r = runBlocking { PushSync(api, db, now = ::now).apply { verifyBeforeDelete = false }.push() }
+                check(r is PushResult.Done && r.deleteUndone == 1 && r.deleted == 0) { "push result $r" }
+                assertEquals("SYNCED", rowOf(c).sync_state)
+                assertEquals("# $prefix c\n\nserver edit\n", rowOf(c).content)
+                assertTrue(runBlocking { api.getNote(remoteC) } is ApiResult.Success, "server note kept")
+                "If-Match honored on DELETE: 412, note kept; push without the GET check undid the local delete"
+            }
         } finally {
             // Cleanup: runs on every path, deletes everything carrying our unique prefix.
             if (smokeOk) {
@@ -290,6 +336,7 @@ class PushRealServerTest {
                     cleanupLeft =
                         (((after as? ApiResult.Success)?.value as? ListResult.Page)?.notes ?: emptyList())
                             .count { it.title?.startsWith(prefix) == true }
+                    trashed = trashCount(prefix)
                 } catch (e: Throwable) {
                     println("CLEANUP ERROR ${e::class.simpleName}")
                 }
@@ -311,6 +358,9 @@ class PushRealServerTest {
         sb.appendLine("Total requests: ${requests.get()}. Guard violations: ${violations.size}.")
         sb.appendLine(
             "Cleanup: deleted $cleanupDeleted of ${created.size} tracked notes; notes with the prefix left on the server: $cleanupLeft.",
+        )
+        sb.appendLine(
+            "Trash bin: ${trashed ?: "unknown"} items with the prefix (deleted Notes ${if ((trashed ?: 0) > 0) "land" else "do not land"} in the trash).",
         )
         val table = sb.toString()
         println(table)
