@@ -147,6 +147,8 @@ class FakeNotesServer(
         noteMap[id] = n.copy(favorite = favorite, modified = now, version = n.version + 1)
     }
 
+    fun clearFailures() = failures.clear()
+
     /**
      * Queues [times] failures, applied to the next requests in order. With an [endpoint], only requests to
      * that endpoint consume them (other requests pass through untouched).

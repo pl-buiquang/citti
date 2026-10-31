@@ -8,8 +8,10 @@ import app.citti.core.api.RemoteNote
 import app.citti.core.api.logText
 import app.citti.core.db.CittiDatabase
 import app.citti.core.log.SyncLog
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -54,8 +56,13 @@ sealed interface PullResult {
  * 3. Unsynced folders are dropped client-side; Hidden folders are stored with `hidden = true`.
  * 4. Content is downloaded for the Notes that need it, with bounded parallelism.
  *
- * The ETag is stored only after a pull without any failure, so a failed content download is retried next time
- * (a stored ETag would turn the retry into a 304).
+ * A content download that fails with a network or 5xx error is retried a few times with a short backoff. After
+ * [circuitBreakerThreshold] Notes in a row that still fail on the network (the phone lost its connection, e.g.
+ * the screen went off) the content phase stops: everything already written stays, and the pull returns
+ * `Failed(Network)` instead of counting hundreds of failures. An auth error stops it at once.
+ *
+ * The ETag is stored only after a pull without any failure, so a failed or skipped content download is retried
+ * next time (a stored ETag would turn the retry into a 304), and only the Notes still missing content are fetched.
  */
 class PullSync(
     private val api: NotesApi,
@@ -64,6 +71,12 @@ class PullSync(
     private val downloadParallelism: Int = DEFAULT_PARALLELISM,
     private val writeBatchSize: Int = DEFAULT_WRITE_BATCH,
     private val log: SyncLog = SyncLog.None,
+    /** Pause before each retry of a content download; its size is the number of retries per Note. */
+    private val retryBackoffMillis: List<Long> = DEFAULT_RETRY_BACKOFF,
+    /** Consecutive Notes that still fail with a network error after retries before the content phase stops. */
+    private val circuitBreakerThreshold: Int = DEFAULT_CIRCUIT_BREAKER,
+    /** Injected so tests run in virtual time. */
+    private val sleep: suspend (Long) -> Unit = { delay(it) },
 ) {
     private val notes = database.noteQueries
     private val syncState = database.syncStateQueries
@@ -91,6 +104,7 @@ class PullSync(
         applyComplete(page.notes, unsynced, hidden)
 
         val outcome = downloadContent(onProgress)
+        outcome.abortedBy?.let { return PullResult.Failed(it) }
 
         if (outcome.failures.isEmpty()) {
             val lastModified = page.notes.maxOfOrNull { it.modified ?: 0L } ?: 0L
@@ -176,7 +190,25 @@ class PullSync(
     private class Downloaded(
         val fetched: Int,
         val failures: List<ContentFailure>,
+        /** Set when the content phase was stopped early (auth error or network circuit breaker). */
+        val abortedBy: ApiError? = null,
     )
+
+    private suspend fun fetchWithRetry(remoteId: Long): ApiResult<RemoteNote> {
+        var attempt = 0
+        while (true) {
+            val result = api.getNote(remoteId)
+            if (result !is ApiResult.Failure || !result.error.isRetryable() || attempt >= retryBackoffMillis.size) return result
+            val wait = retryBackoffMillis[attempt]
+            attempt++
+            log.warn(
+                "pull content retry remote=$remoteId attempt=$attempt/${retryBackoffMillis.size} wait=${wait}ms ${result.error.logText()}",
+            )
+            sleep(wait)
+        }
+    }
+
+    private fun ApiError.isRetryable() = this is ApiError.Network || this is ApiError.Server
 
     private suspend fun downloadContent(onProgress: (Progress) -> Unit): Downloaded {
         val targets = notes.selectNeedingContent().executeAsList()
@@ -196,17 +228,22 @@ class PullSync(
             batch.clear()
         }
 
+        var abortedBy: ApiError? = null
+        var networkStreak = 0
+        var attempted = 0
         coroutineScope {
             val permits = Semaphore(downloadParallelism)
             val results = Channel<Pair<Long, ApiResult<RemoteNote>>>(Channel.UNLIMITED)
             val remoteIds = targets.associate { it.local_id to it.remote_id }
             for ((localId, remoteId) in remoteIds) {
-                launch { results.send(localId to permits.withPermit { api.getNote(remoteId) }) }
+                launch { results.send(localId to permits.withPermit { fetchWithRetry(remoteId) }) }
             }
-            repeat(total) { index ->
+            for (index in 0 until total) {
                 val (localId, result) = results.receive()
+                attempted = index + 1
                 when (result) {
                     is ApiResult.Success -> {
+                        networkStreak = 0
                         batch += localId to result.value
                         if (batch.size >= writeBatchSize) flush()
                     }
@@ -214,7 +251,22 @@ class PullSync(
                     is ApiResult.Failure -> {
                         failures += ContentFailure(remoteIds.getValue(localId), result.error)
                         log.warn("pull content failed remote=${remoteIds.getValue(localId)} ${result.error.logText()}")
+                        networkStreak = if (result.error is ApiError.Network) networkStreak + 1 else 0
+                        if (result.error is ApiError.Auth) {
+                            abortedBy = result.error
+                        } else if (networkStreak >= circuitBreakerThreshold) {
+                            abortedBy = result.error
+                        }
                     }
+                }
+                if (abortedBy != null) {
+                    val skipped = total - attempted
+                    log.error(
+                        "pull content stopped after $attempted/$total ${(abortedBy as ApiError).logText()} " +
+                            "networkStreak=$networkStreak skipped=$skipped fetched=${fetched + batch.size}",
+                    )
+                    coroutineContext.cancelChildren()
+                    break
                 }
                 onProgress(Progress(index + 1, total))
                 val done = index + 1
@@ -224,8 +276,9 @@ class PullSync(
             }
             flush()
         }
-        logProgress(total, total, started.elapsedNow().inWholeMilliseconds)
-        return Downloaded(fetched, failures)
+        if (abortedBy == null) logProgress(total, total, started.elapsedNow().inWholeMilliseconds)
+        // Failures that led to a network stop are not reported: the run fails as a whole and the next one resumes.
+        return Downloaded(fetched, if (abortedBy == null) failures else emptyList(), abortedBy)
     }
 
     private fun logProgress(
@@ -248,6 +301,8 @@ class PullSync(
         const val DEFAULT_CHUNK_SIZE = 500
         const val DEFAULT_PARALLELISM = 8
         const val DEFAULT_WRITE_BATCH = 50
+        const val DEFAULT_CIRCUIT_BREAKER = 5
+        val DEFAULT_RETRY_BACKOFF = listOf(500L, 1500L)
         private const val PROGRESS_LOG_EVERY = 250
         private const val SETTING_EXCLUSIONS = "sync.exclusions-applied"
         private const val UNSYNCED = "UNSYNCED"

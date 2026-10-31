@@ -10,6 +10,9 @@ import app.citti.core.fake.Endpoint
 import app.citti.core.fake.FakeFailure
 import app.citti.core.fake.FakeNotesServer
 import app.citti.core.fake.HeaderCasing
+import app.citti.core.log.SyncLog
+import io.ktor.client.plugins.HttpSend
+import io.ktor.client.plugins.plugin
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -28,9 +31,47 @@ class PullSyncTest {
         }
     private val notes = db.noteQueries
 
-    private fun pullSync(chunkSize: Int = 500): PullSync {
+    private val sleeps = mutableListOf<Long>()
+    private val logLines = mutableListOf<String>()
+    private val recordingLog =
+        object : SyncLog {
+            override fun info(msg: String) {
+                logLines += msg
+            }
+
+            override fun warn(msg: String) {
+                logLines += msg
+            }
+
+            override fun error(
+                msg: String,
+                cause: Throwable?,
+            ) {
+                logLines += msg
+            }
+        }
+
+    /** Called with the number of note downloads seen so far, before every request; flips the server mid-pull. */
+    private var onRequest: (Int) -> Unit = {}
+
+    private fun pullSync(
+        chunkSize: Int = 500,
+        parallelism: Int = PullSync.DEFAULT_PARALLELISM,
+    ): PullSync {
         val config = NotesApiConfig("https://host/", "alice", "s3cret")
-        return PullSync(NotesApi(createNotesHttpClient(server.engine, config), config), db, chunkSize = chunkSize)
+        val client = createNotesHttpClient(server.engine, config)
+        client.plugin(HttpSend).intercept { request ->
+            onRequest(server.count(Endpoint.GET_NOTE))
+            execute(request)
+        }
+        return PullSync(
+            NotesApi(client, config),
+            db,
+            chunkSize = chunkSize,
+            downloadParallelism = parallelism,
+            log = recordingLog,
+            sleep = { sleeps += it },
+        )
     }
 
     private fun byRemote(id: Long) = notes.selectByRemoteId(id).executeAsOneOrNull()
@@ -238,5 +279,102 @@ class PullSyncTest {
             pullSync(50).pull { seen += it }
             assertEquals(Progress(120, 120), seen.last())
             assertEquals(120, seen.size)
+        }
+
+    @Test
+    fun transientContentFailuresAreRetriedAndSucceed() =
+        runTest {
+            server.generateNotes(20)
+            // The first Note fails twice on the network, the Note downloaded 10th hits one 500.
+            server.failNext(FakeFailure.NETWORK_ERROR, times = 2, endpoint = Endpoint.GET_NOTE)
+            onRequest = { if (it == 10) server.failNext(FakeFailure.SERVER_ERROR, endpoint = Endpoint.GET_NOTE) }
+
+            val pulled = assertIs<PullResult.Pulled>(pullSync(parallelism = 1).pull())
+
+            assertEquals(20, pulled.contentFetched)
+            assertTrue(pulled.failures.isEmpty())
+            assertEquals(20L, notes.countNotesWithContent().executeAsOne())
+            assertEquals(23, getRequests().size)
+            assertEquals(3, sleeps.size)
+            assertTrue(logLines.any { it.startsWith("pull content retry") })
+            assertNotNull(
+                db.syncStateQueries
+                    .select("list-plain")
+                    .executeAsOne()
+                    .etag,
+            )
+        }
+
+    @Test
+    fun retriesStopAfterTwoAndTheNoteCountsAsFailed() =
+        runTest {
+            val id = server.addNote("A", "a")
+            server.failNext(FakeFailure.SERVER_ERROR, times = 3, endpoint = Endpoint.GET_NOTE)
+
+            val pulled = assertIs<PullResult.Pulled>(pullSync().pull())
+
+            assertEquals(listOf(500L, 1500L), sleeps)
+            assertEquals(3, getRequests().size)
+            assertEquals(listOf(id), pulled.failures.map { it.remoteId })
+        }
+
+    @Test
+    fun sustainedOutageStopsEarlyKeepsWrittenNotesAndNextPullResumes() =
+        runTest {
+            server.generateNotes(1000)
+            // The network dies after 100 note downloads, like Android blocking the app when the screen goes off.
+            onRequest = { if (it == 100) server.failNext(FakeFailure.NETWORK_ERROR, times = 100_000, endpoint = Endpoint.GET_NOTE) }
+
+            val result = pullSync(parallelism = 1).pull()
+
+            assertIs<ApiError.Network>(assertIs<PullResult.Failed>(result).error)
+            assertEquals(100L, notes.countNotesWithContent().executeAsOne())
+            // 5 Notes x (1 attempt + 2 retries) after the 100 good ones; nowhere near the 900 remaining.
+            // (a request already in flight when the breaker opens may add one)
+            assertTrue(getRequests().size in 115..116)
+            assertTrue(logLines.any { it.startsWith("pull content stopped") })
+            // The ETag stays withheld so the next pull does not turn into a 304.
+            assertNull(
+                db.syncStateQueries
+                    .select("list-plain")
+                    .executeAsOneOrNull()
+                    ?.etag,
+            )
+
+            // The network is back: only the Notes still missing content are fetched.
+            onRequest = {}
+            server.clearFailures()
+            server.clearRequests()
+            val resumed = assertIs<PullResult.Pulled>(pullSync(parallelism = 1).pull())
+            assertEquals(900, resumed.contentFetched)
+            assertEquals(900, getRequests().size)
+            assertEquals(0, notes.selectNeedingContent().executeAsList().size)
+            assertEquals(1000L, notes.countNotesWithContent().executeAsOne())
+        }
+
+    @Test
+    fun scatteredNetworkFailuresDoNotTripTheBreaker() =
+        runTest {
+            server.generateNotes(30)
+            // Each of these Notes exhausts its retries, but successes in between reset the streak.
+            onRequest = { if (it % 9 == 0) server.failNext(FakeFailure.NETWORK_ERROR, times = 3, endpoint = Endpoint.GET_NOTE) }
+
+            val pulled = assertIs<PullResult.Pulled>(pullSync(parallelism = 1).pull())
+
+            assertTrue(pulled.failures.isNotEmpty())
+            assertEquals(30, pulled.contentFetched + pulled.failures.size)
+        }
+
+    @Test
+    fun authErrorAbortsTheContentPhaseAtOnce() =
+        runTest {
+            server.generateNotes(50)
+            server.failNext(FakeFailure.UNAUTHORIZED, times = 1000, endpoint = Endpoint.GET_NOTE)
+
+            val result = pullSync(parallelism = 1).pull()
+
+            assertEquals(ApiError.Auth(401), assertIs<PullResult.Failed>(result).error)
+            assertTrue(getRequests().size <= 2)
+            assertTrue(sleeps.isEmpty())
         }
 }
