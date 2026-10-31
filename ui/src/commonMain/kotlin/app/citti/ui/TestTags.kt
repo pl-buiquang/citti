@@ -24,6 +24,7 @@ object TestTags {
 
     /** The New note button; Index's label and the dialog title both read "New note". */
     const val NEW_NOTE_BUTTON = "browse.newNote"
+    const val TREE_SORT = "browse.treeSort"
     const val NEW_NOTE_TITLE = "newNote.title"
     const val NEW_NOTE_CHANGE_FOLDER = "newNote.changeFolder"
     const val NEW_NOTE_CREATE = "newNote.create"

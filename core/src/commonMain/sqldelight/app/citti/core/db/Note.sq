@@ -200,9 +200,10 @@ FROM note
 WHERE sync_state != 'DELETED' AND hidden = 0 AND (:favoritesOnly = 0 OR favorite = 1)
 ORDER BY favorite DESC, modified DESC;
 
--- Tree mode: visible Notes per Folder (direct counts). Kotlin builds the recursive tree (buildFolderTree).
+-- Tree mode: visible Notes per Folder (direct counts) and the newest of them. Kotlin builds the recursive tree
+-- (buildFolderTree).
 countVisibleByFolder:
-SELECT category, count(*) AS notes
+SELECT category, count(*) AS notes, max(modified) AS newest
 FROM note
 WHERE sync_state != 'DELETED' AND hidden = 0
 GROUP BY category;

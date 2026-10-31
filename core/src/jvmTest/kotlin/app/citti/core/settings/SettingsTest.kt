@@ -75,6 +75,19 @@ class SettingsTest {
         }
 
     @Test
+    fun treeSortDefaultsToAlphabeticalAndRoundTrips() =
+        runTest {
+            val repo = UiSettings(db, Dispatchers.Unconfined)
+            assertEquals(TreeSort.ALPHABETICAL, repo.treeSort())
+            repo.setTreeSort(TreeSort.MODIFIED)
+            assertEquals(TreeSort.MODIFIED, repo.treeSort())
+            assertEquals(TreeSort.MODIFIED, repo.treeSortFlow().first())
+            assertEquals("MODIFIED", db.settingQueries.selectSetting(KEY_UI_TREE_SORT).executeAsOne())
+            db.settingQueries.upsertSetting(KEY_UI_TREE_SORT, "SIZE")
+            assertEquals(TreeSort.ALPHABETICAL, repo.treeSort())
+        }
+
+    @Test
     fun imageCacheSizeDefaultsTo500AndRoundTrips() =
         runTest {
             val repo = ImageSettings(db, Dispatchers.Unconfined)

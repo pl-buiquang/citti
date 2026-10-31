@@ -48,6 +48,8 @@
     <string name="mode_list">List</string>
     <string name="mode_tree">Tree</string>
     <string name="tree_root">Notes</string>
+    <string name="tree_sort_name">A–Z</string>
+    <string name="tree_sort_modified">Recent</string>
     <string name="folder_count">(%1$d)</string>
     <string name="drawer_title">Menu</string>
     <string name="drawer_close">Close menu</string>

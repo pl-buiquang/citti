@@ -383,6 +383,7 @@ class MainActivity : ComponentActivity() {
                     onOpenBreadcrumb = { path ->
                         if (!navigator.popTo(Route.Tree(path))) navigator.reset(breadcrumbPaths(path).map { Route.Tree(it) })
                     },
+                    onTreeSort = controller::setSort,
                     onOpenNote = { navigator.push(Route.Note(it)) },
                     onBack = { navigator.pop() },
                     onSyncNow = controller::syncNow,
@@ -694,6 +695,8 @@ class MainActivity : ComponentActivity() {
             status = container.syncStatus,
             mainMode = container.uiSettings.mainModeFlow(),
             setMainMode = { withContext(Dispatchers.IO) { container.uiSettings.setMainMode(it) } },
+            treeSort = container.uiSettings.treeSortFlow(),
+            setTreeSort = { withContext(Dispatchers.IO) { container.uiSettings.setTreeSort(it) } },
             collator = titleCollator,
             sync = container::sync,
         )

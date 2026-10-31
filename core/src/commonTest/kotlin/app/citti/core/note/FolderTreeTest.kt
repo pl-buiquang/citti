@@ -1,5 +1,6 @@
 package app.citti.core.note
 
+import app.citti.core.settings.TreeSort
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -18,9 +19,9 @@ class FolderTreeTest {
         val root = buildFolderTree(listOf("a/b/c" to 2L), byName)
         assertEquals(listOf("a", "a/b", "a/b/c"), root.paths())
         val a = root.children.single()
-        assertEquals(FolderNode("a", "a", 0, 2, a.children), a)
+        assertEquals(FolderNode("a", "a", 0, 2, 0, a.children), a)
         assertEquals("b", a.children.single().name)
-        assertEquals(FolderNode("a/b/c", "c", 2, 2, emptyList()), root.find("a/b/c"))
+        assertEquals(FolderNode("a/b/c", "c", 2, 2, 0, emptyList()), root.find("a/b/c"))
     }
 
     @Test
@@ -42,7 +43,7 @@ class FolderTreeTest {
         assertEquals(4, root.totalNotes)
 
         val empty = buildFolderTree(emptyList(), byName)
-        assertEquals(FolderNode("", "", 0, 0, emptyList()), empty)
+        assertEquals(FolderNode("", "", 0, 0, 0, emptyList()), empty)
     }
 
     @Test
@@ -64,5 +65,17 @@ class FolderTreeTest {
         assertNull(root.find("a/c"))
         assertNull(root.find("missing"))
         assertNull(root.find("a/b/c"))
+    }
+
+    @Test
+    fun modifiedSortUsesTheNewestNoteRecursivelyAndFallsBackToTheName() {
+        val counts = listOf("a" to 1L, "b/c" to 1L, "d" to 1L, "e" to 1L)
+        val modified = mapOf("a" to 10L, "b/c" to 30L, "d" to 20L, "e" to 20L)
+        val root = buildFolderTree(counts, byName, modified, TreeSort.MODIFIED)
+        // b holds no Note itself, but its child is the newest.
+        assertEquals(listOf("b", "b/c", "d", "e", "a"), root.paths())
+        assertEquals(30L, root.find("b")?.modified)
+        assertEquals(30L, root.modified)
+        assertEquals(listOf("a", "b", "d", "e"), buildFolderTree(counts, byName, modified).children.map { it.path })
     }
 }

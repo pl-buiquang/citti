@@ -1,6 +1,7 @@
 package app.citti.ui.browse
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,11 +31,13 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import app.citti.core.note.find
 import app.citti.core.settings.MainMode
+import app.citti.core.settings.TreeSort
 import app.citti.core.sync.SyncStatus
 import app.citti.ui.TestTags
 import app.citti.ui.components.Banner
@@ -71,6 +74,8 @@ import app.citti.ui.resources.empty_list
 import app.citti.ui.resources.empty_list_first_sync
 import app.citti.ui.resources.sync_server_error
 import app.citti.ui.resources.sync_syncing
+import app.citti.ui.resources.tree_sort_modified
+import app.citti.ui.resources.tree_sort_name
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
@@ -99,6 +104,8 @@ class BrowseActions(
     val onMode: (MainMode) -> Unit,
     val onOpenFolder: (path: String) -> Unit,
     val onOpenBreadcrumb: (path: String) -> Unit,
+    /** Switches the Tree mode's sort order. */
+    val onTreeSort: (TreeSort) -> Unit = {},
     val onOpenNote: ((localId: Long) -> Unit)?,
     val onBack: () -> Unit,
     val onSyncNow: () -> Unit,
@@ -151,7 +158,14 @@ fun BrowseScreen(
         title = if (favoritesOnly) stringResource(Res.string.drawer_favorites) else null,
     ) { fabRoom ->
         if (view is BrowseView.Tree) {
-            Breadcrumb(view.folder, onOpen = actions.onOpenBreadcrumb, modifier = Modifier.padding(vertical = NotesSpacing.space1))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Breadcrumb(
+                    view.folder,
+                    onOpen = actions.onOpenBreadcrumb,
+                    modifier = Modifier.weight(1f).padding(vertical = NotesSpacing.space1),
+                )
+                TreeSortButton(state.treeSort, onSelect = actions.onTreeSort)
+            }
         }
         CittiPullRefresh(refreshing = state.syncing, onRefresh = actions.onSyncNow, modifier = Modifier.weight(1f)) {
             LazyColumn(
@@ -238,6 +252,31 @@ fun MainScaffold(
                 NewNoteButton(onNewNote, busy = newNoteBusy)
             }
         }
+    }
+}
+
+/** Shows the current Tree sort order; a tap switches to the other one. */
+@Composable
+private fun TreeSortButton(
+    sort: TreeSort,
+    onSelect: (TreeSort) -> Unit,
+) {
+    val label =
+        stringResource(if (sort == TreeSort.ALPHABETICAL) Res.string.tree_sort_name else Res.string.tree_sort_modified)
+    val next = if (sort == TreeSort.ALPHABETICAL) TreeSort.MODIFIED else TreeSort.ALPHABETICAL
+    Box(
+        Modifier
+            .testTag(TestTags.TREE_SORT)
+            .heightIn(min = NotesSize.touchMin)
+            .clickable(role = Role.Button, onClick = { onSelect(next) })
+            .padding(horizontal = CittiTheme.shape.gutter),
+        contentAlignment = Alignment.Center,
+    ) {
+        BasicText(
+            if (CittiTheme.shape.labelsUppercase) label.uppercase() else label,
+            maxLines = 1,
+            style = CittiTheme.typography.label.copy(color = CittiTheme.colors.inkMuted),
+        )
     }
 }
 

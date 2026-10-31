@@ -30,6 +30,7 @@ import app.citti.core.dav.ObsidianConfig
 import app.citti.core.dav.UploadResult
 import app.citti.core.db.CittiDatabase
 import app.citti.core.note.ExcerptBackfill
+import app.citti.core.note.FolderCount
 import app.citti.core.note.LinkResolver
 import app.citti.core.note.NoteActions
 import app.citti.core.note.NoteCreator
@@ -354,12 +355,12 @@ class AppContainer(
             .map { rows -> rows.map { it.toRowItem() } }
 
     /** Visible Notes per Folder, for the Tree mode tree. */
-    fun folderCounts(): Flow<List<Pair<String, Long>>> =
+    fun folderCounts(): Flow<List<FolderCount>> =
         database.noteQueries
             .countVisibleByFolder()
             .asFlow()
             .mapToList(Dispatchers.IO)
-            .map { rows -> rows.map { it.category to it.notes } }
+            .map { rows -> rows.map { FolderCount(it.category, it.notes, it.newest ?: 0L) } }
 
     /** The visible Notes directly in [path], unsorted (BrowseController sorts them). */
     fun folderNotes(path: String): Flow<List<NoteRowItem>> =

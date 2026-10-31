@@ -1,6 +1,8 @@
 package app.citti.ui.browse
 
+import app.citti.core.note.FolderCount
 import app.citti.core.settings.MainMode
+import app.citti.core.settings.TreeSort
 import app.citti.core.sync.Progress
 import app.citti.core.sync.SyncPhase
 import app.citti.core.sync.SyncResultKind
@@ -32,10 +34,11 @@ private fun row(
 /** In-memory stand-ins for the queries and settings that AppContainer wires from the DB. */
 private class Fakes {
     val rows = MutableStateFlow(listOf(row(1, "b"), row(2, "a", folder = "x", favorite = true)))
-    val counts = MutableStateFlow(listOf("" to 1L, "x" to 1L, "x/y" to 2L))
+    val counts = MutableStateFlow(listOf(FolderCount("", 1L, 1L), FolderCount("x", 1L, 2L), FolderCount("x/y", 2L, 3L)))
     val notes = MutableStateFlow(mapOf("" to listOf(row(1, "b")), "x" to listOf(row(2, "a", folder = "x"))))
     val status = MutableStateFlow<SyncStatus?>(null)
     val mode = MutableStateFlow(MainMode.LIST)
+    val sort = MutableStateFlow(TreeSort.ALPHABETICAL)
     val triggers = mutableListOf<SyncTrigger>()
     val folderQueries = mutableListOf<String>()
 
@@ -48,6 +51,8 @@ private class Fakes {
             status = status,
             mainMode = mode,
             setMainMode = { mode.value = it },
+            treeSort = sort,
+            setTreeSort = { sort.value = it },
             collator = TitleCollator { a, b -> a.lowercase().compareTo(b.lowercase()) },
             sync = { triggers += it },
         )
@@ -205,6 +210,40 @@ class BrowseControllerTest {
             val c = f.controller(backgroundScope)
             assertEquals(
                 listOf(3L, 4L, 5L, 1L),
+                c.state.value.folderNotes
+                    .map { it.localId },
+            )
+        }
+
+    @Test
+    fun sortOrderReordersTheTreeAndTheFolderNotesAndPersists() =
+        runTest(UnconfinedTestDispatcher()) {
+            val f = Fakes()
+            f.counts.value = listOf(FolderCount("a", 1L, 5L), FolderCount("b", 1L, 9L))
+            f.notes.value = mapOf("" to listOf(row(1, "a"), row(7, "b"), row(3, "c")))
+            val c = f.controller(backgroundScope)
+            assertEquals(
+                listOf("a", "b"),
+                c.state.value.tree!!
+                    .children
+                    .map { it.path },
+            )
+            assertEquals(
+                listOf(1L, 7L, 3L),
+                c.state.value.folderNotes
+                    .map { it.localId },
+            )
+            c.setSort(TreeSort.MODIFIED)
+            assertEquals(TreeSort.MODIFIED, f.sort.value)
+            assertEquals(TreeSort.MODIFIED, c.state.value.treeSort)
+            assertEquals(
+                listOf("b", "a"),
+                c.state.value.tree!!
+                    .children
+                    .map { it.path },
+            )
+            assertEquals(
+                listOf(7L, 3L, 1L),
                 c.state.value.folderNotes
                     .map { it.localId },
             )

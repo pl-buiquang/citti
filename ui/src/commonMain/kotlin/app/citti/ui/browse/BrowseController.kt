@@ -1,8 +1,10 @@
 package app.citti.ui.browse
 
+import app.citti.core.note.FolderCount
 import app.citti.core.note.FolderNode
 import app.citti.core.note.buildFolderTree
 import app.citti.core.settings.MainMode
+import app.citti.core.settings.TreeSort
 import app.citti.core.sync.Progress
 import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
@@ -50,6 +52,7 @@ data class BrowseUiState(
     val tree: FolderNode? = null,
     /** The Tree Folder that [folderNotes] were loaded for ("" is the Vault root). */
     val folder: String = "",
+    val treeSort: TreeSort = TreeSort.ALPHABETICAL,
     val folderNotes: List<NoteRowItem> = emptyList(),
     /** Null until the sync stack exists. */
     val status: SyncStatus? = null,
@@ -83,18 +86,21 @@ private data class View(
  * State holder of the main view, one per signed-in session and shared by every List, Tree and Calendar route entry
  * (the Calendar takes its banner and sync state from here, its month and days from its own controller).
  * The current route drives it through [show]. [listRows], [folderCounts] and [folderNotes] come from the local DB,
- * [status] from the SyncEngine, [mainMode] and [setMainMode] from the `ui.main-mode` setting. [folderNotes] are
- * sorted with [collator], then by local id so that the order is stable. [sync] runs a sync with the given trigger.
+ * [status] from the SyncEngine, [mainMode] and [setMainMode] from the `ui.main-mode` setting. [treeSort] and [setTreeSort] come from
+ * the `ui.tree-sort` setting. [folderNotes] are sorted per the [TreeSort] (by title with [collator], or newest first),
+ * then by local id so that the order is stable. [sync] runs a sync with the given trigger.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class BrowseController(
     private val scope: CoroutineScope,
     listRows: (favoritesOnly: Boolean) -> Flow<List<NoteRowItem>>,
-    folderCounts: Flow<List<Pair<String, Long>>>,
+    folderCounts: Flow<List<FolderCount>>,
     folderNotes: (path: String) -> Flow<List<NoteRowItem>>,
     status: Flow<SyncStatus?>,
     mainMode: Flow<MainMode>,
     private val setMainMode: suspend (MainMode) -> Unit,
+    treeSort: Flow<TreeSort>,
+    private val setTreeSort: suspend (TreeSort) -> Unit,
     collator: TitleCollator,
     private val sync: suspend (SyncTrigger) -> Unit,
 ) {
@@ -109,34 +115,45 @@ class BrowseController(
             .flatMapLatest { favoritesOnly -> listRows(favoritesOnly).map { ListPart(favoritesOnly, it) } }
             .onStart<ListPart?> { emit(null) }
 
-    private val tree: Flow<FolderNode?> =
-        folderCounts
-            .map { buildFolderTree(it, collator) }
-            .onStart<FolderNode?> { emit(null) }
+    private val sort: Flow<TreeSort> = treeSort.onStart { emit(TreeSort.ALPHABETICAL) }.distinctUntilChanged()
 
-    private val noteOrder = compareBy<NoteRowItem, String>(collator) { it.title }.thenBy { it.localId }
+    private val tree: Flow<FolderNode?> =
+        combine(folderCounts, sort) { counts, order ->
+            val rows = counts.map { it.category to it.notes }
+            buildFolderTree(rows, collator, counts.associate { it.category to it.newest }, order)
+        }.onStart<FolderNode?> { emit(null) }
+
+    private val byTitle = compareBy<NoteRowItem, String>(collator) { it.title }
+
+    private fun noteOrder(sort: TreeSort) =
+        when (sort) {
+            TreeSort.ALPHABETICAL -> byTitle.thenBy { it.localId }
+            TreeSort.MODIFIED -> compareByDescending<NoteRowItem> { it.modified }.then(byTitle).thenBy { it.localId }
+        }
 
     private val notesInFolder: Flow<FolderPart?> =
         view
             .map { it.folder }
             .distinctUntilChanged()
-            .flatMapLatest { folder -> folderNotes(folder).map { FolderPart(folder, it.sortedWith(noteOrder)) } }
-            .onStart<FolderPart?> { emit(null) }
+            .flatMapLatest { folder ->
+                combine(folderNotes(folder), sort) { notes, order -> FolderPart(folder, notes.sortedWith(noteOrder(order))) }
+            }.onStart<FolderPart?> { emit(null) }
 
     val state: StateFlow<BrowseUiState> =
         combine(
             list,
             tree,
             notesInFolder,
-            mainMode.onStart { emit(MainMode.LIST) }.distinctUntilChanged(),
+            combine(mainMode.onStart { emit(MainMode.LIST) }.distinctUntilChanged(), sort, ::Pair),
             status.onStart { emit(null) },
-        ) { list, tree, folder, mode, st ->
+        ) { list, tree, folder, (mode, order), st ->
             BrowseUiState(
                 mode = mode,
                 list = list?.rows.orEmpty(),
                 favoritesOnly = list?.favoritesOnly ?: false,
                 tree = tree,
                 folder = folder?.folder ?: "",
+                treeSort = order,
                 folderNotes = folder?.notes.orEmpty(),
                 status = st,
                 loaded = list != null,
@@ -168,6 +185,11 @@ class BrowseController(
     /** Persists the Mode the main view opens in next time, Calendar included ([switchMode] also resets the back stack). */
     fun setMode(mode: MainMode) {
         scope.launch { setMainMode(mode) }
+    }
+
+    /** Persists the Tree mode's sort order. */
+    fun setSort(sort: TreeSort) {
+        scope.launch { setTreeSort(sort) }
     }
 
     private var opened = false
