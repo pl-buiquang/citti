@@ -545,7 +545,8 @@ class NoteController(
 
     fun onRenameText(text: String) =
         editDialog<NoteDialog.Rename> {
-            if (it.checking) it else it.copy(text = text, error = null, clashFolder = null)
+            // The field also reports selection and IME composition changes: only a new text clears the error.
+            if (it.checking || it.text == text) it else it.copy(text = text, error = null, clashFolder = null)
         }
 
     /** Flushes the editor, then renames; a clash or an invalid title keeps the dialog open with the error. */
