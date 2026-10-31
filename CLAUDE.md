@@ -31,6 +31,6 @@ The spec lives in the vault, `~/Nextcloud/Notes/projects/citti/`:
 - Build: `./gradlew assembleDebug` (APK in `androidApp/build/outputs/apk/debug/`)
 - Test and lint: `./gradlew spotlessCheck check`; fix formatting with `./gradlew spotlessApply`
 - JVM tests only: `./gradlew :core:jvmTest`
-- Release build: `./gradlew assembleRelease`. It is signed when `keystore.properties` or the `CITTI_*` env vars are set (see `keystore.properties.example`), unsigned otherwise. Tagging `vX.Y.Z` publishes a signed GitHub release (`.github/workflows/release.yml`).
+- Release build: `./gradlew assembleRelease`. It is signed when `keystore.properties` or the `CITTI_*` env vars are set (see `keystore.properties.example`), unsigned otherwise. Tagging `X.Y.Z` publishes a signed GitHub release (`.github/workflows/release.yml`).
 - Install on a device or emulator: `adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk`
 - Needs JDK 17 and the Android SDK (`sdk.dir` in `local.properties`, which is gitignored)

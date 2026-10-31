@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+    tags: ['[0-9]+.[0-9]+.[0-9]+']
 
 permissions:
   contents: write
@@ -30,7 +30,7 @@ jobs:
           CITTI_KEYSTORE_PASSWORD: ${{ secrets.CITTI_KEYSTORE_PASSWORD }}
           CITTI_KEY_ALIAS: ${{ secrets.CITTI_KEY_ALIAS }}
           CITTI_KEY_PASSWORD: ${{ secrets.CITTI_KEY_PASSWORD }}
-        run: ./gradlew spotlessCheck check assembleRelease -PversionName="${GITHUB_REF_NAME#v}"
+        run: ./gradlew spotlessCheck check assembleRelease -PversionName="$GITHUB_REF_NAME"
       - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
