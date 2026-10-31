@@ -14,7 +14,7 @@ The spec lives in the vault, `~/Nextcloud/Notes/projects/citti/`:
 - `roadmap.md` and `plan.md`: milestones and the current step.
 - Tickets: the Obsidian tracker rooted there, rules in `~/Nextcloud/Notes/_work/topics/dev_workflow/issue-tracker-obsidian.md`.
 
-GLOSSARY and ADRs move into this repo at M1 (the scaffold); from then on the repo copy is the source.
+`GLOSSARY.md` and `docs/adr/` are in this repo and are the source; the vault only keeps a pointer.
 
 ## Rules
 
@@ -28,4 +28,8 @@ GLOSSARY and ADRs move into this repo at M1 (the scaffold); from then on the rep
 
 ## Commands
 
-TBD at M1 (scaffold).
+- Build: `./gradlew assembleDebug` (APK in `androidApp/build/outputs/apk/debug/`)
+- Test and lint: `./gradlew spotlessCheck check`; fix formatting with `./gradlew spotlessApply`
+- JVM tests only: `./gradlew :core:jvmTest`
+- Install on a device or emulator: `adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk`
+- Needs JDK 17 and the Android SDK (`sdk.dir` in `local.properties`, which is gitignored)
