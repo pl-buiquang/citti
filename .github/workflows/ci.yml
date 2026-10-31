@@ -57,9 +57,12 @@ jobs:
           path: |
             ~/.android/avd/gradle-managed
             ~/.android/adb*
-          key: gmd-api36-aosp-atd-${{ hashFiles('androidApp/build.gradle.kts') }}
+          key: gmd-api36-aosp-atd-google-${{ hashFiles('androidApp/build.gradle.kts') }}
       - name: E2E tests
         run: ./gradlew e2e -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+      - name: E2E widget tests (google image)
+        if: ${{ !cancelled() }}
+        run: ./gradlew e2e -Pe2e.widgets -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

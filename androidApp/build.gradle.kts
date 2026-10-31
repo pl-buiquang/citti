@@ -50,6 +50,13 @@ android {
         testInstrumentationRunnerArguments["useTestStorageService"] = "true"
         // `./gradlew e2e -Pe2e.class=app.citti.e2e.flows.SearchTest` runs one flow (or `Class#method`).
         (findProperty("e2e.class") as String?)?.let { testInstrumentationRunnerArguments["class"] = it }
+        // Widget flows need a launcher that can pin widgets (ATD cannot): `-Pe2e.widgets` runs only the
+        // @WidgetFlow classes, on the api36Google device; the plain run leaves them out.
+        if (findProperty("e2e.widgets") != null) {
+            testInstrumentationRunnerArguments["annotation"] = "app.citti.e2e.WidgetFlow"
+        } else {
+            testInstrumentationRunnerArguments["notAnnotation"] = "app.citti.e2e.WidgetFlow"
+        }
     }
 
     testOptions {
@@ -62,6 +69,13 @@ android {
                     device = "Pixel 6"
                     apiLevel = 36
                     systemImageSource = "aosp-atd"
+                    require64Bit = true
+                }
+                // The widget flows: a real launcher (the ATD image has none that pins widgets).
+                create<ManagedVirtualDevice>("api36Google") {
+                    device = "Pixel 6"
+                    apiLevel = 36
+                    systemImageSource = "google"
                     require64Bit = true
                 }
             }
