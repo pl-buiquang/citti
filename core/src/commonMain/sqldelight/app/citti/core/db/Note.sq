@@ -165,9 +165,6 @@ SELECT local_id, title, category, excerpt, favorite, modified, sync_state, confl
 FROM note
 WHERE category = :category AND sync_state != 'DELETED' AND hidden = 0;
 
-selectAllForList:
-SELECT * FROM note WHERE sync_state != 'DELETED' AND hidden = 0 ORDER BY favorite DESC, modified DESC;
-
 countNotes:
 SELECT count(*) FROM note WHERE sync_state != 'DELETED';
 

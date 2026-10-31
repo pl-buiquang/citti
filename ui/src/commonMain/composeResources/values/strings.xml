@@ -23,17 +23,16 @@
     <string name="login_error_server">The server had a problem. Try again later.</string>
     <string name="login_error_unknown">Sign-in failed. Try again.</string>
 
-    <!-- Notes list (debug, replaced in M3) -->
-    <string name="list_title">Notes</string>
-    <string name="list_settings">Settings</string>
-    <string name="list_sync_now">Sync now</string>
-    <string name="list_empty">No Notes yet.</string>
-    <string name="list_empty_syncing">Notes appear here as they are downloaded.</string>
+    <!-- Note rows -->
     <string name="badge_pending">Pending</string>
     <string name="badge_conflict">Conflict</string>
     <string name="badge_favorite">Favorite</string>
-    <string name="list_no_folder">No Folder</string>
     <string name="badge_hidden">Hidden</string>
+    <string name="date_now">now</string>
+    <string name="date_minutes">%1$d min</string>
+    <string name="date_hours">%1$d h</string>
+    <string name="date_yesterday">Yest.</string>
+    <string name="date_days">%1$d d</string>
 
     <!-- Browse: search bar, ModeSwitch, Tree, drawer -->
     <string name="search_hint">Search notes</string>
@@ -47,6 +46,11 @@
     <string name="drawer_title">Menu</string>
     <string name="drawer_close">Close menu</string>
     <string name="pull_refresh_action">Sync now</string>
+    <string name="drawer_favorites">Favorites</string>
+    <string name="empty_list">No notes yet</string>
+    <string name="empty_list_first_sync">Your notes are on their way</string>
+    <string name="empty_favorites">No favorites</string>
+    <string name="empty_folder">This folder is empty</string>
 
     <!-- Sync status line and banners -->
     <string name="sync_syncing">Syncing</string>
@@ -62,11 +66,14 @@
     <string name="sync_failed">Sync failed</string>
     <string name="sync_pending_count">%1$d pending</string>
     <string name="sync_conflict_count">%1$d Conflict copies</string>
-    <string name="banner_offline">You are offline. Edits are saved and will sync.</string>
+    <string name="banner_offline">Offline. Changes will sync.</string>
     <string name="banner_auth_failed">The server refused the saved sign-in. Your Notes stay on this device.</string>
-    <string name="banner_error">Sync did not finish. Your Notes stay on this device.</string>
-    <string name="banner_retry">Retry</string>
+    <string name="banner_first_sync">Syncing %1$s / %2$s notes</string>
+    <string name="banner_failed">Sync failed</string>
     <string name="banner_sign_in_again">Sign in again</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_details">Details</string>
+    <string name="action_hide_details">Hide details</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>

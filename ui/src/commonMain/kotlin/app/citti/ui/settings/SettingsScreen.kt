@@ -27,6 +27,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.SYNC_INTERVAL_CHOICES
 import app.citti.core.settings.SyncNetwork
+import app.citti.ui.browse.statusText
+import app.citti.ui.browse.syncLine
 import app.citti.ui.components.Banner
 import app.citti.ui.components.BannerKind
 import app.citti.ui.components.ButtonKind
@@ -35,9 +37,6 @@ import app.citti.ui.components.CittiTextButton
 import app.citti.ui.components.CittiTextField
 import app.citti.ui.components.CittiTopBar
 import app.citti.ui.components.colored
-import app.citti.ui.list.NoteListUiState
-import app.citti.ui.list.statusText
-import app.citti.ui.list.syncLine
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.settings_account
 import app.citti.ui.resources.settings_add_folder
@@ -169,7 +168,7 @@ private fun SettingsHome(
                 actions.onNetwork(SyncNetwork.UNMETERED)
             }
             BasicText(
-                statusText(syncLine(state.status, now), NoteListUiState(status = state.status)),
+                statusText(syncLine(state.status, now), state.status),
                 style = CittiTheme.typography.meta.colored(muted = true),
             )
             CittiButton(

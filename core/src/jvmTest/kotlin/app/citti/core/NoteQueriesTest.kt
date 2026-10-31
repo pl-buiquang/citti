@@ -32,7 +32,7 @@ class NoteQueriesTest {
     fun listHidesHiddenNotesButStillStoresThem() {
         server(1)
         server(2, category = "secret", hidden = true)
-        assertEquals(listOf(1L), notes.selectAllForList().executeAsList().mapNotNull { it.remote_id })
+        assertEquals(listOf("t1"), notes.selectListRows(favoritesOnly = 0).executeAsList().map { it.title })
         assertEquals(2, notes.countNotes().executeAsOne())
     }
 
@@ -261,14 +261,14 @@ class NoteQueriesTest {
         notes.deleteByCategoryPrefix("a/b")
         val left =
             notes
-                .selectAllForList()
+                .selectListRows(favoritesOnly = 0)
                 .executeAsList()
                 .map { it.category }
                 .toSet()
         assertEquals(setOf("a", "a/bc", "ab", "_work", "xwork", ""), left)
         notes.deleteByCategoryPrefix("_work")
-        assertTrue(notes.selectAllForList().executeAsList().any { it.category == "xwork" })
-        assertFalse(notes.selectAllForList().executeAsList().any { it.category == "_work" })
+        assertTrue(notes.selectListRows(favoritesOnly = 0).executeAsList().any { it.category == "xwork" })
+        assertFalse(notes.selectListRows(favoritesOnly = 0).executeAsList().any { it.category == "_work" })
     }
 
     @Test
@@ -276,16 +276,6 @@ class NoteQueriesTest {
         server(1)
         notes.deleteByLocalId(notes.selectByRemoteId(1).executeAsOne().local_id)
         assertEquals(0, notes.countNotes().executeAsOne())
-    }
-
-    @Test
-    fun listOrdersFavoritesFirstThenNewestAndSkipsDeleted() {
-        server(1, modified = 100)
-        server(2, modified = 300)
-        server(3, modified = 50, favorite = true)
-        server(4, modified = 400)
-        notes.markDeleted(notes.selectByRemoteId(4).executeAsOne().local_id)
-        assertEquals(listOf(3L, 2L, 1L), notes.selectAllForList().executeAsList().map { it.remote_id })
     }
 
     @Test

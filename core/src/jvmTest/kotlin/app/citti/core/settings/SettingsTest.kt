@@ -58,6 +58,20 @@ class SettingsTest {
         }
 
     @Test
+    fun mainModeDefaultsToListAndRoundTrips() =
+        runTest {
+            val repo = UiSettings(db, Dispatchers.Unconfined)
+            assertEquals(MainMode.LIST, repo.mainMode())
+            assertEquals(MainMode.LIST, repo.mainModeFlow().first())
+            repo.setMainMode(MainMode.TREE)
+            assertEquals(MainMode.TREE, repo.mainMode())
+            assertEquals(MainMode.TREE, repo.mainModeFlow().first())
+            assertEquals("TREE", db.settingQueries.selectSetting(KEY_UI_MAIN_MODE).executeAsOne())
+            db.settingQueries.upsertSetting(KEY_UI_MAIN_MODE, "GRID")
+            assertEquals(MainMode.LIST, repo.mainMode())
+        }
+
+    @Test
     fun exclusionsAddNormalizeRemove() {
         val repo = ExclusionRepository(db)
         assertEquals("a/b", repo.add(ExclusionKind.UNSYNCED, " /a//b/ "))

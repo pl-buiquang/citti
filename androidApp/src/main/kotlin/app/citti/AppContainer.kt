@@ -18,14 +18,15 @@ import app.citti.core.db.CittiDatabase
 import app.citti.core.note.ExcerptBackfill
 import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.SyncSettingsRepository
+import app.citti.core.settings.UiSettings
 import app.citti.core.sync.PullSync
 import app.citti.core.sync.PushSync
 import app.citti.core.sync.SyncEngine
 import app.citti.core.sync.SyncOutcome
 import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
-import app.citti.ui.list.NoteListItem
-import app.citti.ui.list.toListItem
+import app.citti.ui.browse.NoteRowItem
+import app.citti.ui.browse.toRowItem
 import app.citti.ui.settings.AccountInfo
 import app.citti.ui.settings.CoreSettingsStore
 import io.ktor.client.HttpClient
@@ -72,6 +73,8 @@ class AppContainer(
     val syncSettings: SyncSettingsRepository by lazy { SyncSettingsRepository(database) }
 
     val exclusions: ExclusionRepository by lazy { ExclusionRepository(database) }
+
+    val uiSettings: UiSettings by lazy { UiSettings(database) }
 
     val settingsStore: CoreSettingsStore by lazy { CoreSettingsStore(syncSettings, exclusions) }
 
@@ -190,13 +193,29 @@ class AppContainer(
         return AccountInfo(host, c.user)
     }
 
-    /** Notes for the debug list, kept current by SQLDelight. */
-    fun noteListItems(): Flow<List<NoteListItem>> =
+    /** List mode rows (favorites first, then newest), kept current by SQLDelight. */
+    fun listRows(favoritesOnly: Boolean): Flow<List<NoteRowItem>> =
         database.noteQueries
-            .selectAllForList()
+            .selectListRows(if (favoritesOnly) 1L else 0L)
             .asFlow()
             .mapToList(Dispatchers.IO)
-            .map { notes -> notes.map { it.toListItem() } }
+            .map { rows -> rows.map { it.toRowItem() } }
+
+    /** Visible Notes per Folder, for the Tree mode tree. */
+    fun folderCounts(): Flow<List<Pair<String, Long>>> =
+        database.noteQueries
+            .countVisibleByFolder()
+            .asFlow()
+            .mapToList(Dispatchers.IO)
+            .map { rows -> rows.map { it.category to it.notes } }
+
+    /** The visible Notes directly in [path], unsorted (BrowseController sorts them). */
+    fun folderNotes(path: String): Flow<List<NoteRowItem>> =
+        database.noteQueries
+            .selectFolderNotes(path)
+            .asFlow()
+            .mapToList(Dispatchers.IO)
+            .map { rows -> rows.map { it.toRowItem() } }
 
     private suspend fun buildStack(credentials: Credentials): SyncStack =
         stackLock.withLock {

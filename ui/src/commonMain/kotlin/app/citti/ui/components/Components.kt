@@ -25,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -32,10 +34,14 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import app.citti.core.note.NoteBadge
+import app.citti.ui.resources.Res
+import app.citti.ui.resources.action_back
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
+import org.jetbrains.compose.resources.stringResource
 
 /** Text roles resolved against the current theme colors. Components use these instead of raw colors. */
 @Composable
@@ -155,7 +161,10 @@ fun CittiTextField(
 
 enum class BannerKind { Offline, Error }
 
-/** Full-width strip under the top bar. Offline has no action; Error has one (Retry, Sign in again). */
+/**
+ * Full-width strip under the top bar. Offline has no action; Error has one (Retry, Sign in again) and
+ * optionally a second one before it (Details).
+ */
 @Composable
 fun Banner(
     message: String,
@@ -163,6 +172,8 @@ fun Banner(
     modifier: Modifier = Modifier,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    secondaryLabel: String? = null,
+    onSecondary: (() -> Unit)? = null,
 ) {
     val colors = CittiTheme.colors
     Row(
@@ -178,6 +189,7 @@ fun Banner(
             modifier = Modifier.weight(1f),
             style = CittiTheme.typography.meta.copy(color = if (kind == BannerKind.Error) colors.danger else colors.ink),
         )
+        if (secondaryLabel != null && onSecondary != null) CittiTextButton(secondaryLabel, onSecondary)
         if (actionLabel != null && onAction != null) CittiTextButton(actionLabel, onAction)
     }
 }
@@ -187,6 +199,7 @@ fun Banner(
 fun CittiTopBar(
     title: String,
     modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
 ) {
@@ -194,12 +207,13 @@ fun CittiTopBar(
         modifier
             .fillMaxWidth()
             .heightIn(min = NotesSize.barHeight)
-            .padding(horizontal = CittiTheme.shape.gutter),
+            .padding(start = if (onBack == null) CittiTheme.shape.gutter else 0.dp, end = CittiTheme.shape.gutter),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (onBack != null) IconButton(CittiIcon.Back, stringResource(Res.string.action_back), onBack)
         BasicText(
             title,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).semantics { heading() },
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = CittiTheme.typography.title.colored(),
