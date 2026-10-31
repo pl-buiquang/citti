@@ -48,6 +48,7 @@ enum class CittiIcon {
     Info,
     Trash,
     StarFilled,
+    CalendarDay,
 }
 
 /** Decorative icon (no semantics): pair it with a label, or use [IconButton]. */
@@ -218,6 +219,15 @@ private fun DrawScope.drawIcon(
             path(6f to 6f, 7f to 20.5f, 17f to 20.5f, 18f to 6f)
             line(10f, 10f, 10f, 17f)
             line(14f, 10f, 14f, 17f)
+        }
+
+        CittiIcon.CalendarDay -> {
+            // A calendar page: the binding rings, the header rule, and one day filled in.
+            path(4f to 5f, 20f to 5f, 20f to 20f, 4f to 20f, close = true)
+            line(4f, 10f, 20f, 10f)
+            line(8f, 3f, 8f, 6f)
+            line(16f, 3f, 16f, 6f)
+            path(10f to 13f, 14f to 13f, 14f to 17f, 10f to 17f, close = true, fill = true)
         }
     }
 }

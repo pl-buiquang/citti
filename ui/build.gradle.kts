@@ -22,6 +22,8 @@ kotlin {
             api(libs.compose.foundation)
             api(project(":core"))
             api(libs.kotlinx.coroutines.core)
+            // The Calendar's months and days (YearMonth, LocalDate, DayOfWeek) are in the API of :ui.
+            api(libs.kotlinx.datetime)
             implementation(libs.compose.resources)
             implementation(libs.kotlinx.serialization.json)
             api(libs.coil.compose)

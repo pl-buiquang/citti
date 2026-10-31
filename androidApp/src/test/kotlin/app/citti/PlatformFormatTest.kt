@@ -1,5 +1,8 @@
 package app.citti
 
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.Locale
@@ -32,5 +35,26 @@ class PlatformFormatTest {
         assertEquals(0, collator.compare("ete", "Été"))
         assertTrue(collator.compare("abricot", "Été") < 0)
         assertTrue(collator.compare("Zèbre", "été") > 0)
+    }
+
+    @Test
+    fun calendarLabelsInEnglish() {
+        val labels = JavaTimeCalendarLabels(Locale.UK)
+        assertEquals("October 2026", labels.monthYear(YearMonth(2026, 10)))
+        assertEquals("October", labels.monthName(YearMonth(2026, 10)))
+        assertEquals("M", labels.weekdayInitial(DayOfWeek.MONDAY))
+        assertEquals("Saturday", labels.weekdayName(DayOfWeek.SATURDAY))
+        assertEquals("Sat 31 Oct", labels.shortDate(LocalDate(2026, 10, 31)))
+        assertEquals("12 Oct", labels.dayMonth(LocalDate(2026, 10, 12)))
+        assertEquals("31 October", labels.dayMonthLong(LocalDate(2026, 10, 31)))
+    }
+
+    @Test
+    fun calendarLabelsFollowTheLocale() {
+        val french = JavaTimeCalendarLabels(Locale.FRANCE)
+        assertEquals("Octobre 2026", french.monthYear(YearMonth(2026, 10)))
+        assertEquals("octobre", french.monthName(YearMonth(2026, 10)))
+        assertEquals(DayOfWeek.MONDAY, french.defaultWeekStart())
+        assertEquals(DayOfWeek.SUNDAY, JavaTimeCalendarLabels(Locale.US).defaultWeekStart())
     }
 }

@@ -50,6 +50,14 @@ object TestTags {
     const val IMAGE_GALLERY = "image.gallery"
     const val UPLOAD_CHIP = "upload.chip"
 
+    /**
+     * The Calendar: the month pager (swiped by the Robots), the Today chip (Index's Today button reads "Today" too)
+     * and the Daily note rows under the grid. Day cells are found by their content description.
+     */
+    const val CALENDAR_GRID = "calendar.grid"
+    const val CALENDAR_TODAY = "calendar.today"
+    const val CALENDAR_ENTRIES = "calendar.entries"
+
     const val SETTINGS_HOME = "settings.home"
     const val SETTINGS_PICKER = "settings.picker"
     const val SETTINGS_FOLDER_PATH = "settings.folder.path"
