@@ -11,3 +11,4 @@ captures/
 CLAUDE.local.md
 nextcloud.env
 *.env
+.claude/worktrees
