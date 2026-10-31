@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Runs the E2E suite (the e2e job); only by hand.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -30,3 +32,39 @@ jobs:
           name: citti-debug-apk
           path: androidApp/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+  # E2E suite on the managed emulator (AOSP ATD, API 36), against the fake server. Manual only.
+  e2e:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Cache the managed device
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/gradle-managed
+            ~/.android/adb*
+          key: gmd-api36-aosp-atd-${{ hashFiles('androidApp/build.gradle.kts') }}
+      - name: E2E tests
+        run: ./gradlew e2e -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-results
+          path: |
+            androidApp/build/outputs/androidTest-results/
+            androidApp/build/reports/androidTests/
+            androidApp/build/outputs/managed_device_android_test_additional_output/
+          if-no-files-found: warn
