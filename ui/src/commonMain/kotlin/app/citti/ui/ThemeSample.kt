@@ -22,6 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import app.citti.ui.components.Gutter
+import app.citti.ui.components.NoteRow
+import app.citti.ui.components.RowBadge
+import app.citti.ui.components.colored
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
@@ -50,27 +54,16 @@ fun ThemeSampleScreen() {
                 folder = "Projects/citti",
                 date = "2h",
                 favorite = true,
-                conflict = false,
             )
             NoteRow(
                 title = "Meeting notes (conflict 2026-10-31)",
                 folder = "Work/notes",
                 date = "1d",
-                favorite = false,
-                conflict = true,
+                badge = RowBadge.Conflict,
             )
             Gutter { NoteSnippet() }
         }
     }
-}
-
-@Composable
-private fun TextStyle.colored(muted: Boolean = false): TextStyle =
-    copy(color = if (muted) CittiTheme.colors.inkMuted else CittiTheme.colors.ink)
-
-@Composable
-private fun Gutter(content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = CittiTheme.shape.gutter)) { content() }
 }
 
 @Composable
@@ -102,44 +95,6 @@ private fun <T : Enum<T>> Picker(
             }
         }
     }
-}
-
-@Composable
-private fun NoteRow(
-    title: String,
-    folder: String,
-    date: String,
-    favorite: Boolean,
-    conflict: Boolean,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = CittiTheme.shape.rowMin)
-            .padding(horizontal = CittiTheme.shape.gutter),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(NotesSpacing.space3),
-    ) {
-        Column(Modifier.weight(1f)) {
-            BasicText(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = CittiTheme.typography.rowTitle.colored())
-            BasicText(folder, maxLines = 1, overflow = TextOverflow.Ellipsis, style = CittiTheme.typography.meta.colored(muted = true))
-        }
-        if (favorite) StateLabel("Favorite", CittiTheme.colors.favorite)
-        if (conflict) StateLabel("Conflict", CittiTheme.colors.conflict)
-        BasicText(date, style = CittiTheme.typography.meta.colored(muted = true))
-    }
-}
-
-/** State is words, not only color. */
-@Composable
-private fun StateLabel(
-    text: String,
-    color: Color,
-) {
-    BasicText(
-        if (CittiTheme.shape.labelsUppercase) text.uppercase() else text,
-        style = CittiTheme.typography.label.copy(color = color),
-    )
 }
 
 @Composable

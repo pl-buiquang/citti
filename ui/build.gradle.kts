@@ -19,10 +19,13 @@ kotlin {
         commonMain.dependencies {
             api(libs.compose.runtime)
             api(libs.compose.foundation)
+            api(project(":core"))
+            api(libs.kotlinx.coroutines.core)
             implementation(libs.compose.resources)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }
