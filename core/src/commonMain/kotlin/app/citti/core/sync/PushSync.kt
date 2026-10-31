@@ -111,7 +111,7 @@ class PushSync(
         val body = NewNote(note.title, note.content.orEmpty(), note.category, note.favorite)
         return when (val result = api.createNote(body)) {
             is ApiResult.Success -> {
-                markSynced(note.local_id, result.value, body.title, body.category, body.content)
+                markSynced(note.local_id, result.value, body.title, body.category, body.content, body.favorite)
                 created++
                 null
             }
@@ -187,7 +187,7 @@ class PushSync(
             is ApiResult.Success -> {
                 when (val update = result.value) {
                     is UpdateResult.Updated -> {
-                        markSynced(note.local_id, update.note, note.title, note.category, note.content.orEmpty())
+                        markSynced(note.local_id, update.note, note.title, note.category, note.content.orEmpty(), note.favorite)
                         updated++
                         null
                     }
@@ -258,13 +258,14 @@ class PushSync(
         )
     }
 
-    /** [sentTitle], [sentCategory] and [sentContent] are the values the request carried. */
+    /** [sentTitle], [sentCategory], [sentContent] and [sentFavorite] are the values the request carried. */
     private fun markSynced(
         localId: Long,
         remote: RemoteNote,
         sentTitle: String,
         sentCategory: String,
         sentContent: String,
+        sentFavorite: Boolean,
     ) = queries.markSynced(
         remoteId = remote.id,
         etag = remote.etag,
@@ -273,6 +274,7 @@ class PushSync(
         sentCategory = sentCategory,
         category = remote.category ?: sentCategory,
         sentContent = sentContent,
+        sentFavorite = sentFavorite,
         modified = remote.modified ?: now(),
         localId = localId,
     )

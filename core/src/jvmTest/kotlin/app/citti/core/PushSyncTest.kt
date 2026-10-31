@@ -230,6 +230,51 @@ class PushSyncTest {
             assertEquals("SYNCED", notes.selectByLocalId(local).executeAsOne().sync_state)
         }
 
+    /** No query toggles a Favorite yet (M5 NoteActions), so the test writes it directly, like the menu will. */
+    private fun toggleFavorite(local: Long) =
+        driver.execute(
+            null,
+            "UPDATE note SET favorite = NOT favorite, sync_state = CASE WHEN sync_state = 'NEW' THEN 'NEW' ELSE 'DIRTY' END " +
+                "WHERE local_id = ?",
+            1,
+        ) { bindLong(0, local) }
+
+    @Test
+    fun favoriteToggledDuringUpdateIsPushedNextRun() =
+        runTest {
+            val (local, remote) = synced()
+            notes.markDirty("edited", 5, local)
+            duringRequest(Endpoint.UPDATE) { toggleFavorite(local) }
+            assertEquals(1, done().updated)
+
+            val row = notes.selectByLocalId(local).executeAsOne()
+            assertEquals("DIRTY", row.sync_state)
+            assertTrue(row.favorite)
+            assertEquals(false, server.note(remote)!!.favorite)
+            assertEquals(server.note(remote)!!.etag, row.etag)
+
+            assertEquals(1, done().updated)
+            assertTrue(server.note(remote)!!.favorite)
+            assertEquals("SYNCED", notes.selectByLocalId(local).executeAsOne().sync_state)
+        }
+
+    @Test
+    fun favoriteToggledDuringCreateIsPushedNextRun() =
+        runTest {
+            val local = newLocal("Fresh", "first")
+            duringRequest(Endpoint.CREATE) { toggleFavorite(local) }
+            assertEquals(1, done().created)
+
+            val row = notes.selectByLocalId(local).executeAsOne()
+            val remote = assertNotNull(row.remote_id)
+            assertEquals("DIRTY", row.sync_state)
+            assertEquals(false, server.note(remote)!!.favorite)
+
+            assertEquals(1, done().updated)
+            assertTrue(server.note(remote)!!.favorite)
+            assertEquals("SYNCED", notes.selectByLocalId(local).executeAsOne().sync_state)
+        }
+
     @Test
     fun deleteDuringCreateIsPushedNextRun() =
         runTest {

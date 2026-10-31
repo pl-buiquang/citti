@@ -296,7 +296,7 @@ class NoteSearchTest {
             notes.insertNew("T", "c", "body", 5, null)
             val id = notes.lastInsertedLocalId().executeAsOne()
             val before = segments()
-            notes.markSynced(7, "e7", "T", "T", "c", "c", "body", 100, id)
+            notes.markSynced(7, "e7", "T", "T", "c", "c", "body", false, 100, id)
             assertEquals(before, segments())
             notes.upsertFromServer(7, "e7", "T", "c", false, 100, false, false)
             assertEquals(before, segments())

@@ -111,7 +111,7 @@ class NoteEditorTest {
         val id = synced()
         val e = editor(id).also { it.load() }
         assertEquals(SaveResult.Saved, e.save("one", "e1"))
-        notes.markSynced(1, "e5", "Plan", "Plan", "work", "work", "one", 300, id)
+        notes.markSynced(1, "e5", "Plan", "Plan", "work", "work", "one", false, 300, id)
         assertEquals(SaveResult.Saved, e.save("two", "e5"))
         assertEquals("two", row(id).content)
         assertIs<SaveResult.Conflict>(e.save("three", "e1"))
@@ -156,7 +156,7 @@ class NoteEditorTest {
         e.save("a", "e1")
         e.save("a", "e1")
         assertEquals(1, pushes)
-        notes.markSynced(1, "e5", "Plan", "Plan", "work", "work", "a", 300, id)
+        notes.markSynced(1, "e5", "Plan", "Plan", "work", "work", "a", false, 300, id)
         notes.upsertFromServer(1, "e6", "Plan", "work", false, 400, false, false)
         assertIs<SaveResult.Conflict>(e.save("b", "e5"))
         assertEquals(1, pushes)

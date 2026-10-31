@@ -11,11 +11,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NoteQueriesTest {
-    private val db: CittiDatabase =
-        JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).let {
-            CittiDatabase.Schema.create(it)
-            CittiDatabase(it)
-        }
+    private val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { CittiDatabase.Schema.create(it) }
+    private val db: CittiDatabase = CittiDatabase(driver)
     private val notes = db.noteQueries
 
     private fun server(
@@ -137,6 +134,7 @@ class NoteQueriesTest {
         sentCategory: String,
         sentContent: String,
         localId: Long,
+        sentFavorite: Boolean = false,
     ) = notes.markSynced(
         remoteId = remoteId,
         etag = "e$remoteId",
@@ -145,6 +143,7 @@ class NoteQueriesTest {
         sentCategory = sentCategory,
         category = "server/$sentCategory",
         sentContent = sentContent,
+        sentFavorite = sentFavorite,
         modified = 100,
         localId = localId,
     )
@@ -178,6 +177,23 @@ class NoteQueriesTest {
         assertEquals("typed meanwhile", row.content)
         assertEquals("T (2)", row.title)
         assertEquals(6, row.modified)
+    }
+
+    @Test
+    fun markSyncedKeepsFavoriteToggledDuringPush() {
+        val id = newNote()
+        // No query toggles a Favorite yet (M5 NoteActions), so the test writes it directly.
+        driver.execute(null, "UPDATE note SET favorite = 1 WHERE local_id = ?", 1) { bindLong(0, id) }
+        synced(7, "T", "c", "body", id, sentFavorite = false)
+        val row = notes.selectByLocalId(id).executeAsOne()
+        assertEquals("DIRTY", row.sync_state)
+        assertEquals(true, row.favorite)
+        assertEquals(7L, row.remote_id)
+        assertEquals("e7", row.etag)
+        assertEquals(5, row.modified)
+
+        synced(7, "T (2)", "server/c", "body", id, sentFavorite = true)
+        assertEquals("SYNCED", notes.selectByLocalId(id).executeAsOne().sync_state)
     }
 
     @Test
