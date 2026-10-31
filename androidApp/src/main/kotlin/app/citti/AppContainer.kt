@@ -67,6 +67,9 @@ import app.citti.ui.settings.AccountInfo
 import app.citti.ui.settings.CoreDailySettingsStore
 import app.citti.ui.settings.CoreSettingsStore
 import app.citti.ui.settings.DailySettingsStore
+import app.citti.widget.DailyWidgetState
+import app.citti.widget.FavoriteRow
+import app.citti.widget.NoteWidgetRow
 import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
@@ -353,6 +356,39 @@ class AppContainer(
             .asFlow()
             .mapToList(Dispatchers.IO)
             .map { rows -> rows.map { it.toRowItem() } }
+
+    /** Favorites widget rows (the Drawer > Favorites set, newest first); one-shot, the widget redraws on update. */
+    suspend fun favoriteWidgetRows(): List<FavoriteRow> =
+        withContext(Dispatchers.IO) {
+            database.noteQueries
+                .selectFavoriteWidgetRows()
+                .executeAsList()
+                .map { FavoriteRow(it.local_id, it.title, it.category) }
+        }
+
+    /** The row a Note widget draws, or null when the Note is gone. */
+    suspend fun noteWidget(localId: Long): NoteWidgetRow? =
+        withContext(Dispatchers.IO) {
+            database.noteQueries
+                .selectNoteWidget(localId)
+                .executeAsOneOrNull()
+                ?.let { NoteWidgetRow(it.title, it.category, it.content, it.view_line?.toInt()) }
+        }
+
+    /** The Reading position of a Note, written when its screen is left. Sync never writes it. */
+    suspend fun setViewLine(
+        localId: Long,
+        line: Int,
+    ) = withContext(Dispatchers.IO) { database.noteQueries.setViewLine(line.toLong(), localId) }
+
+    /** What the Daily note widget shows for [date], through M6's local lookup (Hidden notes included). */
+    suspend fun dailyWidget(date: LocalDate): DailyWidgetState =
+        withContext(Dispatchers.IO) {
+            if (dailyGuard.current() != null) return@withContext DailyWidgetState.Guard
+            val id = dailyNotes()?.localNote(date) ?: return@withContext DailyWidgetState.Missing
+            val row = noteWidget(id) ?: return@withContext DailyWidgetState.Missing
+            DailyWidgetState.Found(id, row)
+        }
 
     /** Visible Notes per Folder, for the Tree mode tree. */
     fun folderCounts(): Flow<List<FolderCount>> =

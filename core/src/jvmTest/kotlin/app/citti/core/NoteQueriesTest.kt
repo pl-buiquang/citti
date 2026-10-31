@@ -404,7 +404,7 @@ class NoteQueriesTest {
         upgraded.syncStateQueries.upsert("k", null, 0, null)
         upgraded.settingQueries.insertExclusion("p", "HIDDEN")
         assertEquals(1, upgraded.noteQueries.countNotes().executeAsOne())
-        assertEquals(4, CittiDatabase.Schema.version)
+        assertEquals(5, CittiDatabase.Schema.version)
     }
 
     /** The v2 schema as 1.sqm leaves it, which is what databases/2.db holds. */
@@ -451,7 +451,7 @@ class NoteQueriesTest {
         // and the triggers keep it current
         migrated.updateContent("Une journée d'été", "e1b", migrated.selectByRemoteId(1).executeAsOne().local_id)
         assertEquals(listOf("1"), driver.strings("$found '\"ete*\" \"journee*\"'"))
-        assertEquals(4, CittiDatabase.Schema.version)
+        assertEquals(5, CittiDatabase.Schema.version)
     }
 
     @Test
@@ -518,5 +518,56 @@ class NoteQueriesTest {
         assertEquals("typed here", notes.selectByLocalId(id).executeAsOne().excerpt)
         notes.insertNew("New", "", "> quoted", 6, null)
         assertEquals("quoted", notes.selectByLocalId(notes.lastInsertedLocalId().executeAsOne()).executeAsOne().excerpt)
+    }
+
+    @Test
+    fun favoriteWidgetRowsAreTheFavoritesByModifiedDescWithoutHiddenOrDeleted() {
+        server(1, favorite = true, modified = 10)
+        server(2, favorite = true, modified = 30)
+        server(3, favorite = false, modified = 50)
+        server(4, favorite = true, modified = 40, category = "secret", hidden = true)
+        server(5, favorite = true, modified = 20)
+        notes.markDeleted(notes.selectByRemoteId(5).executeAsOne().local_id)
+        assertEquals(listOf("t2", "t1"), notes.selectFavoriteWidgetRows().executeAsList().map { it.title })
+    }
+
+    @Test
+    fun noteWidgetReturnsAHiddenNoteAndNothingForADeletedOne() {
+        server(1, category = "secret", hidden = true)
+        server(2)
+        val hidden = notes.selectByRemoteId(1).executeAsOne().local_id
+        val gone = notes.selectByRemoteId(2).executeAsOne().local_id
+        notes.markDeleted(gone)
+        assertEquals("t1", notes.selectNoteWidget(hidden).executeAsOne().title)
+        assertNull(notes.selectNoteWidget(gone).executeAsOneOrNull())
+    }
+
+    @Test
+    fun theReadingPositionSurvivesSyncAndLocalWrites() {
+        server(1)
+        val id = notes.selectByRemoteId(1).executeAsOne().local_id
+        notes.updateContent("a\nb\nc", "e1", id)
+        assertNull(notes.selectViewLine(id).executeAsOne().view_line)
+        notes.setViewLine(2, id)
+        server(1, etag = "e2", title = "renamed", favorite = true)
+        assertEquals(2L, notes.selectViewLine(id).executeAsOne().view_line)
+        notes.updateContent("a\nb\nc\nd", "e2", id)
+        notes.markDirty("a\nb\nc\nd\ne", 9, id)
+        assertEquals(2L, notes.selectViewLine(id).executeAsOne().view_line)
+        notes.markSynced(1, "e3", "renamed", "renamed", "", "", "a\nb\nc\nd\ne", true, 11, id)
+        assertEquals(2L, notes.selectViewLine(id).executeAsOne().view_line)
+    }
+
+    @Test
+    fun migrationFourAddsAnEmptyReadingPosition() {
+        val driver = v2Driver()
+        CittiDatabase.Schema.migrate(driver, 2, 3)
+        driver.execute(null, "INSERT INTO note(title, category, content, modified) VALUES ('Old', '', 'x', 1)", 0)
+        CittiDatabase.Schema.migrate(driver, 3, CittiDatabase.Schema.version)
+        val migrated = CittiDatabase(driver).noteQueries
+        val id = 1L
+        assertNull(migrated.selectViewLine(id).executeAsOne().view_line)
+        migrated.setViewLine(7, id)
+        assertEquals(7L, migrated.selectViewLine(id).executeAsOne().view_line)
     }
 }

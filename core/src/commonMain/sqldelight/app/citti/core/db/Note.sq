@@ -17,7 +17,10 @@ CREATE TABLE note (
     -- The text a New note was created with (3.sqm): while content still equals it, the Note is untouched and the
     -- push may drop it in favour of a server Note with the same title (ADR 0006). NULL once SYNCED, and for Conflict
     -- copies and rows from before M5 (never dropped).
-    created_from TEXT
+    created_from TEXT,
+    -- The Reading position (4.sqm): the source line at the top of the Note screen when the user last left it.
+    -- Local only: sync never writes it.
+    view_line INTEGER
 );
 
 -- (category, title) serves the Folder lookups of Tree mode, Today, the Calendar and the creation check (M5/M6).
@@ -324,3 +327,23 @@ ORDER BY note.modified DESC LIMIT 500;
 
 selectRecentForSuggest:
 SELECT local_id, title, category FROM note WHERE sync_state != 'DELETED' ORDER BY modified DESC LIMIT 8;
+
+-- Favorites widget: the Drawer > Favorites set, without the columns the widget does not draw.
+-- Hidden is filtered inline, like every List, Tree and Search query.
+selectFavoriteWidgetRows:
+SELECT local_id, title, category
+FROM note
+WHERE sync_state != 'DELETED' AND hidden = 0 AND favorite = 1
+ORDER BY modified DESC;
+
+-- Note and Daily note widgets. No hidden filter: a Note picked through Search can live in a Hidden folder.
+selectNoteWidget:
+SELECT title, category, content, view_line
+FROM note
+WHERE local_id = ? AND sync_state != 'DELETED';
+
+setViewLine:
+UPDATE note SET view_line = :line WHERE local_id = :localId;
+
+selectViewLine:
+SELECT view_line FROM note WHERE local_id = ?;

@@ -1,0 +1,2 @@
+-- The Reading position: the source line at the top of the Note screen when you last left it. Local-only; sync never writes it.
+ALTER TABLE note ADD COLUMN view_line INTEGER;
