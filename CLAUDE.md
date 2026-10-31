@@ -23,8 +23,10 @@ The spec lives in the vault, `~/Nextcloud/Notes/projects/citti/`:
 - **Never rewrite the user's markdown**: the editor and the renderer leave the text as typed.
 - **Case-insensitive headers**: ETag and Last-Modified lookups must not depend on header case.
 - **Exclusions are client-side**: Unsynced folders are never downloaded or searched; Hidden folders are synced and searchable but not listed.
+- **Hidden is filtered inline** in each List, Tree and Search query (never in a shared helper): the Calendar (M6) must see Hidden notes.
 - **Conflicts**: server wins, local text becomes a conflict copy (ADR 0003).
 - **Performance budgets**: no-change sync is a single 304; the real 2.2k-note vault syncs in reasonable time; long notes (thousands of lines) scroll and type without lag (see roadmap exit criteria).
+- **Search goes through `note_fts`** (ADR 0007): never query `content` with LIKE.
 
 ## Commands
 

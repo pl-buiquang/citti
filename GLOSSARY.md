@@ -87,10 +87,27 @@ _Avoid_: Profile, login
 
 **List mode**:
 The flat main view, favorites first then most recently modified.
+_Avoid_: Flat view, all notes
 
 **Tree mode**:
 The main view organized by folders, which the user navigates level by level.
 _Avoid_: Folder view
+
+**Vault root**:
+The top folder of the vault, holding the notes that are in no folder; Tree mode labels it "Notes".
+_Avoid_: Root category, home
+
+**Breadcrumb**:
+The folder path shown at the top of Tree mode, one tappable level per folder, starting at the vault root.
+_Avoid_: Path bar
+
+**Excerpt**:
+The first meaningful line of a note's text, shown under its title in a list, skipping frontmatter and a heading that repeats the title.
+_Avoid_: Preview (that is Preview mode), summary, snippet
+
+**Search**:
+Finding notes by the words of their title, text or folder path, across every synced note, Hidden folders included.
+_Avoid_: Filter, find, lookup
 
 ## Widgets
 
