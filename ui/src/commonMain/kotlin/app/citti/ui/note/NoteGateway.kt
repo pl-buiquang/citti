@@ -33,6 +33,12 @@ interface NoteGateway {
         baseEtag: String?,
     ): NoteEditor.SaveResult
 
+    /**
+     * Downloads the text of a row that has none yet (a Note a Folder refresh brought), so it opens without waiting
+     * for the next Sync. False when it could not.
+     */
+    suspend fun fetchText(): Boolean = false
+
     /** The text last written to the row. */
     fun savedText(): String?
 

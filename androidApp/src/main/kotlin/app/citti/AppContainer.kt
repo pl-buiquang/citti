@@ -335,6 +335,7 @@ class AppContainer(
             localId,
             NoteEditor(database, localId, config::nowSeconds, ::scheduleAfterEditPush),
             LinkResolver(database),
+            fetchContent = { syncEngine()?.fetchContent(localId) ?: false },
         )
 
     private suspend fun buildStack(credentials: Credentials): SyncStack =

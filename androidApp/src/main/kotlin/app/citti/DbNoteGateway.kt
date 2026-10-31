@@ -21,6 +21,8 @@ class DbNoteGateway(
     localId: Long,
     private val editor: NoteEditor,
     private val links: LinkResolver,
+    /** `SyncEngine.fetchContent` of this Note; false while signed out. */
+    private val fetchContent: suspend () -> Boolean = { false },
 ) : NoteGateway {
     private val query = db.noteQueries.selectForEditor(localId)
 
@@ -47,6 +49,8 @@ class DbNoteGateway(
         block: String,
         baseEtag: String?,
     ): NoteEditor.SaveResult = withContext(Dispatchers.IO) { editor.insertAt(offset, block, baseEtag) }
+
+    override suspend fun fetchText(): Boolean = withContext(Dispatchers.IO) { fetchContent() }
 
     override fun savedText(): String? = editor.savedText
 

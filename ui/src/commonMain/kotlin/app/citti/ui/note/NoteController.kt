@@ -220,12 +220,19 @@ class NoteController(
 
     // ---- the row ----
 
+    /** The missing text was asked for once ([NoteGateway.fetchText]). */
+    private var fetchedText = false
+
     private suspend fun onRow(row: EditorDoc?) {
         if (row == null) return onGone()
         val text = row.text
         val before = model.value
         if (text == null) {
             model.update { it.copy(row = row) }
+            if (!fetchedText) {
+                fetchedText = true
+                scope.launch { gateway.fetchText() }
+            }
             return
         }
         when {
