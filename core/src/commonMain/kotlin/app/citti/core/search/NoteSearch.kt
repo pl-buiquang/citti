@@ -57,8 +57,12 @@ class NoteSearch(
             notes
                 .searchSnippets(query.match, ids)
                 .executeAsList()
-                .mapNotNull { row -> row.snippet?.takeIf { it.isNotBlank() }?.let { row.local_id to it } }
-                .toMap()
+                .mapNotNull { row ->
+                    row.snippet
+                        ?.let(::tidySnippet)
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { row.local_id to it }
+                }.toMap()
         }
     }
 
