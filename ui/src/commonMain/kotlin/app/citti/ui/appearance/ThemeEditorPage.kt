@@ -124,6 +124,7 @@ fun ThemeEditorPage(
                 }
             }
             EditorSheets(state, editDark, actions)
+            EditorDialogs(state, actions)
         }
     }
 }

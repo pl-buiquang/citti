@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,9 +37,11 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import app.citti.core.appearance.MAX_THEME_FILE_BYTES
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.MainMode
 import app.citti.ui.appearance.AppearanceActions
+import app.citti.ui.appearance.ThemeEditorController
 import app.citti.ui.appearance.actions
 import app.citti.ui.browse.AppDrawer
 import app.citti.ui.browse.BrowseActions
@@ -152,6 +155,33 @@ class MainActivity : ComponentActivity() {
     // POST_NOTIFICATIONS: asked once, never blocks anything; the sync works without it.
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    /** The theme editor of the open Settings route, for the file picker results. */
+    private var themeEditor: ThemeEditorController? = null
+
+    private val exportTheme =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            val text = themeEditor?.exportText()
+            if (uri != null && text != null) {
+                container.appScope.launch(Dispatchers.IO) {
+                    runCatching { contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray()) } }
+                }
+            }
+        }
+
+    // The result is read up to the cap + 1 byte, so a bigger file is refused without being loaded whole.
+    private val importTheme =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) {
+                container.appScope.launch(Dispatchers.IO) {
+                    val text =
+                        runCatching {
+                            contentResolver.openInputStream(uri)?.use { it.readCapped(MAX_THEME_FILE_BYTES + 1).toString(Charsets.UTF_8) }
+                        }.getOrNull().orEmpty()
+                    themeEditor?.importText(text)
+                }
+            }
+        }
 
     private fun askNotificationPermissionOnce() {
         val prefs = getSharedPreferences("prompts", MODE_PRIVATE)
@@ -659,6 +689,10 @@ class MainActivity : ComponentActivity() {
         val state by controller.state.collectAsState()
         BackHandler { if (!controller.onBack()) navigator.pop() }
         val editor by controller.themeEditor.state.collectAsState()
+        DisposableEffect(controller) {
+            themeEditor = controller.themeEditor
+            onDispose { if (themeEditor === controller.themeEditor) themeEditor = null }
+        }
         SettingsScreen(
             state = state,
             editor = editor,
@@ -691,7 +725,13 @@ class MainActivity : ComponentActivity() {
                     editor =
                         remember(
                             controller,
-                        ) { controller.themeEditor.actions(onBack = { if (!controller.onBack()) navigator.pop() }) },
+                        ) {
+                            controller.themeEditor.actions(
+                                onBack = { if (!controller.onBack()) navigator.pop() },
+                                onImport = { importTheme.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+                                onExport = { exportTheme.launch("citti-theme.json") },
+                            )
+                        },
                 ),
         )
     }
@@ -820,4 +860,16 @@ class MainActivity : ComponentActivity() {
     private companion object {
         const val KEY_ASKED_NOTIFICATIONS = "asked-notifications"
     }
+}
+
+/** At most [limit] bytes of the stream. */
+private fun java.io.InputStream.readCapped(limit: Int): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    val buffer = ByteArray(8192)
+    while (out.size() < limit) {
+        val n = read(buffer, 0, minOf(buffer.size, limit - out.size()))
+        if (n < 0) break
+        out.write(buffer, 0, n)
+    }
+    return out.toByteArray()
 }
