@@ -29,6 +29,7 @@ kotlin {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.ktor.client.mock)
+            implementation(project(":core-testing"))
         }
         // javax.crypto code shared by Android and JVM (AesGcmCipher).
         val jvmCommonMain by creating { dependsOn(commonMain.get()) }

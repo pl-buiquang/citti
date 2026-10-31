@@ -27,4 +27,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "citti"
 
-include(":core", ":ui", ":androidApp")
+include(":core", ":core-testing", ":ui", ":androidApp")

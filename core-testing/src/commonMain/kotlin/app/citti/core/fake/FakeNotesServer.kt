@@ -412,18 +412,18 @@ class FakeNotesServer(
     }
 
     private fun percentDecodeForFake(s: String): String {
-        val out = java.io.ByteArrayOutputStream()
+        val out = ArrayList<Byte>(s.length)
         var i = 0
         while (i < s.length) {
             if (s[i] == '%') {
-                out.write(s.substring(i + 1, i + 3).toInt(16))
+                out += s.substring(i + 1, i + 3).toInt(16).toByte()
                 i += 3
             } else {
-                out.write(s[i].toString().toByteArray())
+                out += s[i].toString().encodeToByteArray().toList()
                 i++
             }
         }
-        return out.toString("UTF-8")
+        return out.toByteArray().decodeToString()
     }
 
     /** Like Nextcloud, a title already used in the folder becomes `Title (2)`, `Title (3)`... */
@@ -578,7 +578,7 @@ private val DAYS = listOf("Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed")
 private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 /** RFC 1123 date for the `Last-Modified` header, without any platform date API. */
-internal fun httpDate(epochSeconds: Long): String {
+fun httpDate(epochSeconds: Long): String {
     val days = epochSeconds.floorDiv(86_400L)
     val secs = epochSeconds.mod(86_400L)
     // civil-from-days (Howard Hinnant)
