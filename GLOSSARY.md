@@ -99,6 +99,10 @@ _Avoid_: Dirty note, unsynced edit, queued edit
 The server address and the user that the app is signed in with.
 _Avoid_: Profile, login
 
+**Fixture Vault**:
+The synthetic Vault the E2E tests seed into the fake server; never real notes.
+_Avoid_: Test data, sample vault
+
 ## Browsing
 
 **List mode**:

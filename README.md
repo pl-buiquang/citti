@@ -16,11 +16,12 @@ Requires JDK 17 and the Android SDK (`sdk.dir` in `local.properties` or `ANDROID
 ./gradlew spotlessCheck check assembleDebug
 ```
 
-The debug APK lands in `androidApp/build/outputs/apk/debug/`.
+The debug APK lands in `androidApp/build/outputs/apk/debug/`. The end-to-end tests run on a Gradle-managed emulator against a fake server: `./gradlew e2e`.
 
 ## Layout
 
 - `core`: shared Kotlin (models, Ktor, SQLDelight, sync)
+- `core-testing`: the fake Nextcloud server and the Fixture Vault, for tests only
 - `ui`: Compose Multiplatform theme and components
 - `androidApp`: the Android application
 - `docs/adr`: architecture decision records; `GLOSSARY.md`: the project's terms
