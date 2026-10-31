@@ -8,7 +8,9 @@
     <application
         android:name=".CittiApp"
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
         android:label="citti"
+        android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity

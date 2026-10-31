@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Note rows: a dot and a bar per row. The top row is the highlighted one. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,45m-3.5,0a3.5,3.5 0,1 1,7 0a3.5,3.5 0,1 1,-7 0" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M38,55m-3.5,0a3.5,3.5 0,1 1,7 0a3.5,3.5 0,1 1,-7 0M38,65m-3.5,0a3.5,3.5 0,1 1,7 0a3.5,3.5 0,1 1,-7 0M46,42h26v6h-26zM46,52h20v6h-20zM46,62h14v6h-14z" />
+</vector>
