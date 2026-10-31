@@ -12,8 +12,11 @@ import app.citti.core.auth.CredentialStore
 import app.citti.core.auth.CredentialStoreFactory
 import app.citti.core.auth.Credentials
 import app.citti.core.auth.LoginFlow
+import app.citti.core.auth.prepareForSignIn
 import app.citti.core.auth.signOut
 import app.citti.core.db.CittiDatabase
+import app.citti.core.settings.ExclusionRepository
+import app.citti.core.settings.SyncSettingsRepository
 import app.citti.core.sync.PullSync
 import app.citti.core.sync.PushSync
 import app.citti.core.sync.SyncEngine
@@ -21,6 +24,8 @@ import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
 import app.citti.ui.list.NoteListItem
 import app.citti.ui.list.toListItem
+import app.citti.ui.settings.AccountInfo
+import app.citti.ui.settings.CoreSettingsStore
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,6 +66,12 @@ class AppContainer(
 
     val credentialStore: CredentialStore by lazy { CredentialStoreFactory(appContext).create() }
 
+    val syncSettings: SyncSettingsRepository by lazy { SyncSettingsRepository(database) }
+
+    val exclusions: ExclusionRepository by lazy { ExclusionRepository(database) }
+
+    val settingsStore: CoreSettingsStore by lazy { CoreSettingsStore(syncSettings, exclusions) }
+
     /** Login Flow v2 / manual check. Its client carries no credentials. */
     val loginFlow: LoginFlow by lazy { LoginFlow(HttpClient(defaultHttpEngine())) }
 
@@ -83,7 +94,11 @@ class AppContainer(
     init {
         appScope.launch {
             val credentials = withContext(Dispatchers.IO) { credentialStore.load() }
-            if (credentials != null) buildStack(credentials)
+            if (credentials != null) {
+                // Records the owner of a database created before the account was remembered; never wipes then.
+                withContext(Dispatchers.IO) { prepareForSignIn(database, credentials) }
+                buildStack(credentials)
+            }
             _signedIn.value = credentials != null
         }
     }
@@ -105,7 +120,13 @@ class AppContainer(
 
     /** Saves the credentials after a successful login and (re)builds the sync stack. */
     suspend fun onSignedIn(credentials: Credentials) {
-        withContext(Dispatchers.IO) { credentialStore.save(credentials) }
+        // A database that belongs to another server or user is wiped first, so its Notes never mix with
+        // (or get pushed to) the new account. Same account: local data and queued edits stay.
+        dropStack()
+        withContext(Dispatchers.IO) {
+            prepareForSignIn(database, credentials)
+            credentialStore.save(credentials)
+        }
         buildStack(credentials)
         _signedIn.value = true
     }
@@ -124,6 +145,13 @@ class AppContainer(
     suspend fun requireSignIn() {
         dropStack()
         _signedIn.value = false
+    }
+
+    /** Server host and user of the stored credentials, or null when signed out. */
+    suspend fun accountInfo(): AccountInfo? {
+        val c = withContext(Dispatchers.IO) { credentialStore.load() } ?: return null
+        val host = c.serverUrl.substringAfter("://").substringBefore('/')
+        return AccountInfo(host, c.user)
     }
 
     /** Notes for the debug list, kept current by SQLDelight. */
