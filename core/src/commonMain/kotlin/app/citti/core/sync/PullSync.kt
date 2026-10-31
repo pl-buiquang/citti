@@ -5,12 +5,15 @@ import app.citti.core.api.ApiResult
 import app.citti.core.api.ListResult
 import app.citti.core.api.NotesApi
 import app.citti.core.api.RemoteNote
+import app.citti.core.api.logText
 import app.citti.core.db.CittiDatabase
+import app.citti.core.log.SyncLog
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlin.time.TimeSource
 
 /** Content download progress: [done] of [total] Notes. */
 data class Progress(
@@ -60,6 +63,7 @@ class PullSync(
     private val chunkSize: Int = DEFAULT_CHUNK_SIZE,
     private val downloadParallelism: Int = DEFAULT_PARALLELISM,
     private val writeBatchSize: Int = DEFAULT_WRITE_BATCH,
+    private val log: SyncLog = SyncLog.None,
 ) {
     private val notes = database.noteQueries
     private val syncState = database.syncStateQueries
@@ -74,6 +78,7 @@ class PullSync(
         val stored = syncState.select(KEY_LIST_PLAIN).executeAsOneOrNull()
         val firstSync = notes.countNotes().executeAsOne() == 0L
 
+        log.info("pull plan firstSync=$firstSync exclusionsChanged=$exclusionsChanged storedEtag=${stored?.etag != null}")
         if (firstSync) pullChunks(unsynced, hidden)?.let { return PullResult.Failed(it) }
         // Changed exclusions need the full list again (hidden flags, newly Unsynced folders): skip the 304 check.
         val ifNoneMatch = if (firstSync || exclusionsChanged) null else stored?.etag
@@ -103,6 +108,7 @@ class PullSync(
         hidden: List<String>,
     ): ApiError? {
         var cursor: String? = null
+        var pageNumber = 0
         do {
             when (val result = api.listNotes(excludeContent = true, chunkSize = chunkSize, chunkCursor = cursor)) {
                 is ApiResult.Failure -> {
@@ -111,6 +117,8 @@ class PullSync(
 
                 is ApiResult.Success -> {
                     val page = result.value as ListResult.Page
+                    pageNumber++
+                    log.info("pull chunk page=$pageNumber notes=${page.notes.size} pending=${page.pending ?: "?"}")
                     // A cursor request repeats the already-seen Notes as stubs; those carry nothing new.
                     database.transaction { upsert(page.notes.filterNot { it.isStub }, unsynced, hidden) }
                     cursor = page.nextCursor
@@ -174,6 +182,8 @@ class PullSync(
         val targets = notes.selectNeedingContent().executeAsList()
         val total = targets.size
         if (total == 0) return Downloaded(0, emptyList())
+        log.info("pull content start total=$total")
+        val started = TimeSource.Monotonic.markNow()
 
         val failures = mutableListOf<ContentFailure>()
         var fetched = 0
@@ -203,13 +213,29 @@ class PullSync(
 
                     is ApiResult.Failure -> {
                         failures += ContentFailure(remoteIds.getValue(localId), result.error)
+                        log.warn("pull content failed remote=${remoteIds.getValue(localId)} ${result.error.logText()}")
                     }
                 }
                 onProgress(Progress(index + 1, total))
+                val done = index + 1
+                if (done % PROGRESS_LOG_EVERY == 0 && done < total) {
+                    logProgress(done, total, started.elapsedNow().inWholeMilliseconds)
+                }
             }
             flush()
         }
+        logProgress(total, total, started.elapsedNow().inWholeMilliseconds)
         return Downloaded(fetched, failures)
+    }
+
+    private fun logProgress(
+        done: Int,
+        total: Int,
+        elapsedMs: Long,
+    ) {
+        val perSecond = if (elapsedMs > 0) done * 1000.0 / elapsedMs else 0.0
+        val rate = (perSecond * 10).toLong() / 10.0
+        log.info("pull content $done/$total elapsed=${elapsedMs}ms rate=$rate notes/s")
     }
 
     private fun signature(
@@ -222,6 +248,7 @@ class PullSync(
         const val DEFAULT_CHUNK_SIZE = 500
         const val DEFAULT_PARALLELISM = 8
         const val DEFAULT_WRITE_BATCH = 50
+        private const val PROGRESS_LOG_EVERY = 250
         private const val SETTING_EXCLUSIONS = "sync.exclusions-applied"
         private const val UNSYNCED = "UNSYNCED"
         private const val HIDDEN = "HIDDEN"

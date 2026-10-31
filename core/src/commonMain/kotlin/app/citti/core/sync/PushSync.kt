@@ -7,8 +7,10 @@ import app.citti.core.api.NotesApi
 import app.citti.core.api.RemoteNote
 import app.citti.core.api.UpdateNote
 import app.citti.core.api.UpdateResult
+import app.citti.core.api.logText
 import app.citti.core.db.CittiDatabase
 import app.citti.core.db.Note
+import app.citti.core.log.SyncLog
 
 /** A Note whose push failed with an error that does not stop the run. */
 data class PushFailure(
@@ -43,6 +45,7 @@ sealed interface PushResult {
 class PushSync(
     private val api: NotesApi,
     db: CittiDatabase,
+    private val log: SyncLog = SyncLog.None,
     private val now: () -> Long,
 ) {
     private val queries = db.noteQueries
@@ -170,6 +173,7 @@ class PushSync(
                         val title = freeConflictTitle(note.category, "${note.title} (conflict ${isoDate(now())})")
                         queries.insertNew(title, note.category, note.content.orEmpty(), now(), note.local_id)
                         conflicts += queries.lastInsertedLocalId().executeAsOne()
+                        log.warn("push conflict: server wins, local text kept as copy local=${conflicts.last()}")
                     }
                     queries.replaceWithServer(
                         title = server.title ?: note.title,
@@ -218,6 +222,7 @@ class PushSync(
 
             else -> {
                 failures += PushFailure(note.local_id, error)
+                log.warn("push note failed local=${note.local_id} ${error.logText()}")
                 null
             }
         }

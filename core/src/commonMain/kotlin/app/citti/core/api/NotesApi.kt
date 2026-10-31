@@ -1,5 +1,6 @@
 package app.citti.core.api
 
+import app.citti.core.log.SyncLog
 import io.ktor.client.HttpClient
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.delete
@@ -23,6 +24,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlin.time.TimeSource
 
 const val HEADER_CHUNK_CURSOR = "X-Notes-Chunk-Cursor"
 const val HEADER_CHUNK_PENDING = "X-Notes-Chunk-Pending"
@@ -31,11 +33,15 @@ const val HEADER_CHUNK_PENDING = "X-Notes-Chunk-Pending"
 class NotesApi(
     private val client: HttpClient,
     private val config: NotesApiConfig,
+    private val log: SyncLog = SyncLog.None,
 ) {
+    /** Counts every request made through this API; the sync engine reads it for its summary line. */
+    val stats = RequestStats()
+
     private fun notesUrl(path: String = "") = config.url(config.notesApiPath.trim('/') + path)
 
     suspend fun capabilities(): ApiResult<Capabilities> =
-        call({
+        call("GET /capabilities", {
             client.get(config.url("ocs/v2.php/cloud/capabilities")) {
                 parameter("format", "json")
                 header("OCS-APIRequest", "true")
@@ -69,7 +75,7 @@ class NotesApi(
         chunkCursor: String? = null,
         ifNoneMatch: String? = null,
     ): ApiResult<ListResult> =
-        call({
+        call("GET /notes", {
             client.get(notesUrl("/notes")) {
                 if (excludeContent) parameter("exclude", "content")
                 pruneBefore?.let { parameter("pruneBefore", it) }
@@ -101,13 +107,13 @@ class NotesApi(
         }
 
     suspend fun getNote(id: Long): ApiResult<RemoteNote> =
-        call({ client.get(notesUrl("/notes/$id")) }) { response ->
+        call("GET /notes/{id}", { client.get(notesUrl("/notes/$id")) }) { response ->
             if (!response.status.isOk()) return@call fail(response)
             parse { decode(response, RemoteNote.serializer()) }
         }
 
     suspend fun createNote(note: NewNote): ApiResult<RemoteNote> =
-        call({ client.post(notesUrl("/notes")) { json(note, NewNote.serializer()) } }) { response ->
+        call("POST /notes", { client.post(notesUrl("/notes")) { json(note, NewNote.serializer()) } }) { response ->
             if (!response.status.isOk()) return@call fail(response)
             parse { decode(response, RemoteNote.serializer()) }
         }
@@ -117,7 +123,7 @@ class NotesApi(
         update: UpdateNote,
         ifMatch: String,
     ): ApiResult<UpdateResult> =
-        call({
+        call("PUT /notes/{id}", {
             client.put(notesUrl("/notes/$id")) {
                 header(HttpHeaders.IfMatch, ifMatch)
                 json(update, UpdateNote.serializer())
@@ -139,7 +145,7 @@ class NotesApi(
         }
 
     suspend fun deleteNote(id: Long): ApiResult<Deleted> =
-        call({ client.delete(notesUrl("/notes/$id")) }) { response ->
+        call("DELETE /notes/{id}", { client.delete(notesUrl("/notes/$id")) }) { response ->
             if (response.status.isOk() || response.status == HttpStatusCode.NotFound) {
                 ApiResult.Success(Deleted)
             } else {
@@ -148,7 +154,7 @@ class NotesApi(
         }
 
     suspend fun settings(): ApiResult<NotesSettings> =
-        call({ client.get(notesUrl("/settings")) }) { response ->
+        call("GET /settings", { client.get(notesUrl("/settings")) }) { response ->
             if (!response.status.isOk()) return@call fail(response)
             parse { decode(response, NotesSettings.serializer()) }
         }
@@ -186,16 +192,39 @@ class NotesApi(
         )
 
     private suspend fun <T> call(
+        label: String,
         request: suspend () -> HttpResponse,
         handle: suspend (HttpResponse) -> ApiResult<T>,
-    ): ApiResult<T> =
-        try {
-            handle(request())
+    ): ApiResult<T> {
+        val start = TimeSource.Monotonic.markNow()
+        return try {
+            val response = request()
+            val bytes = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+            stats.record(bytes ?: 0L)
+            val note = if (response.status == HttpStatusCode.NotModified) " (not modified)" else ""
+            val size = bytes?.let { " ${it}B" }.orEmpty()
+            val ms = start.elapsedNow().inWholeMilliseconds
+            log.info("req $label${queryNames(response)} -> ${response.status.value}$note$size ${ms}ms")
+            handle(response)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
+            stats.record(0L)
+            log.warn("req $label failed: ${e::class.simpleName} ${start.elapsedNow().inWholeMilliseconds}ms")
             ApiResult.Failure(ApiError.Network(e))
         }
+    }
+
+    /** `?exclude&chunkSize=500&chunkCursor`: parameter names only, values just for the harmless ones. */
+    private fun queryNames(response: HttpResponse): String {
+        val params = response.call.request.url.parameters
+        if (params.isEmpty()) return ""
+        return params.names().joinToString("&", prefix = "?") { name ->
+            if (name in LOGGABLE_VALUES) "$name=${params[name]}" else name
+        }
+    }
 }
+
+private val LOGGABLE_VALUES = setOf("pruneBefore", "chunkSize")
 
 private fun HttpStatusCode.isOk() = value in 200..299

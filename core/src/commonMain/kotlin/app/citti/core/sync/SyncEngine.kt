@@ -1,12 +1,16 @@
 package app.citti.core.sync
 
 import app.citti.core.api.ApiError
+import app.citti.core.api.RequestStats
+import app.citti.core.api.logText
 import app.citti.core.db.CittiDatabase
+import app.citti.core.log.SyncLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
+import kotlin.time.TimeSource
 
 /** Why a sync run starts. The engine treats all alike; callers use it for policy (e.g. no retry after auth failure). */
 enum class SyncTrigger { AppOpen, Manual, Periodic, AfterEdit }
@@ -107,6 +111,8 @@ class SyncEngine(
     private val push: PushSync,
     private val pull: PullSync,
     db: CittiDatabase,
+    private val log: SyncLog = SyncLog.None,
+    private val stats: RequestStats? = null,
     private val now: () -> Long,
 ) {
     private val settings = db.settingQueries
@@ -130,13 +136,29 @@ class SyncEngine(
         _state.value = withCounts(current)
     }
 
-    /** [trigger] is accepted for callers' policy and logging; every trigger runs the same push then pull. */
-    @Suppress("UNUSED_PARAMETER")
+    /** Every trigger runs the same push then pull; [trigger] is only logged and left to callers' policy. */
     suspend fun sync(trigger: SyncTrigger): SyncOutcome {
-        if (!mutex.tryLock()) return SyncOutcome.AlreadyRunning
+        if (!mutex.tryLock()) {
+            log.info("sync skipped trigger=$trigger: already running")
+            return SyncOutcome.AlreadyRunning
+        }
+        val started = TimeSource.Monotonic.markNow()
+        val before = stats?.snapshot()
+        log.info("sync start trigger=$trigger")
         try {
-            return run()
+            val outcome = run()
+            val after = stats?.snapshot()
+            val traffic =
+                if (before != null && after != null) {
+                    " requests=${after.requests - before.requests} bytes=${after.bytes - before.bytes}"
+                } else {
+                    ""
+                }
+            val ms = started.elapsedNow().inWholeMilliseconds
+            log.info("sync done trigger=$trigger ${summary(outcome)} duration=${ms}ms$traffic")
+            return outcome
         } catch (e: CancellationException) {
+            log.warn("sync cancelled trigger=$trigger after ${started.elapsedNow().inWholeMilliseconds}ms")
             _state.value = idle()
             throw e
         } finally {
@@ -144,24 +166,60 @@ class SyncEngine(
         }
     }
 
+    private fun summary(outcome: SyncOutcome): String =
+        when (outcome) {
+            SyncOutcome.AlreadyRunning -> {
+                "outcome=AlreadyRunning"
+            }
+
+            SyncOutcome.NothingChanged -> {
+                "outcome=NothingChanged pushed=0 pulled=0 conflicts=0 failures=0"
+            }
+
+            is SyncOutcome.Synced -> {
+                val kind = if (outcome.failures.isEmpty()) "Synced" else "SyncedWithFailures"
+                "outcome=$kind pushed=${outcome.pushed} pulled=${outcome.pulled} " +
+                    "conflicts=${outcome.conflicts} failures=${outcome.failures.size}"
+            }
+
+            is SyncOutcome.Failed -> {
+                "outcome=Failed error=${outcome.error.logText()} pushed=${outcome.pushed} pulled=0 " +
+                    "conflicts=${outcome.conflicts} failures=${outcome.failures.size}"
+            }
+        }
+
     private suspend fun run(): SyncOutcome {
         running(SyncPhase.Pushing, null)
+        log.info("phase push start pending=${pending.count()}")
         val pushed =
             when (val result = push.push()) {
-                is PushResult.Failed -> return fail(result.error)
-                is PushResult.Done -> result
+                is PushResult.Failed -> {
+                    log.error("phase push failed ${result.error.logText()}")
+                    return fail(result.error)
+                }
+
+                is PushResult.Done -> {
+                    result
+                }
             }
+        log.info(
+            "phase push end updated=${pushed.updated} created=${pushed.created} deleted=${pushed.deleted} " +
+                "conflicts=${pushed.conflicts.size} skippedReadOnly=${pushed.skippedReadOnly} failures=${pushed.failures.size}",
+        )
         val pushedCount = pushed.updated + pushed.created + pushed.deleted
         val pushFailures = pushed.failures.map { NoteFailure(it.localId, null, it.error) }
 
         running(SyncPhase.Pulling, null)
+        log.info("phase pull start")
         val outcome =
             when (val result = pull.pull { running(SyncPhase.Pulling, it) }) {
                 is PullResult.Failed -> {
+                    log.error("phase pull failed ${result.error.logText()}")
                     return fail(result.error, pushedCount, pushed.conflicts.size, pushFailures)
                 }
 
                 PullResult.NothingChanged -> {
+                    log.info("phase pull end result=NothingChanged")
                     if (pushedCount == 0 && pushed.conflicts.isEmpty() && pushFailures.isEmpty()) {
                         SyncOutcome.NothingChanged
                     } else {
@@ -170,6 +228,7 @@ class SyncEngine(
                 }
 
                 is PullResult.Pulled -> {
+                    log.info("phase pull end result=Pulled contentFetched=${result.contentFetched} failures=${result.failures.size}")
                     val failures = pushFailures + result.failures.map { NoteFailure(null, it.remoteId, it.error) }
                     SyncOutcome.Synced(pushedCount, result.contentFetched, pushed.conflicts.size, failures)
                 }
