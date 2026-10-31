@@ -44,8 +44,8 @@ sealed interface PushResult {
 /**
  * Pushes the queue of local changes (ADR 0003: on a 412 the server wins and the local text becomes a Conflict copy).
  * A delete never removes a server version this client has not seen: the server version wins and the Note comes back.
- * With [verifyBeforeDelete] a `GET` compares ETags first, on top of `If-Match` (for a server that ignores `If-Match`
- * on `DELETE`). [now] returns epoch seconds.
+ * With [verifyBeforeDelete] a `GET` compares ETags first, on top of `If-Match` (Nextcloud ignores `If-Match` on
+ * `DELETE`, so only the `GET` guards it, with a short race window before the `DELETE`). [now] returns epoch seconds.
  */
 class PushSync(
     private val api: NotesApi,
@@ -53,7 +53,7 @@ class PushSync(
     private val log: SyncLog = SyncLog.None,
     private val now: () -> Long,
 ) {
-    /** See the class comment; on until a real-server check shows `If-Match` is honored on `DELETE`. */
+    /** See the class comment. Keep it on: Nextcloud ignores `If-Match` on `DELETE` (`PushRealServerTest` scenario 7). */
     var verifyBeforeDelete: Boolean = true
 
     private val queries = db.noteQueries
