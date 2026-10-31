@@ -211,6 +211,13 @@ UPDATE note SET remote_id = NULL, etag = NULL, sync_state = 'NEW' WHERE local_id
 folderHasTitle:
 SELECT count(*) FROM note WHERE category = :category AND title = :title AND sync_state != 'DELETED';
 
+-- Creation check (NoteCreator): the Note at exactly this (folder, title), as the server matches it. Not the
+-- resolver's selectByFolderAndTitle, which ignores case. No `hidden` filter: a Hidden Note still takes the title.
+selectExactByFolderAndTitle:
+SELECT local_id FROM note
+WHERE category = :category AND title = :title AND sync_state != 'DELETED'
+ORDER BY modified DESC LIMIT 1;
+
 -- Push-time check (ADR 0006): the server's copy of a (folder, title), i.e. a row the server knows. Exact match, as
 -- on the server.
 selectServerNote:
