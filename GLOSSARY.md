@@ -25,7 +25,7 @@ A picture stored in the vault's attachment folder and shown inside a note.
 _Avoid_: Attachment, media
 
 **Wikilink**:
-A `[[title]]` reference in a note that leads to another note.
+A `[[target]]` or `[[target|alias]]` reference in a note that leads to another note; the target is a title or a folder path and title (`journal/2026-W44`), and the alias is the text shown.
 _Avoid_: Internal link, backlink
 
 ## Journal
@@ -64,6 +64,22 @@ The default way of showing a note: raw markdown, ready to type.
 **Preview mode**:
 The rendered view of a note, with images, links and folded frontmatter.
 _Avoid_: Read mode, view mode
+
+**Properties**:
+The frontmatter of a note (the YAML block between `---` lines at the top), shown folded in Preview mode.
+_Avoid_: Metadata, front matter, header
+
+**In-note search**:
+Finding text inside the open note, with a match count and previous/next, in Edit or Preview mode.
+_Avoid_: Find, find in page
+
+**Image viewer**:
+The full-screen view of one Image, opened by tapping it in Preview mode.
+_Avoid_: Lightbox, gallery
+
+**Save indicator**:
+The line under a note's title saying whether its text is saved, pending, syncing or offline.
+_Avoid_: Sync status (that is the whole app's sync)
 
 **Conflict copy**:
 A new note holding the user's local text, created when the same note changed elsewhere in the meantime.

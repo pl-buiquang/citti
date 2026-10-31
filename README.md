@@ -6,7 +6,7 @@ citti is a new app, not a fork of notes-android, and is not affiliated with Next
 
 ## Status
 
-Early development. Milestone M1 (project scaffold and theme) is in progress; sync, the editor and the widgets come next.
+Early development. Sync, the List, Tree and Search views are in place; the editor and preview (M4) are in progress, and the widgets come next.
 
 ## Build
 
