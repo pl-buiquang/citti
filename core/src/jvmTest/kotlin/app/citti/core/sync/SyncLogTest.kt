@@ -49,7 +49,7 @@ class SyncLogTest {
     private fun engine(sink: SyncLog): SyncEngine {
         val config = NotesApiConfig("https://host/", "alice", password)
         val api = NotesApi(createNotesHttpClient(server.engine, config), config, sink)
-        return SyncEngine(PushSync(api, db, sink, clock), PullSync(api, db, log = sink), db, sink, api.stats, clock)
+        return SyncEngine(PushSync(api, db, sink, clock), PullSync(api, db, log = sink), db, sink, api.stats, now = clock)
     }
 
     @Test

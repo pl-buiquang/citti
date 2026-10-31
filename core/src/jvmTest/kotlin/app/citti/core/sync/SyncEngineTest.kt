@@ -6,6 +6,7 @@ import app.citti.core.api.NotesApi
 import app.citti.core.api.NotesApiConfig
 import app.citti.core.api.createNotesHttpClient
 import app.citti.core.db.CittiDatabase
+import app.citti.core.fake.Endpoint
 import app.citti.core.fake.FakeFailure
 import app.citti.core.fake.FakeNotesServer
 import io.ktor.client.plugins.HttpSend
@@ -31,6 +32,8 @@ class SyncEngineTest {
         CittiDatabase.Schema.create(driver).let { CittiDatabase(driver) }
     private val notes = db.noteQueries
 
+    private val sleeps = mutableListOf<Long>()
+
     private var clock = 1_793_448_000L
 
     /** Completes when the test lets HTTP requests through. */
@@ -46,7 +49,13 @@ class SyncEngineTest {
             execute(request)
         }
         val api = NotesApi(client, config)
-        return SyncEngine(PushSync(api, db) { clock }, PullSync(api, db), db) { clock }
+        return SyncEngine(
+            PushSync(api, db) { clock },
+            PullSync(api, db),
+            db,
+            startupRetryDelayMillis = 2_000,
+            sleep = { sleeps += it },
+        ) { clock }
     }
 
     private fun newLocal(
@@ -63,7 +72,8 @@ class SyncEngineTest {
             server.addNote("Remote", "r")
             newLocal("Local", "text")
 
-            server.failNext(FakeFailure.NETWORK_ERROR)
+            // Twice: an app-open or manual sync retries once when its first request fails on the network.
+            server.failNext(FakeFailure.NETWORK_ERROR, times = 2)
             val offline = engine.sync(SyncTrigger.Manual)
             assertIs<SyncOutcome.Failed>(offline)
             assertIs<SyncStatus.Offline>(engine.state.value)
@@ -112,7 +122,8 @@ class SyncEngineTest {
     @Test
     fun networkErrorMapsToOffline() =
         runTest {
-            server.failNext(FakeFailure.NETWORK_ERROR)
+            // Twice: an app-open or manual sync retries once when its first request fails on the network.
+            server.failNext(FakeFailure.NETWORK_ERROR, times = 2)
             val outcome = assertIs<SyncOutcome.Failed>(engine.sync(SyncTrigger.Manual))
             assertIs<ApiError.Network>(outcome.error)
             assertIs<SyncStatus.Offline>(engine.state.value)
@@ -163,7 +174,8 @@ class SyncEngineTest {
             engine.sync(SyncTrigger.Manual)
             val at = clock
             clock += 60
-            server.failNext(FakeFailure.NETWORK_ERROR)
+            // Twice: an app-open or manual sync retries once when its first request fails on the network.
+            server.failNext(FakeFailure.NETWORK_ERROR, times = 2)
             engine.sync(SyncTrigger.Manual)
 
             assertEquals(at, engine.state.value.lastSuccessAt)
@@ -222,5 +234,54 @@ class SyncEngineTest {
             val outcome = assertIs<SyncOutcome.Synced>(engine.sync(SyncTrigger.Manual))
             assertEquals(1, outcome.conflicts)
             assertEquals(1, engine.state.value.conflictCopies)
+        }
+
+    @Test
+    fun firstRequestNetworkErrorOnAppOpenIsRetriedOnce() =
+        runTest {
+            server.generateNotes(5)
+            server.failNext(FakeFailure.NETWORK_ERROR, endpoint = Endpoint.LIST)
+
+            val outcome = assertIs<SyncOutcome.Synced>(engine.sync(SyncTrigger.AppOpen))
+
+            assertEquals(5, outcome.pulled)
+            assertEquals(listOf(2_000L), sleeps)
+            assertIs<SyncStatus.Idle>(engine.state.value)
+        }
+
+    @Test
+    fun startupRetryGivesUpAfterOneRetry() =
+        runTest {
+            server.failNext(FakeFailure.NETWORK_ERROR, times = 5)
+
+            val outcome = assertIs<SyncOutcome.Failed>(engine.sync(SyncTrigger.Manual))
+
+            assertIs<ApiError.Network>(outcome.error)
+            assertEquals(2, server.requests.size)
+            assertEquals(listOf(2_000L), sleeps)
+            assertIs<SyncStatus.Offline>(engine.state.value)
+        }
+
+    @Test
+    fun periodicAndAfterEditSyncsAreNotRetried() =
+        runTest {
+            server.failNext(FakeFailure.NETWORK_ERROR, times = 2)
+
+            assertIs<SyncOutcome.Failed>(engine.sync(SyncTrigger.Periodic))
+            assertIs<SyncOutcome.Failed>(engine.sync(SyncTrigger.AfterEdit))
+
+            assertEquals(2, server.requests.size)
+            assertTrue(sleeps.isEmpty())
+        }
+
+    @Test
+    fun serverErrorIsNotRetriedAtStart() =
+        runTest {
+            server.failNext(FakeFailure.SERVER_ERROR, times = 2)
+
+            assertIs<SyncOutcome.Failed>(engine.sync(SyncTrigger.AppOpen))
+
+            assertEquals(1, server.requests.size)
+            assertTrue(sleeps.isEmpty())
         }
 }

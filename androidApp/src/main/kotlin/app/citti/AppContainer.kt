@@ -178,7 +178,7 @@ class AppContainer(
                         database,
                         AndroidSyncLog,
                         api.stats,
-                        now,
+                        now = now,
                     )
                 }
             SyncStack(client, engine).also { stack.value = it }

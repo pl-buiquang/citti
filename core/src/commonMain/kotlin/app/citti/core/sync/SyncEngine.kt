@@ -6,6 +6,7 @@ import app.citti.core.api.logText
 import app.citti.core.db.CittiDatabase
 import app.citti.core.log.SyncLog
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -113,6 +114,9 @@ class SyncEngine(
     db: CittiDatabase,
     private val log: SyncLog = SyncLog.None,
     private val stats: RequestStats? = null,
+    /** Pause before the one start-up retry (see [sync]); injected so tests run in virtual time. */
+    private val startupRetryDelayMillis: Long = DEFAULT_STARTUP_RETRY_DELAY,
+    private val sleep: suspend (Long) -> Unit = { delay(it) },
     private val now: () -> Long,
 ) {
     private val settings = db.settingQueries
@@ -136,7 +140,14 @@ class SyncEngine(
         _state.value = withCounts(current)
     }
 
-    /** Every trigger runs the same push then pull; [trigger] is only logged and left to callers' policy. */
+    /** Set once the content phase reports progress, i.e. the first requests of the run went through. */
+    private var contentStarted = false
+
+    /**
+     * Every trigger runs the same push then pull. [trigger] is mostly left to callers' policy, with one exception:
+     * an app-open or manual sync whose first request fails with a network error is retried once after a short
+     * pause, because right after a cold start or a wake-up the network is often not usable for a moment.
+     */
     suspend fun sync(trigger: SyncTrigger): SyncOutcome {
         if (!mutex.tryLock()) {
             log.info("sync skipped trigger=$trigger: already running")
@@ -146,7 +157,12 @@ class SyncEngine(
         val before = stats?.snapshot()
         log.info("sync start trigger=$trigger")
         try {
-            val outcome = run()
+            var outcome = run()
+            if (shouldRetryStart(trigger, outcome)) {
+                log.warn("sync retry trigger=$trigger after ${startupRetryDelayMillis}ms: first request failed on the network")
+                sleep(startupRetryDelayMillis)
+                outcome = run()
+            }
             val after = stats?.snapshot()
             val traffic =
                 if (before != null && after != null) {
@@ -165,6 +181,16 @@ class SyncEngine(
             mutex.unlock()
         }
     }
+
+    private fun shouldRetryStart(
+        trigger: SyncTrigger,
+        outcome: SyncOutcome,
+    ): Boolean =
+        (trigger == SyncTrigger.AppOpen || trigger == SyncTrigger.Manual) &&
+            outcome is SyncOutcome.Failed &&
+            outcome.error is ApiError.Network &&
+            outcome.pushed == 0 &&
+            !contentStarted
 
     private fun summary(outcome: SyncOutcome): String =
         when (outcome) {
@@ -189,6 +215,7 @@ class SyncEngine(
         }
 
     private suspend fun run(): SyncOutcome {
+        contentStarted = false
         running(SyncPhase.Pushing, null)
         log.info("phase push start pending=${pending.count()}")
         val pushed =
@@ -212,7 +239,13 @@ class SyncEngine(
         running(SyncPhase.Pulling, null)
         log.info("phase pull start")
         val outcome =
-            when (val result = pull.pull { running(SyncPhase.Pulling, it) }) {
+            when (
+                val result =
+                    pull.pull {
+                        contentStarted = true
+                        running(SyncPhase.Pulling, it)
+                    }
+            ) {
                 is PullResult.Failed -> {
                     log.error("phase pull failed ${result.error.logText()}")
                     return fail(result.error, pushedCount, pushed.conflicts.size, pushFailures)
@@ -309,5 +342,6 @@ class SyncEngine(
     companion object {
         const val KEY_LAST_AT = "sync.last-at"
         const val KEY_LAST_RESULT = "sync.last-result"
+        const val DEFAULT_STARTUP_RETRY_DELAY = 2_000L
     }
 }
