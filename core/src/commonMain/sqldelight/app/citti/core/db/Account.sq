@@ -7,7 +7,7 @@ deleteAllSyncState:
 DELETE FROM sync_state;
 
 deleteAllSettings:
-DELETE FROM setting;
+DELETE FROM setting WHERE key NOT LIKE 'appearance.%';
 
 deleteAllFolderExclusions:
 DELETE FROM folder_exclusion;
