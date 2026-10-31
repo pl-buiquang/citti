@@ -42,6 +42,8 @@ fun normalizeFolderPath(raw: String): String? =
 class ExclusionRepository(
     private val db: CittiDatabase,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /** Called after an exclusion was added or removed: the lists, and the widgets, change at once for a Hidden folder. */
+    private val onChanged: () -> Unit = {},
 ) {
     private val settings = db.settingQueries
     private val notes = db.noteQueries
@@ -65,27 +67,37 @@ class ExclusionRepository(
         path: String,
     ): AddResult {
         val p = normalizeFolderPath(path) ?: return AddResult.Blank
-        return db.transactionWithResult {
-            if (p in list(kind)) return@transactionWithResult AddResult.Duplicate
-            if (kind == ExclusionKind.UNSYNCED) {
-                val journal = journalFolder(settings)
-                if (journal.isNotEmpty() && categoryMatchesPrefix(journal, p)) return@transactionWithResult AddResult.JournalFolder(journal)
-            }
-            settings.insertExclusion(p, kind.name)
-            if (kind == ExclusionKind.HIDDEN) notes.recomputeHidden()
-            syncState.deleteFolderKeys()
-            AddResult.Added(p)
+        val result = db.transactionWithResult { insert(kind, p) }
+        if (result is AddResult.Added) onChanged()
+        return result
+    }
+
+    private fun insert(
+        kind: ExclusionKind,
+        p: String,
+    ): AddResult {
+        if (p in list(kind)) return AddResult.Duplicate
+        if (kind == ExclusionKind.UNSYNCED) {
+            val journal = journalFolder(settings)
+            if (journal.isNotEmpty() && categoryMatchesPrefix(journal, p)) return AddResult.JournalFolder(journal)
         }
+        settings.insertExclusion(p, kind.name)
+        if (kind == ExclusionKind.HIDDEN) notes.recomputeHidden()
+        syncState.deleteFolderKeys()
+        return AddResult.Added(p)
     }
 
     /** Removes [path]. A Hidden folder shows its Notes again at once, in the same transaction; the Folder ETags go. */
     fun remove(
         kind: ExclusionKind,
         path: String,
-    ) = db.transaction {
-        settings.deleteExclusion(path, kind.name)
-        if (kind == ExclusionKind.HIDDEN) notes.recomputeHidden()
-        syncState.deleteFolderKeys()
+    ) {
+        db.transaction {
+            settings.deleteExclusion(path, kind.name)
+            if (kind == ExclusionKind.HIDDEN) notes.recomputeHidden()
+            syncState.deleteFolderKeys()
+        }
+        onChanged()
     }
 
     /** Local Notes in [path] or below it. */

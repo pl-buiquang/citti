@@ -70,6 +70,8 @@ import app.citti.ui.settings.DailySettingsStore
 import app.citti.widget.DailyWidgetState
 import app.citti.widget.FavoriteRow
 import app.citti.widget.NoteWidgetRow
+import app.citti.widget.WidgetRefresher
+import app.citti.widget.shouldRefreshWidgets
 import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
@@ -133,7 +135,14 @@ class AppContainer(
 
     val syncSettings: SyncSettingsRepository by lazy { SyncSettingsRepository(database) }
 
-    val exclusions: ExclusionRepository by lazy { ExclusionRepository(database) }
+    /** Redraws the home-screen widgets; every call runs on [appScope]. */
+    val widgets: WidgetRefresher by lazy {
+        WidgetRefresher(appContext, appScope) {
+            withContext(Dispatchers.IO) { dailyNotes()?.let { it.localNote(it.today()) } }
+        }
+    }
+
+    val exclusions: ExclusionRepository by lazy { ExclusionRepository(database, onChanged = { widgets.updateAll() }) }
 
     val uiSettings: UiSettings by lazy { UiSettings(database) }
 
@@ -146,7 +155,15 @@ class AppContainer(
 
     /** Settings › Daily notes; Import from Obsidian needs the session's WebDAV client. */
     val dailySettingsStore: DailySettingsStore by lazy {
-        CoreDailySettingsStore(dailySettings, dailyGuard, exclusions, LinkResolver(database), { stack.value?.dailyImport }, Dispatchers.IO)
+        CoreDailySettingsStore(
+            dailySettings,
+            dailyGuard,
+            exclusions,
+            LinkResolver(database),
+            { stack.value?.dailyImport },
+            Dispatchers.IO,
+            onChanged = { widgets.updateDaily() },
+        )
     }
 
     /** The Date locale of Daily notes: the setting, else detected from the Journal folder, else the phone's language. */
@@ -293,7 +310,10 @@ class AppContainer(
         val owner = ownForeground && _foregroundSync.compareAndSet(false, true)
         if (owner && !SyncForegroundService.start(appContext)) AndroidSyncLog.warn("sync runs without foreground service")
         try {
-            return withSyncWakeLock(appContext) { engine.sync(trigger) }.also(::importDailySettingsOnce)
+            return withSyncWakeLock(appContext) { engine.sync(trigger) }.also {
+                importDailySettingsOnce(it)
+                if (shouldRefreshWidgets(it)) widgets.updateAll()
+            }
         } finally {
             if (owner) _foregroundSync.value = false
         }
@@ -308,6 +328,7 @@ class AppContainer(
             import.runOnce()?.let {
                 AndroidSyncLog.info("daily import read=${it.read.keys} refused=${it.refused.map { r -> r.key }} notFound=${it.notFound}")
                 _dailyImportReports.emit(it)
+                widgets.updateDaily()
             }
         }
     }
@@ -323,6 +344,7 @@ class AppContainer(
         }
         buildStack(credentials)
         _signedIn.value = true
+        widgets.updateAll()
     }
 
     /** Wipes credentials and local data (core [signOut]) and drops the sync stack. */
@@ -331,6 +353,7 @@ class AppContainer(
         withContext(Dispatchers.IO) { signOut(credentialStore, database) }
         clearImages()
         _signedIn.value = false
+        widgets.updateAll()
     }
 
     /**
@@ -340,6 +363,7 @@ class AppContainer(
     suspend fun requireSignIn() {
         dropStack()
         _signedIn.value = false
+        widgets.updateAll()
     }
 
     /** Server host and user of the stored credentials, or null when signed out. */
@@ -379,7 +403,10 @@ class AppContainer(
     suspend fun setViewLine(
         localId: Long,
         line: Int,
-    ) = withContext(Dispatchers.IO) { database.noteQueries.setViewLine(line.toLong(), localId) }
+    ) {
+        withContext(Dispatchers.IO) { database.noteQueries.setViewLine(line.toLong(), localId) }
+        widgets.updateNote(localId)
+    }
 
     /** What the Daily note widget shows for [date], through M6's local lookup (Hidden notes included). */
     suspend fun dailyWidget(date: LocalDate): DailyWidgetState =
@@ -437,7 +464,8 @@ class AppContainer(
             localId,
             NoteEditor(database, localId, config::nowSeconds, ::scheduleAfterEditPush),
             LinkResolver(database),
-            fetchContent = { syncEngine()?.fetchContent(localId) ?: false },
+            fetchContent = { (syncEngine()?.fetchContent(localId) ?: false).also { if (it) widgets.updateNote(localId) } },
+            onViewLine = { widgets.updateNote(localId) },
             dropped = {
                 flow {
                     val engine = syncEngine() ?: return@flow
@@ -479,7 +507,7 @@ class AppContainer(
             val uploader = ImageUploader(dav, obsidian, imageSettings, images)
             val afterEdit = AfterEditPush(appScope, engine, config.afterEditPushDelay.inWholeMilliseconds)
             val creator = NoteCreator(database, engine, appScope, exclusions, afterEdit::schedule, now)
-            val actions = NoteActions(database, creator, exclusions, afterEdit::schedule, now)
+            val actions = NoteActions(database, creator, exclusions, afterEdit::schedule, now, onChanged = { widgets.updateAll() })
             val dailyImport = ObsidianDailyImport(dav, dailySettings)
             val templates = TemplateSource(database, api, dav, dailySettings, engine::fetchContent, appScope, AndroidSyncLog)
             val dailyNotes =
@@ -489,11 +517,12 @@ class AppContainer(
                     creator,
                     templates,
                     localeDetector,
-                    engine::fetchContent,
+                    { id -> engine.fetchContent(id).also { if (it) widgets.updateNote(id) } },
                     exclusions,
                     appScope,
                     clock = config.clock::now,
                     zone = { TimeZone.of(config.timeZone().id) },
+                    onCreated = { widgets.updateDaily() },
                 )
             SyncStack(client, engine, afterEdit, dav, images, creator, uploader, actions, dailyImport, dailyNotes)
                 .also { stack.value = it }

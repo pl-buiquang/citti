@@ -57,6 +57,8 @@ class CoreDailySettingsStore(
     private val links: LinkResolver,
     private val import: () -> ObsidianDailyImport?,
     private val io: CoroutineDispatcher,
+    /** Called after a setting that changes which note is today's (Journal folder, Date format, Date locale) or an Import. */
+    private val onChanged: () -> Unit = {},
 ) : DailySettingsStore {
     override fun config(): Flow<DailyConfig> = settings.configFlow()
 
@@ -64,7 +66,7 @@ class CoreDailySettingsStore(
 
     override suspend fun normaliseFolder(path: String): Result<String> = withContext(io) { NameRules.normaliseFolder(path, exclusions) }
 
-    override suspend fun setFolder(path: String): FolderResult = withContext(io) { settings.setFolder(path) }
+    override suspend fun setFolder(path: String): FolderResult = withContext(io) { settings.setFolder(path) }.also { onChanged() }
 
     override suspend fun setTemplate(path: String) = withContext(io) { settings.setTemplate(path) }
 
@@ -72,13 +74,13 @@ class CoreDailySettingsStore(
 
     override suspend fun suggest(query: String): List<Suggestion> = withContext(io) { links.suggest(query) }
 
-    override suspend fun setFormat(format: String): FormatResult = withContext(io) { settings.setFormat(format) }
+    override suspend fun setFormat(format: String): FormatResult = withContext(io) { settings.setFormat(format) }.also { onChanged() }
 
-    override suspend fun setLocale(code: String?) = withContext(io) { settings.setLocale(code) }
+    override suspend fun setLocale(code: String?) = withContext(io) { settings.setLocale(code) }.also { onChanged() }
 
     override suspend fun setWeekStart(day: DayOfWeek?) = withContext(io) { settings.setWeekStart(day) }
 
-    override suspend fun importFromObsidian(): ImportReport? = import()?.let { withContext(io) { it.run() } }
+    override suspend fun importFromObsidian(): ImportReport? = import()?.let { withContext(io) { it.run() } }.also { onChanged() }
 }
 
 /**

@@ -111,6 +111,8 @@ class NoteActions(
     private val clock: () -> Long,
     private val countDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val checkTimeoutMs: Long = CREATION_CHECK_MS,
+    /** Called after a write that changed what the lists and the widgets show (Favorite, Rename, Move, Delete). */
+    private val onChanged: () -> Unit = {},
 ) {
     private val notes = db.noteQueries
 
@@ -120,7 +122,10 @@ class NoteActions(
         favorite: Boolean,
     ): Boolean {
         val changed = notes.setFavorite(favorite, localId).value > 0
-        if (changed) afterEdit()
+        if (changed) {
+            afterEdit()
+            onChanged()
+        }
         return changed
     }
 
@@ -177,7 +182,10 @@ class NoteActions(
      */
     fun delete(localId: Long): Boolean {
         val deleted = notes.deleteNew(localId).value > 0 || notes.markDeletedByUser(localId).value > 0
-        if (deleted) afterEdit()
+        if (deleted) {
+            afterEdit()
+            onChanged()
+        }
         return deleted
     }
 
@@ -231,6 +239,7 @@ class NoteActions(
             return if (row != null && row.sync_state != DELETED && row.readonly) RenameResult.ReadOnly else RenameResult.Gone
         }
         afterEdit()
+        onChanged()
         return RenameResult.Done
     }
 

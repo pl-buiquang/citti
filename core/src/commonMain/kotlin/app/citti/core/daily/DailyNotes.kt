@@ -62,6 +62,8 @@ class DailyNotes(
     private val appScope: CoroutineScope,
     private val clock: () -> Instant,
     private val zone: () -> TimeZone,
+    /** Called after a Daily note was created (also offline), so the widgets redraw. */
+    private val onCreated: () -> Unit = {},
 ) {
     private val notes = db.noteQueries
     private val guard = DailyGuard(settings, exclusions)
@@ -141,6 +143,7 @@ class DailyNotes(
                 locale,
             )
         val localId = creator.create(folder, title, rendered)
+        onCreated()
         return DailyResult.Created(localId, (template as? TemplateText.Missing)?.path)
     }
 
