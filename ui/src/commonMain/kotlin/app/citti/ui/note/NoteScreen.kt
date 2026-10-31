@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -28,6 +29,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import app.citti.core.markdown.Task
 import app.citti.core.markdown.ToolbarAction
+import app.citti.ui.TestTags
 import app.citti.ui.components.Banner
 import app.citti.ui.components.BannerKind
 import app.citti.ui.components.CittiIcon
@@ -148,7 +150,7 @@ fun NoteScreen(
                 }
 
                 else -> {
-                    MarkdownEditor(editor, Modifier.fillMaxSize(), editable = !state.readonly)
+                    MarkdownEditor(editor, Modifier.fillMaxSize().testTag(TestTags.NOTE_EDITOR), editable = !state.readonly)
                 }
             }
         }

@@ -19,6 +19,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import app.citti.ui.TestTags
 import app.citti.ui.browse.NoteRowItem
 import app.citti.ui.browse.RowDateFormatter
 import app.citti.ui.browse.rowDateText
@@ -105,7 +107,7 @@ fun SearchScreen(
             }
         }
         // The hits are drawn from the first row, so the reported indexes are hit indexes.
-        LazyColumn(Modifier.weight(1f), state = listState) {
+        LazyColumn(Modifier.weight(1f).testTag(TestTags.SEARCH_RESULTS), state = listState) {
             if (!showResults) return@LazyColumn
             if (state.hits.isEmpty()) {
                 item(key = "empty") {

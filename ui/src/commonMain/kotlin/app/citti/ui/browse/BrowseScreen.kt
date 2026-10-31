@@ -21,11 +21,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import app.citti.core.note.find
 import app.citti.core.sync.SyncStatus
+import app.citti.ui.TestTags
 import app.citti.ui.components.Banner
 import app.citti.ui.components.BannerKind
 import app.citti.ui.components.Breadcrumb
@@ -140,7 +142,7 @@ fun BrowseScreen(
             Breadcrumb(view.folder, onOpen = actions.onOpenBreadcrumb, modifier = Modifier.padding(vertical = NotesSpacing.space1))
         }
         CittiPullRefresh(refreshing = state.syncing, onRefresh = actions.onSyncNow, modifier = Modifier.weight(1f)) {
-            LazyColumn(Modifier.fillMaxSize(), state = listState) {
+            LazyColumn(Modifier.fillMaxSize().testTag(TestTags.BROWSE_ROWS), state = listState) {
                 when (view) {
                     is BrowseView.List -> listRows(view, state, now, dates, actions)
                     is BrowseView.Tree -> treeRows(view, state, now, dates, actions)

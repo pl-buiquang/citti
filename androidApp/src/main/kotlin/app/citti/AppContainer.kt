@@ -328,6 +328,12 @@ class AppContainer(
             }
         }
 
+    /** No sync is running and no push after an edit is pending (signed out counts as idle). For the E2E idling resource. */
+    fun isSyncIdle(): Boolean {
+        val s = stack.value ?: return true
+        return s.engine.state.value !is SyncStatus.Running && !s.afterEdit.isPending
+    }
+
     /** Image links of Notes (M4 UI). Null while signed out. */
     fun imageResolver(): ImageResolver? = stack.value?.images
 

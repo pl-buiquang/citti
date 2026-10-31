@@ -23,11 +23,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.IMAGE_CACHE_CHOICES_MB
 import app.citti.core.settings.SYNC_INTERVAL_CHOICES
 import app.citti.core.settings.SyncNetwork
+import app.citti.ui.TestTags
 import app.citti.ui.browse.statusText
 import app.citti.ui.browse.syncLine
 import app.citti.ui.components.Banner
@@ -155,6 +157,7 @@ private fun SettingsHome(
         Column(
             Modifier
                 .fillMaxSize()
+                .testTag(TestTags.SETTINGS_HOME)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = CittiTheme.shape.gutter),
             verticalArrangement = Arrangement.spacedBy(NotesSpacing.space3),
@@ -231,10 +234,19 @@ private fun FolderList(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BasicText(path, Modifier.weight(1f), style = CittiTheme.typography.body.colored())
-            CittiTextButton(stringResource(Res.string.settings_remove), { actions.onRemoveFolder(kind, path) })
+            CittiTextButton(
+                stringResource(Res.string.settings_remove),
+                { actions.onRemoveFolder(kind, path) },
+                Modifier.testTag(TestTags.settingsRemove(kind, path)),
+            )
         }
     }
-    CittiButton(stringResource(Res.string.settings_add_folder), { actions.onOpenPicker(kind) }, kind = ButtonKind.Quiet)
+    CittiButton(
+        stringResource(Res.string.settings_add_folder),
+        { actions.onOpenPicker(kind) },
+        Modifier.testTag(TestTags.settingsAdd(kind)),
+        kind = ButtonKind.Quiet,
+    )
 }
 
 /** Folders known locally (from the Notes' categories) plus manual entry. */
@@ -257,6 +269,7 @@ private fun FolderPicker(
         Column(
             Modifier
                 .fillMaxSize()
+                .testTag(TestTags.SETTINGS_PICKER)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = CittiTheme.shape.gutter),
             verticalArrangement = Arrangement.spacedBy(NotesSpacing.space3),
@@ -268,6 +281,7 @@ private fun FolderPicker(
                     actions.onClearFolderError()
                 },
                 label = stringResource(Res.string.settings_folder_path_label),
+                modifier = Modifier.testTag(TestTags.SETTINGS_FOLDER_PATH),
                 placeholder = stringResource(Res.string.settings_folder_path_hint),
                 keyboardType = KeyboardType.Uri,
             )
@@ -348,7 +362,7 @@ private fun ConfirmDialog(
         ) {
             BasicText(title, style = CittiTheme.typography.title.colored())
             BasicText(body, style = CittiTheme.typography.body.colored())
-            CittiButton(action, actions.onConfirm, kind = ButtonKind.Danger)
+            CittiButton(action, actions.onConfirm, Modifier.testTag(TestTags.SETTINGS_CONFIRM), kind = ButtonKind.Danger)
             CittiButton(stringResource(Res.string.settings_cancel), actions.onDismissConfirm, kind = ButtonKind.Quiet)
         }
     }

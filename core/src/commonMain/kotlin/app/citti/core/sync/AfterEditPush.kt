@@ -17,6 +17,10 @@ class AfterEditPush(
     private val delayMillis: Long = DEFAULT_DELAY,
 ) {
     private var timer: Job? = null
+    private var pushing: Job? = null
+
+    /** A timer is running, or the push it started has not finished yet (the E2E idling resource waits on it). */
+    val isPending: Boolean get() = timer?.isActive == true || pushing?.isActive == true
 
     fun schedule() {
         timer?.cancel()
@@ -24,7 +28,7 @@ class AfterEditPush(
             scope.launch {
                 delay(delayMillis)
                 // A separate job, so that a later schedule() cancels the timer but not this push.
-                scope.launch { engine.push(SyncTrigger.AfterEdit) }
+                pushing = scope.launch { engine.push(SyncTrigger.AfterEdit) }
             }
     }
 

@@ -12,7 +12,9 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
+import app.citti.ui.TestTags
 import app.citti.ui.components.Banner
 import app.citti.ui.components.BannerKind
 import app.citti.ui.components.ButtonKind
@@ -74,6 +76,7 @@ fun LoginScreen(
             value = state.serverUrl,
             onValueChange = onServerUrl,
             label = stringResource(Res.string.login_server_label),
+            modifier = Modifier.testTag(TestTags.LOGIN_SERVER),
             placeholder = stringResource(Res.string.login_server_hint),
             enabled = !state.busy,
             keyboardType = KeyboardType.Uri,
@@ -83,12 +86,14 @@ fun LoginScreen(
                 value = state.user,
                 onValueChange = onUser,
                 label = stringResource(Res.string.login_user_label),
+                modifier = Modifier.testTag(TestTags.LOGIN_USER),
                 enabled = !state.busy,
             )
             CittiTextField(
                 value = state.appPassword,
                 onValueChange = onAppPassword,
                 label = stringResource(Res.string.login_app_password_label),
+                modifier = Modifier.testTag(TestTags.LOGIN_APP_PASSWORD),
                 enabled = !state.busy,
                 secret = true,
             )

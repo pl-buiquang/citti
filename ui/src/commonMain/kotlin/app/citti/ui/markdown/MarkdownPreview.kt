@@ -40,6 +40,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -61,6 +62,7 @@ import app.citti.core.markdown.Property
 import app.citti.core.markdown.Task
 import app.citti.core.markdown.plainText
 import app.citti.core.note.LinkTarget
+import app.citti.ui.TestTags
 import app.citti.ui.components.colored
 import app.citti.ui.image.ImageEnv
 import app.citti.ui.image.VaultImage
@@ -92,7 +94,7 @@ fun MarkdownPreview(
     val colors = CittiTheme.colors
     val styles = remember(colors, links, onLink) { InlineStyles(colors, links, onLink) }
     val scope = PreviewScope(styles, readonly, onTask, images)
-    LazyColumn(modifier.fillMaxSize(), state = listState) {
+    LazyColumn(modifier.fillMaxSize().testTag(TestTags.NOTE_PREVIEW), state = listState) {
         itemsIndexed(doc.blocks, key = { index, block -> "$index:${block.start}" }) { _, block ->
             Box(Modifier.fillMaxWidth().padding(horizontal = CittiTheme.shape.gutter)) { scope.Block(block, muted = false) }
         }

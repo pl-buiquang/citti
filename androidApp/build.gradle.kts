@@ -1,3 +1,4 @@
+import com.android.build.api.dsl.ManagedVirtualDevice
 import java.util.Properties
 
 plugins {
@@ -39,6 +40,31 @@ android {
         targetSdk = 36
         versionCode = appVersionCode
         versionName = appVersionName
+
+        // E2E (androidTest): see androidApp/src/androidTest and `./gradlew e2e`.
+        testInstrumentationRunner = "app.citti.e2e.E2eRunner"
+        // Orchestrator runs each test in its own process on wiped app data (prefs, DB, Keystore-backed blob).
+        testInstrumentationRunnerArguments["clearPackageData"] = "true"
+        // Failure screenshots and request logs (E2eRule) go to the test storage, pulled into
+        // build/outputs/managed_device_android_test_additional_output/.
+        testInstrumentationRunnerArguments["useTestStorageService"] = "true"
+        // `./gradlew e2e -Pe2e.class=app.citti.e2e.flows.SearchTest` runs one flow (or `Class#method`).
+        (findProperty("e2e.class") as String?)?.let { testInstrumentationRunnerArguments["class"] = it }
+    }
+
+    testOptions {
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
+        animationsDisabled = true
+        managedDevices {
+            allDevices {
+                create<ManagedVirtualDevice>("api36") {
+                    device = "Pixel 6"
+                    apiLevel = 36
+                    systemImageSource = "aosp-atd"
+                    require64Bit = true
+                }
+            }
+        }
     }
 
     val releaseStoreFile = signing("storeFile", "CITTI_KEYSTORE_FILE")
@@ -76,4 +102,30 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.ktor)
     testImplementation(libs.kotlin.test.junit)
+
+    // The fake server and the fixture Vault: androidTest only, never in the app.
+    androidTestImplementation(project(":core-testing"))
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.espresso.core)
+    androidTestImplementation(libs.androidx.test.espresso.intents)
+    androidTestImplementation(libs.androidx.test.uiautomator)
+    androidTestImplementation(libs.androidx.work.testing)
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.kotlin.test.junit)
+    debugImplementation(libs.compose.ui.test.manifest)
+    androidTestUtil(libs.androidx.test.orchestrator)
+    androidTestUtil(libs.androidx.test.services)
+}
+
+// Thread.sleep is forbidden in the E2E suite: wait on the sync state or the fake's request log instead.
+tasks.register("e2eNoSleep") {
+    val sources = fileTree("src/androidTest") { include("**/*.kt") }
+    inputs.files(sources)
+    doLast {
+        val offenders = sources.files.filter { "Thread.sleep" in it.readText() }
+        check(offenders.isEmpty()) { "Thread.sleep in the E2E suite: ${offenders.joinToString()}" }
+    }
 }

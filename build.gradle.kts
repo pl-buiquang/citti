@@ -9,6 +9,13 @@ plugins {
     alias(libs.plugins.spotless)
 }
 
+// E2E suite on the managed emulator (not part of `check`). `-Pe2e.class=<class>[#method]` runs one flow.
+tasks.register("e2e") {
+    group = "verification"
+    description = "Runs the E2E tests on the api36 managed device."
+    dependsOn(":androidApp:e2eNoSleep", ":androidApp:api36DebugAndroidTest")
+}
+
 spotless {
     kotlin {
         target("**/*.kt")
