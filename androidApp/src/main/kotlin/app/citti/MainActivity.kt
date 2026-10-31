@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
     private var fullyDrawn = false
 
     private val titleCollator by lazy { localeTitleCollator() }
-    private val rowDates by lazy { JavaTimeRowDateFormatter() }
+    private val rowDates by lazy { JavaTimeRowDateFormatter(zone = container.config.timeZone) }
 
     // POST_NOTIFICATIONS: asked once, never blocks anything; the sync works without it.
     private val notificationPermission =
@@ -246,7 +246,7 @@ class MainActivity : ComponentActivity() {
                 AppDrawer(
                     account = account,
                     status = state.status,
-                    now = remember(drawer.isOpen) { System.currentTimeMillis() / 1000 },
+                    now = remember(drawer.isOpen) { container.config.nowSeconds() },
                     folders = state.tree?.children.orEmpty(),
                     actions =
                         DrawerActions(
@@ -260,7 +260,7 @@ class MainActivity : ComponentActivity() {
             BrowseScreen(
                 view = view,
                 state = state,
-                nowSeconds = { System.currentTimeMillis() / 1000 },
+                nowSeconds = { container.config.nowSeconds() },
                 dates = rowDates,
                 listState = rememberLazyListState(),
                 actions =
@@ -306,7 +306,7 @@ class MainActivity : ComponentActivity() {
         val keep: (String) -> Unit = { text -> if (navigator.top is Route.Search) navigator.replaceTop(Route.Search(text)) }
         SearchScreen(
             state = state,
-            nowSeconds = { System.currentTimeMillis() / 1000 },
+            nowSeconds = { container.config.nowSeconds() },
             dates = rowDates,
             listState = rememberLazyListState(),
             actions =
@@ -395,7 +395,7 @@ class MainActivity : ComponentActivity() {
         BackHandler { if (!controller.onBack()) navigator.pop() }
         SettingsScreen(
             state = state,
-            nowSeconds = { System.currentTimeMillis() / 1000 },
+            nowSeconds = { container.config.nowSeconds() },
             actions =
                 SettingsActions(
                     onBack = { if (!controller.onBack()) navigator.pop() },
@@ -445,7 +445,7 @@ class MainActivity : ComponentActivity() {
         route = route,
         navigator = navigator,
         notify = snackbars::show,
-        clockMs = System::currentTimeMillis,
+        clockMs = container.config::nowMillis,
     )
 
     private fun newScope() = CoroutineScope(SupervisorJob(container.appScope.coroutineContext[Job]) + Dispatchers.Default)

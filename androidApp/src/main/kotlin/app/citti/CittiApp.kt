@@ -5,8 +5,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /** Application class: owns the [AppContainer] so Activities, services and workers share one graph. */
-class CittiApp : Application() {
-    val container: AppContainer by lazy { AppContainer(this) }
+open class CittiApp : Application() {
+    val container: AppContainer by lazy { createContainer() }
+
+    /** The E2E tests override this to wire the fake server, a pinned clock and a short push delay. */
+    protected open fun createContainer(): AppContainer = AppContainer(this, AppConfig())
 
     val syncScheduler: SyncScheduler by lazy { SyncScheduler(this, container.syncSettings) }
 

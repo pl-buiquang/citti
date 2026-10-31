@@ -7,7 +7,6 @@ import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import app.citti.core.api.NotesApi
 import app.citti.core.api.NotesApiConfig
 import app.citti.core.api.createNotesHttpClient
-import app.citti.core.api.defaultHttpEngine
 import app.citti.core.auth.CredentialStore
 import app.citti.core.auth.CredentialStoreFactory
 import app.citti.core.auth.Credentials
@@ -71,9 +70,12 @@ import okio.Path.Companion.toOkioPath
  * built after login ([signedIn]) and dropped on [signOut] / [requireSignIn].
  *
  * Background code (WorkManager) calls [syncEngine]: it returns null when nobody is signed in.
+ *
+ * [config] holds the HTTP engine, the clock and the push delay; the E2E tests replace them.
  */
 class AppContainer(
     context: Context,
+    val config: AppConfig = AppConfig(),
 ) {
     private val appContext = context.applicationContext
 
@@ -115,8 +117,8 @@ class AppContainer(
             .diskCache(imageDiskCache)
             .components {
                 add(VaultImageKeyer())
-                add(VaultImageFetcherFactory(::imageResolver, System::currentTimeMillis))
-                add(KtorNetworkFetcherFactory())
+                add(VaultImageFetcherFactory(::imageResolver, config::nowMillis))
+                add(KtorNetworkFetcherFactory(httpClient = { HttpClient(config.httpEngine()) }))
             }.build()
     }
 
@@ -144,7 +146,9 @@ class AppContainer(
         }
 
     /** Login Flow v2 / manual check. Its client carries no credentials. */
-    val loginFlow: LoginFlow by lazy { LoginFlow(HttpClient(defaultHttpEngine())) }
+    val loginFlow: LoginFlow by lazy {
+        LoginFlow(HttpClient(config.httpEngine()), apiClientFactory = { createNotesHttpClient(config.httpEngine(), it) })
+    }
 
     private class SyncStack(
         val client: HttpClient,
@@ -291,18 +295,18 @@ class AppContainer(
         DbNoteGateway(
             database,
             localId,
-            NoteEditor(database, localId, { System.currentTimeMillis() / 1000 }, ::scheduleAfterEditPush),
+            NoteEditor(database, localId, config::nowSeconds, ::scheduleAfterEditPush),
             LinkResolver(database),
         )
 
     private suspend fun buildStack(credentials: Credentials): SyncStack =
         stackLock.withLock {
             stack.value?.client?.close()
-            val config = NotesApiConfig(credentials.serverUrl, credentials.user, credentials.appPassword)
-            val client = createNotesHttpClient(config)
-            val api = NotesApi(client, config, AndroidSyncLog)
+            val apiConfig = NotesApiConfig(credentials.serverUrl, credentials.user, credentials.appPassword)
+            val client = createNotesHttpClient(config.httpEngine(), apiConfig)
+            val api = NotesApi(client, apiConfig, AndroidSyncLog)
             val davSetup = DavSetup(api, database, credentials.serverUrl)
-            val now = { System.currentTimeMillis() / 1000 }
+            val now = config::nowSeconds
             // SyncEngine reads settings in its constructor, so build it off the main thread.
             val engine =
                 withContext(Dispatchers.IO) {
@@ -318,7 +322,10 @@ class AppContainer(
                 }
             val dav = DavClient(client, { davSetup.root() }, AndroidSyncLog, api.stats)
             val images = ImageResolver(dav, ObsidianConfig(dav, database))
-            SyncStack(client, engine, AfterEditPush(appScope, engine), dav, images).also { stack.value = it }
+            SyncStack(client, engine, AfterEditPush(appScope, engine, config.afterEditPushDelay.inWholeMilliseconds), dav, images).also {
+                stack.value =
+                    it
+            }
         }
 
     /** Image links of Notes (M4 UI). Null while signed out. */
