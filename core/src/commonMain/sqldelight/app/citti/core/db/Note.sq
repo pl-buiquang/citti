@@ -104,3 +104,6 @@ UPDATE note SET remote_id = NULL, etag = NULL, sync_state = 'NEW' WHERE local_id
 
 folderHasTitle:
 SELECT count(*) FROM note WHERE category = :category AND title = :title AND sync_state != 'DELETED';
+
+countConflictCopies:
+SELECT count(*) FROM note WHERE conflict_of IS NOT NULL AND sync_state != 'DELETED';
