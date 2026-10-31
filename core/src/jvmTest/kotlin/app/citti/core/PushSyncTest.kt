@@ -262,6 +262,34 @@ class PushSyncTest {
         }
 
     @Test
+    fun textTypedDuringConflictFetchGoesToTheCopy() =
+        runTest {
+            val (local, remote) = synced("Plan", "base")
+            notes.markDirty("local text", 5, local)
+            server.editOnServer(remote, content = "server text")
+            duringRequest(Endpoint.GET_NOTE) { notes.markDirty("local text, more", 6, local) }
+
+            val copy = notes.selectByLocalId(done().conflicts.single()).executeAsOne()
+            assertEquals("local text, more", copy.content)
+            assertEquals("server text", notes.selectByLocalId(local).executeAsOne().content)
+        }
+
+    @Test
+    fun deleteDuringConflictFetchTakesServerVersionWithoutCopy() =
+        runTest {
+            val (local, remote) = synced("Plan", "base")
+            notes.markDirty("local text", 5, local)
+            server.editOnServer(remote, content = "server text")
+            duringRequest(Endpoint.GET_NOTE) { notes.markDeleted(local) }
+
+            assertTrue(done().conflicts.isEmpty())
+            val row = notes.selectByLocalId(local).executeAsOne()
+            assertEquals("SYNCED", row.sync_state)
+            assertEquals("server text", row.content)
+            assertEquals(1, notes.countNotes().executeAsOne())
+        }
+
+    @Test
     fun offlineEditIsPushedOnReconnect() =
         runTest {
             val (local, remote) = synced()

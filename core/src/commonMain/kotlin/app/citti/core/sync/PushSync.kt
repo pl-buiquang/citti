@@ -208,7 +208,11 @@ class PushSync(
         return pushCreate(queries.selectByLocalId(note.local_id).executeAsOne())
     }
 
-    /** Server wins: its version replaces the Note in place, the local text moves to a Conflict copy. */
+    /**
+     * Server wins: its version replaces the Note in place, the local text moves to a Conflict copy. The row is read
+     * again inside the transaction, so the copy holds text typed while the server version was fetched. A Note deleted
+     * meanwhile takes the server version without a copy.
+     */
     private suspend fun resolveConflict(
         note: Note,
         remoteId: Long,
@@ -216,15 +220,16 @@ class PushSync(
         when (val result = api.getNote(remoteId)) {
             is ApiResult.Success -> {
                 val server = result.value
-                val sameText = server.content.orEmpty() == note.content.orEmpty() && server.title == note.title
                 database.transaction {
-                    if (!sameText) {
-                        val title = freeConflictTitle(note.category, "${note.title} (conflict ${isoDate(now())})")
-                        queries.insertNew(title, note.category, note.content.orEmpty(), now(), note.local_id)
+                    val current = queries.selectByLocalId(note.local_id).executeAsOneOrNull() ?: return@transaction
+                    val sameText = server.content.orEmpty() == current.content.orEmpty() && server.title == current.title
+                    if (!sameText && current.sync_state != "DELETED") {
+                        val title = freeConflictTitle(current.category, "${current.title} (conflict ${isoDate(now())})")
+                        queries.insertNew(title, current.category, current.content.orEmpty(), now(), current.local_id)
                         conflicts += queries.lastInsertedLocalId().executeAsOne()
                         log.warn("push conflict: server wins, local text kept as copy local=${conflicts.last()}")
                     }
-                    storeServerVersion(note, server)
+                    storeServerVersion(current, server)
                 }
                 null
             }
