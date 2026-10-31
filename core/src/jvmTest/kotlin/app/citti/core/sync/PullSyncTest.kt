@@ -329,9 +329,10 @@ class PullSyncTest {
 
             assertIs<ApiError.Network>(assertIs<PullResult.Failed>(result).error)
             assertEquals(100L, notes.countNotesWithContent().executeAsOne())
-            // 5 Notes x (1 attempt + 2 retries) after the 100 good ones; nowhere near the 900 remaining.
-            // (a request already in flight when the breaker opens may add one)
-            assertTrue(getRequests().size in 115..116)
+            // 5 Notes x (1 attempt + 2 retries) after the 100 good ones; a worker may already have started the
+            // next download when the breaker opens, so allow a few more. Nowhere near the 900 remaining.
+            val requests = getRequests().size
+            assertTrue(requests in 115..120, "expected an early stop, got $requests GET requests")
             assertTrue(logLines.any { it.startsWith("pull content stopped") })
             // The ETag stays withheld so the next pull does not turn into a 304.
             assertNull(

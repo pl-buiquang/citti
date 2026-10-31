@@ -12,9 +12,8 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlin.time.TimeSource
 
 /** Content download progress: [done] of [total] Notes. */
@@ -232,15 +231,29 @@ class PullSync(
         var networkStreak = 0
         var attempted = 0
         coroutineScope {
-            val permits = Semaphore(downloadParallelism)
-            val results = Channel<Pair<Long, ApiResult<RemoteNote>>>(Channel.UNLIMITED)
             val remoteIds = targets.associate { it.local_id to it.remote_id }
-            for ((localId, remoteId) in remoteIds) {
-                launch { results.send(localId to permits.withPermit { fetchWithRetry(remoteId) }) }
+            val queue = Channel<Long>(Channel.UNLIMITED)
+            remoteIds.keys.forEach { queue.trySend(it) }
+            queue.close()
+            // A fixed pool of workers, and a rendezvous channel: a worker cannot start its next download before
+            // the previous result was handled, so the circuit breaker below stops the downloads within about
+            // `downloadParallelism` requests instead of lagging behind a crowd of already-started ones.
+            val results = Channel<Pair<Long, ApiResult<RemoteNote>>>(Channel.RENDEZVOUS)
+            val workers =
+                List(downloadParallelism) {
+                    launch {
+                        for (localId in queue) {
+                            results.send(localId to fetchWithRetry(remoteIds.getValue(localId)))
+                        }
+                    }
+                }
+            launch {
+                workers.joinAll()
+                results.close()
             }
-            for (index in 0 until total) {
-                val (localId, result) = results.receive()
-                attempted = index + 1
+            var index = 0
+            for ((localId, result) in results) {
+                attempted = ++index
                 when (result) {
                     is ApiResult.Success -> {
                         networkStreak = 0
@@ -268,10 +281,9 @@ class PullSync(
                     coroutineContext.cancelChildren()
                     break
                 }
-                onProgress(Progress(index + 1, total))
-                val done = index + 1
-                if (done % PROGRESS_LOG_EVERY == 0 && done < total) {
-                    logProgress(done, total, started.elapsedNow().inWholeMilliseconds)
+                onProgress(Progress(index, total))
+                if (index % PROGRESS_LOG_EVERY == 0 && index < total) {
+                    logProgress(index, total, started.elapsedNow().inWholeMilliseconds)
                 }
             }
             flush()
