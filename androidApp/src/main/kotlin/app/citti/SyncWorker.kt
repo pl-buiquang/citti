@@ -1,7 +1,9 @@
 package app.citti
 
 import android.content.Context
+import android.content.pm.ServiceInfo
 import androidx.work.CoroutineWorker
+import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import app.citti.core.api.ApiError
 import app.citti.core.sync.SyncOutcome
@@ -38,7 +40,20 @@ class SyncWorker(
     override suspend fun doWork(): Result {
         val container = (applicationContext as CittiApp).container
         AndroidSyncLog.info("worker start attempt=$runAttemptCount")
-        val outcome = container.syncEngine()?.sync(SyncTrigger.Periodic)
+        // Foreground (same notification as the service) so the sync survives screen-off. Android may refuse
+        // from the background (ForegroundServiceStartNotAllowedException); then run unprotected.
+        try {
+            setForeground(
+                ForegroundInfo(
+                    SyncNotification.ID,
+                    SyncNotification.build(applicationContext),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                ),
+            )
+        } catch (e: IllegalStateException) {
+            AndroidSyncLog.warn("worker runs without foreground: ${e.javaClass.simpleName}")
+        }
+        val outcome = container.runSync(SyncTrigger.Periodic, ownForeground = false)
         val decision = decide(outcome, runAttemptCount)
         AndroidSyncLog.info("worker decision=$decision attempt=$runAttemptCount signedIn=${outcome != null}")
         return when (decision) {

@@ -1,12 +1,16 @@
 package app.citti
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,6 +55,20 @@ class MainActivity : ComponentActivity() {
     private var settingsScope: CoroutineScope? = null
     private var settingsOpen by mutableStateOf(false)
 
+    // POST_NOTIFICATIONS: asked once, never blocks anything; the sync works without it.
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    private fun askNotificationPermissionOnce() {
+        val prefs = getSharedPreferences("prompts", MODE_PRIVATE)
+        val granted = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        val asked = prefs.getBoolean(KEY_ASKED_NOTIFICATIONS, false)
+        if (shouldAskNotificationPermission(Build.VERSION.SDK_INT, granted, asked)) {
+            prefs.edit().putBoolean(KEY_ASKED_NOTIFICATIONS, true).apply()
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -86,7 +104,10 @@ class MainActivity : ComponentActivity() {
     private fun ListRoute() {
         val controller = remember { listController ?: newListController().also { listController = it } }
         val state by controller.state.collectAsState()
-        LaunchedEffect(controller) { controller.onShown() }
+        LaunchedEffect(controller) {
+            controller.onShown()
+            askNotificationPermissionOnce()
+        }
         NoteListScreen(
             state = state,
             nowSeconds = { System.currentTimeMillis() / 1000 },
@@ -194,5 +215,9 @@ class MainActivity : ComponentActivity() {
 
     private fun openInBrowser(url: String) {
         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    private companion object {
+        const val KEY_ASKED_NOTIFICATIONS = "asked-notifications"
     }
 }

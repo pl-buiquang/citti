@@ -20,6 +20,7 @@ import app.citti.core.settings.SyncSettingsRepository
 import app.citti.core.sync.PullSync
 import app.citti.core.sync.PushSync
 import app.citti.core.sync.SyncEngine
+import app.citti.core.sync.SyncOutcome
 import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
 import app.citti.ui.list.NoteListItem
@@ -42,6 +43,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The app's object graph, held by [CittiApp]. Everything is built lazily on first use.
@@ -113,9 +115,37 @@ class AppContainer(
         return buildStack(credentials).engine
     }
 
-    /** Runs one sync; no-op when signed out. */
+    /** Runs one sync under a foreground service and a wake lock; no-op when signed out. */
     suspend fun sync(trigger: SyncTrigger) {
-        syncEngine()?.sync(trigger)
+        runSync(trigger, ownForeground = true)
+    }
+
+    private val syncGuarded = AtomicBoolean(false)
+
+    /**
+     * Runs one sync holding a partial wake lock, so it survives screen-off. With [ownForeground] a
+     * [SyncForegroundService] runs for its duration; [SyncWorker] passes false because WorkManager already
+     * runs it in the foreground. Returns null when signed out.
+     *
+     * Only the call that wins [syncGuarded] starts (and later stops) the service, so a second call during a
+     * running sync neither starts another service nor stops the first one's. The engine itself answers
+     * `AlreadyRunning` to such a call.
+     */
+    suspend fun runSync(
+        trigger: SyncTrigger,
+        ownForeground: Boolean,
+    ): SyncOutcome? {
+        val engine = syncEngine() ?: return null
+        val owner = ownForeground && syncGuarded.compareAndSet(false, true)
+        if (owner && !SyncForegroundService.start(appContext)) AndroidSyncLog.warn("sync runs without foreground service")
+        try {
+            return withSyncWakeLock(appContext) { engine.sync(trigger) }
+        } finally {
+            if (owner) {
+                SyncForegroundService.stop(appContext)
+                syncGuarded.set(false)
+            }
+        }
     }
 
     /** Saves the credentials after a successful login and (re)builds the sync stack. */
