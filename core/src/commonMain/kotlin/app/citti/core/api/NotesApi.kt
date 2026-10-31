@@ -144,12 +144,28 @@ class NotesApi(
             }
         }
 
-    suspend fun deleteNote(id: Long): ApiResult<Deleted> =
-        call("DELETE /notes/{id}", { client.delete(notesUrl("/notes/$id")) }) { response ->
-            if (response.status.isOk() || response.status == HttpStatusCode.NotFound) {
-                ApiResult.Success(Deleted)
-            } else {
-                fail(response)
+    /** With [ifMatch], a Note that changed on the server is kept and the result is [DeletePreconditionFailed]. */
+    suspend fun deleteNote(
+        id: Long,
+        ifMatch: String? = null,
+    ): ApiResult<DeleteResult> =
+        call("DELETE /notes/{id}", {
+            client.delete(notesUrl("/notes/$id")) {
+                ifMatch?.let { header(HttpHeaders.IfMatch, it) }
+            }
+        }) { response ->
+            when {
+                response.status == HttpStatusCode.PreconditionFailed -> {
+                    ApiResult.Success(DeletePreconditionFailed)
+                }
+
+                response.status.isOk() || response.status == HttpStatusCode.NotFound -> {
+                    ApiResult.Success(Deleted)
+                }
+
+                else -> {
+                    fail(response)
+                }
             }
         }
 

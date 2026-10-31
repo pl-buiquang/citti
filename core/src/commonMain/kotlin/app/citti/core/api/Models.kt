@@ -86,8 +86,13 @@ sealed interface UpdateResult {
     data object PreconditionFailed : UpdateResult
 }
 
+sealed interface DeleteResult
+
 /** Delete succeeded, or the Note was already gone (404). */
-data object Deleted
+data object Deleted : DeleteResult
+
+/** 412: the server Note changed since the ETag we sent, so it was not deleted. */
+data object DeletePreconditionFailed : DeleteResult
 
 /** An unexpected outcome the sync engine maps to a state (offline, auth, server). */
 sealed interface ApiError {

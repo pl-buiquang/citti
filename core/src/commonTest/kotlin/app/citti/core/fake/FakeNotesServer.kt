@@ -310,9 +310,14 @@ class FakeNotesServer(
             }
 
             Endpoint.DELETE -> {
-                withNote(path) {
-                    noteMap.remove(it.id)
-                    json("[]")
+                withNote(path) { n ->
+                    val ifMatch = request.headers["If-Match"]?.removeSurrounding("\"")
+                    if (ifMatch != null && ifMatch != n.etag) {
+                        text(HttpStatusCode.PreconditionFailed, "etag mismatch")
+                    } else {
+                        noteMap.remove(n.id)
+                        json("[]")
+                    }
                 }
             }
 

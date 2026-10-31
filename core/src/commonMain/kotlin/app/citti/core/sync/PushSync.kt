@@ -2,6 +2,7 @@ package app.citti.core.sync
 
 import app.citti.core.api.ApiError
 import app.citti.core.api.ApiResult
+import app.citti.core.api.DeletePreconditionFailed
 import app.citti.core.api.NewNote
 import app.citti.core.api.NotesApi
 import app.citti.core.api.RemoteNote
@@ -30,6 +31,8 @@ sealed interface PushResult {
         val conflicts: List<Long> = emptyList(),
         val skippedReadOnly: Int = 0,
         val failures: List<PushFailure> = emptyList(),
+        /** Local deletes undone because the server Note changed since the last sync (server wins). */
+        val deleteUndone: Int = 0,
     ) : PushResult
 
     /** Auth, server or network failure: the run stopped and the queue is intact. */
@@ -40,7 +43,9 @@ sealed interface PushResult {
 
 /**
  * Pushes the queue of local changes (ADR 0003: on a 412 the server wins and the local text becomes a Conflict copy).
- * [now] returns epoch seconds.
+ * A delete never removes a server version this client has not seen: the server version wins and the Note comes back.
+ * With [verifyBeforeDelete] a `GET` compares ETags first, on top of `If-Match` (for a server that ignores `If-Match`
+ * on `DELETE`). [now] returns epoch seconds.
  */
 class PushSync(
     private val api: NotesApi,
@@ -48,12 +53,16 @@ class PushSync(
     private val log: SyncLog = SyncLog.None,
     private val now: () -> Long,
 ) {
+    /** See the class comment; on until a real-server check shows `If-Match` is honored on `DELETE`. */
+    var verifyBeforeDelete: Boolean = true
+
     private val queries = db.noteQueries
     private val database = db
 
     private var updated = 0
     private var created = 0
     private var deleted = 0
+    private var deleteUndone = 0
     private val conflicts = mutableListOf<Long>()
     private val skipped = mutableSetOf<Long>()
     private val failures = mutableListOf<PushFailure>()
@@ -63,6 +72,7 @@ class PushSync(
         updated = 0
         created = 0
         deleted = 0
+        deleteUndone = 0
         conflicts.clear()
         skipped.clear()
         failures.clear()
@@ -80,7 +90,7 @@ class PushSync(
         return done()
     }
 
-    private fun done() = PushResult.Done(updated, created, deleted, conflicts.toList(), skipped.size, failures.toList())
+    private fun done() = PushResult.Done(updated, created, deleted, conflicts.toList(), skipped.size, failures.toList(), deleteUndone)
 
     /** Returns a run-stopping error, or null. */
     private suspend fun pushOne(note: Note): ApiError? {
@@ -114,17 +124,54 @@ class PushSync(
             queries.deleteByLocalId(note.local_id)
             return null
         }
-        return when (val result = api.deleteNote(remoteId)) {
+        if (verifyBeforeDelete) {
+            when (val check = api.getNote(remoteId)) {
+                is ApiResult.Success -> {
+                    if (check.value.etag != note.etag) return undoDelete(note, check.value)
+                }
+
+                is ApiResult.Failure -> {
+                    // NotFound: already gone, the delete is done.
+                    return if (check.error == ApiError.NotFound) deleteLocal(note) else handle(note, check.error)
+                }
+            }
+        }
+        return when (val result = api.deleteNote(remoteId, ifMatch = note.etag?.let(::quote))) {
             is ApiResult.Success -> {
-                queries.deleteByLocalId(note.local_id)
-                deleted++
-                null
+                if (result.value is DeletePreconditionFailed) undoDeleteFromServer(note, remoteId) else deleteLocal(note)
             }
 
             is ApiResult.Failure -> {
                 handle(note, result.error)
             }
         }
+    }
+
+    private fun deleteLocal(note: Note): ApiError? {
+        queries.deleteByLocalId(note.local_id)
+        deleted++
+        return null
+    }
+
+    /** The delete answered 412: fetch the server version and keep it. */
+    private suspend fun undoDeleteFromServer(
+        note: Note,
+        remoteId: Long,
+    ): ApiError? =
+        when (val result = api.getNote(remoteId)) {
+            is ApiResult.Success -> undoDelete(note, result.value)
+            is ApiResult.Failure -> if (result.error == ApiError.NotFound) deleteLocal(note) else handle(note, result.error)
+        }
+
+    /** Server wins over a local delete: the Note comes back with the server text. */
+    private fun undoDelete(
+        note: Note,
+        server: RemoteNote,
+    ): ApiError? {
+        storeServerVersion(note, server)
+        deleteUndone++
+        log.warn("push delete undone: server Note changed local=${note.local_id}")
+        return null
     }
 
     private suspend fun pushUpdate(
@@ -175,16 +222,7 @@ class PushSync(
                         conflicts += queries.lastInsertedLocalId().executeAsOne()
                         log.warn("push conflict: server wins, local text kept as copy local=${conflicts.last()}")
                     }
-                    queries.replaceWithServer(
-                        title = server.title ?: note.title,
-                        category = server.category ?: note.category,
-                        content = server.content,
-                        favorite = server.favorite ?: note.favorite,
-                        etag = server.etag,
-                        modified = server.modified ?: now(),
-                        readonly = server.readonly ?: false,
-                        localId = note.local_id,
-                    )
+                    storeServerVersion(note, server)
                 }
                 null
             }
@@ -194,6 +232,20 @@ class PushSync(
                 if (result.error == ApiError.NotFound) recreate(note) else handle(note, result.error)
             }
         }
+
+    private fun storeServerVersion(
+        note: Note,
+        server: RemoteNote,
+    ) = queries.replaceWithServer(
+        title = server.title ?: note.title,
+        category = server.category ?: note.category,
+        content = server.content,
+        favorite = server.favorite ?: note.favorite,
+        etag = server.etag,
+        modified = server.modified ?: now(),
+        readonly = server.readonly ?: false,
+        localId = note.local_id,
+    )
 
     private fun freeConflictTitle(
         category: String,
