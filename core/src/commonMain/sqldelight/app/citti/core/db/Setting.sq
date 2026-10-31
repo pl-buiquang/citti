@@ -1,0 +1,28 @@
+CREATE TABLE setting (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE folder_exclusion (
+    prefix TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('UNSYNCED', 'HIDDEN')),
+    PRIMARY KEY (prefix, kind)
+);
+
+selectSetting:
+SELECT value FROM setting WHERE key = ?;
+
+upsertSetting:
+INSERT OR REPLACE INTO setting(key, value) VALUES (?, ?);
+
+deleteSetting:
+DELETE FROM setting WHERE key = ?;
+
+selectExclusionsByKind:
+SELECT prefix FROM folder_exclusion WHERE kind = ? ORDER BY prefix;
+
+insertExclusion:
+INSERT OR IGNORE INTO folder_exclusion(prefix, kind) VALUES (?, ?);
+
+deleteExclusion:
+DELETE FROM folder_exclusion WHERE prefix = ? AND kind = ?;

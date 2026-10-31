@@ -1,0 +1,88 @@
+CREATE TABLE note (
+    local_id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    remote_id INTEGER UNIQUE,
+    etag TEXT,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL,
+    content TEXT,
+    favorite INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    modified INTEGER NOT NULL,
+    readonly INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    hidden INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    sync_state TEXT NOT NULL DEFAULT 'SYNCED' CHECK (sync_state IN ('SYNCED', 'DIRTY', 'NEW', 'DELETED')),
+    conflict_of INTEGER
+);
+
+CREATE INDEX note_category ON note(category);
+CREATE INDEX note_sync_state ON note(sync_state);
+
+-- Insert or refresh a Note from server metadata. A Note with pending local changes
+-- (sync_state other than SYNCED) is left untouched, and a changed etag clears the
+-- content so that selectNeedingContent picks it up.
+upsertFromServer:
+INSERT INTO note(remote_id, etag, title, category, favorite, modified, readonly, hidden, sync_state)
+VALUES (:remoteId, :etag, :title, :category, :favorite, :modified, :readonly, :hidden, 'SYNCED')
+ON CONFLICT(remote_id) DO UPDATE SET
+    content = CASE WHEN note.etag IS excluded.etag THEN note.content ELSE NULL END,
+    etag = excluded.etag,
+    title = excluded.title,
+    category = excluded.category,
+    favorite = excluded.favorite,
+    modified = excluded.modified,
+    readonly = excluded.readonly,
+    hidden = excluded.hidden
+WHERE note.sync_state = 'SYNCED';
+
+selectByRemoteId:
+SELECT * FROM note WHERE remote_id = ?;
+
+selectByLocalId:
+SELECT * FROM note WHERE local_id = ?;
+
+selectAllRemoteIds:
+SELECT remote_id FROM note WHERE remote_id IS NOT NULL;
+
+updateContent:
+UPDATE note SET content = :content, etag = :etag WHERE local_id = :localId;
+
+selectNeedingContent:
+SELECT local_id, remote_id, category FROM note WHERE content IS NULL AND sync_state != 'DELETED' AND remote_id IS NOT NULL;
+
+selectDirty:
+SELECT * FROM note WHERE sync_state IN ('DIRTY', 'NEW', 'DELETED') ORDER BY local_id;
+
+markDirty:
+UPDATE note
+SET content = :content,
+    modified = :modified,
+    sync_state = CASE WHEN sync_state = 'NEW' THEN 'NEW' ELSE 'DIRTY' END
+WHERE local_id = :localId AND sync_state != 'DELETED';
+
+insertNew:
+INSERT INTO note(title, category, content, favorite, modified, sync_state, conflict_of)
+VALUES (:title, :category, :content, 0, :modified, 'NEW', :conflictOf);
+
+lastInsertedLocalId:
+SELECT last_insert_rowid();
+
+markSynced:
+UPDATE note SET remote_id = :remoteId, etag = :etag, modified = :modified, sync_state = 'SYNCED' WHERE local_id = :localId;
+
+markDeleted:
+UPDATE note SET sync_state = 'DELETED' WHERE local_id = ?;
+
+deleteByLocalId:
+DELETE FROM note WHERE local_id = ?;
+
+-- Match the Folder itself and its sub-folders (no LIKE: '_' is common in names), so "a/b" does not match "a/bc".
+deleteByCategoryPrefix:
+DELETE FROM note WHERE category = :prefix OR substr(category, 1, length(:prefix) + 1) = :prefix || '/';
+
+selectAllForList:
+SELECT * FROM note WHERE sync_state != 'DELETED' ORDER BY favorite DESC, modified DESC;
+
+countNotes:
+SELECT count(*) FROM note WHERE sync_state != 'DELETED';
+
+countNotesWithContent:
+SELECT count(*) FROM note WHERE content IS NOT NULL AND sync_state != 'DELETED';

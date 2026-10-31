@@ -44,6 +44,9 @@ sqldelight {
     databases {
         create("CittiDatabase") {
             packageName.set("app.citti.core.db")
+            schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
+            verifyMigrations.set(true)
+            dialect(libs.sqldelight.dialect)
         }
     }
 }

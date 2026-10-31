@@ -1,0 +1,18 @@
+CREATE TABLE sync_state (
+    query_key TEXT NOT NULL PRIMARY KEY,
+    etag TEXT,
+    last_modified_seen INTEGER NOT NULL DEFAULT 0,
+    chunk_cursor TEXT
+);
+
+select:
+SELECT * FROM sync_state WHERE query_key = ?;
+
+upsert:
+INSERT OR REPLACE INTO sync_state(query_key, etag, last_modified_seen, chunk_cursor) VALUES (?, ?, ?, ?);
+
+clear:
+DELETE FROM sync_state WHERE query_key = ?;
+
+clearAll:
+DELETE FROM sync_state;

@@ -1,0 +1,35 @@
+CREATE TABLE note (
+    local_id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    remote_id INTEGER UNIQUE,
+    etag TEXT,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL,
+    content TEXT,
+    favorite INTEGER NOT NULL DEFAULT 0,
+    modified INTEGER NOT NULL,
+    readonly INTEGER NOT NULL DEFAULT 0,
+    hidden INTEGER NOT NULL DEFAULT 0,
+    sync_state TEXT NOT NULL DEFAULT 'SYNCED' CHECK (sync_state IN ('SYNCED', 'DIRTY', 'NEW', 'DELETED')),
+    conflict_of INTEGER
+);
+
+CREATE INDEX note_category ON note(category);
+CREATE INDEX note_sync_state ON note(sync_state);
+
+CREATE TABLE sync_state (
+    query_key TEXT NOT NULL PRIMARY KEY,
+    etag TEXT,
+    last_modified_seen INTEGER NOT NULL DEFAULT 0,
+    chunk_cursor TEXT
+);
+
+CREATE TABLE setting (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE folder_exclusion (
+    prefix TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('UNSYNCED', 'HIDDEN')),
+    PRIMARY KEY (prefix, kind)
+);
