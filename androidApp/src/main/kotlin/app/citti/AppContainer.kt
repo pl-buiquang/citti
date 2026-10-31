@@ -15,6 +15,8 @@ import app.citti.core.auth.LoginFlow
 import app.citti.core.auth.prepareForSignIn
 import app.citti.core.auth.signOut
 import app.citti.core.daily.DailyGuard
+import app.citti.core.daily.ImportReport
+import app.citti.core.daily.ObsidianDailyImport
 import app.citti.core.dav.DavClient
 import app.citti.core.dav.DavSetup
 import app.citti.core.dav.ImageResolver
@@ -66,8 +68,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
@@ -185,6 +190,7 @@ class AppContainer(
         val creator: NoteCreator,
         val uploader: ImageUploader,
         val actions: NoteActions,
+        val dailyImport: ObsidianDailyImport,
     )
 
     private val stackLock = Mutex()
@@ -197,6 +203,11 @@ class AppContainer(
     /** The status of the current [SyncEngine]; null while signed out. */
     @OptIn(ExperimentalCoroutinesApi::class)
     val syncStatus: Flow<SyncStatus?> = stack.flatMapLatest { s -> s?.engine?.state ?: emptyFlow() }
+
+    private val _dailyImportReports = MutableSharedFlow<ImportReport>(extraBufferCapacity = 1)
+
+    /** The report of the automatic Import from Obsidian, once per sign-in; no replay. */
+    val dailyImportReports: SharedFlow<ImportReport> = _dailyImportReports.asSharedFlow()
 
     init {
         appScope.launch {
@@ -252,9 +263,22 @@ class AppContainer(
         val owner = ownForeground && _foregroundSync.compareAndSet(false, true)
         if (owner && !SyncForegroundService.start(appContext)) AndroidSyncLog.warn("sync runs without foreground service")
         try {
-            return withSyncWakeLock(appContext) { engine.sync(trigger) }
+            return withSyncWakeLock(appContext) { engine.sync(trigger) }.also(::importDailySettingsOnce)
         } finally {
             if (owner) _foregroundSync.value = false
+        }
+    }
+
+    /** After a successful Sync, the automatic Import from Obsidian when `daily.import-done` is not set. */
+    private fun importDailySettingsOnce(outcome: SyncOutcome) {
+        if (outcome !is SyncOutcome.Synced && outcome != SyncOutcome.NothingChanged) return
+        val import = stack.value?.dailyImport ?: return
+        appScope.launch(Dispatchers.IO) {
+            if (dailySettings.importDone()) return@launch
+            import.runOnce()?.let {
+                AndroidSyncLog.info("daily import read=${it.read.keys} refused=${it.refused.map { r -> r.key }} notFound=${it.notFound}")
+                _dailyImportReports.emit(it)
+            }
         }
     }
 
@@ -390,7 +414,8 @@ class AppContainer(
             val afterEdit = AfterEditPush(appScope, engine, config.afterEditPushDelay.inWholeMilliseconds)
             val creator = NoteCreator(database, engine, appScope, exclusions, afterEdit::schedule, now)
             val actions = NoteActions(database, creator, exclusions, afterEdit::schedule, now)
-            SyncStack(client, engine, afterEdit, dav, images, creator, uploader, actions).also { stack.value = it }
+            val dailyImport = ObsidianDailyImport(dav, dailySettings)
+            SyncStack(client, engine, afterEdit, dav, images, creator, uploader, actions, dailyImport).also { stack.value = it }
         }
 
     /** No sync is running and no push after an edit is pending (signed out counts as idle). For the E2E idling resource. */
