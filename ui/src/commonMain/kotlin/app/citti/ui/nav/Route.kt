@@ -27,7 +27,8 @@ sealed interface Route {
      * A Note. [preview] is the Edit/Preview toggle of this entry (`replaceTop`, so it survives process death without
      * becoming a back stack entry); [searchQuery] is the Search query that opened it (used by in-note search).
      * [focus] opens it in Edit mode with the editor focused and the keyboard up (a New note); the controller clears
-     * it once applied (`replaceTop`), so it is not applied again after rotation or process death.
+     * it once applied (`replaceTop`), so it is not applied again after rotation or process death. [notice] is a banner
+     * shown on the Note until dismissed (a new Daily note whose Template was not found); dismissing clears it.
      */
     @Serializable
     data class Note(
@@ -35,6 +36,7 @@ sealed interface Route {
         val preview: Boolean = false,
         val searchQuery: String? = null,
         val focus: Boolean = false,
+        val notice: NoteNotice? = null,
     ) : Route
 
     /** The full-screen Image viewer: [link] is the Image link as written in the Note [noteLocalId]. */
@@ -59,3 +61,13 @@ val Route.entryId: Route
             is Route.Note -> Route.Note(localId)
             else -> this
         }
+
+/** A banner a Note route carries until it is dismissed. */
+@Serializable
+sealed interface NoteNotice {
+    /** The new Daily note was created empty: its Template [path] was found nowhere. */
+    @Serializable
+    data class TemplateMissing(
+        val path: String,
+    ) : NoteNotice
+}

@@ -113,4 +113,20 @@ class NavigatorTest {
         assertEquals(nav.stack.value, Navigator.decode(nav.encode()))
         assertEquals(Route.Note(3).entryId, Route.Note(3, focus = true).entryId)
     }
+
+    @Test
+    fun anM5StackWithoutNoticeDecodes() {
+        val m5 =
+            "[{\"type\":\"app.citti.ui.nav.Route.Tree\",\"folder\":\"work\"}," +
+                "{\"type\":\"app.citti.ui.nav.Route.Note\",\"localId\":3,\"preview\":true,\"focus\":true}]"
+        assertEquals(listOf(Route.Tree("work"), Route.Note(3, preview = true, focus = true)), Navigator.decode(m5))
+    }
+
+    @Test
+    fun aNoteNoticeRoundTripsAndIsPartOfTheSameEntry() {
+        val note = Route.Note(3, focus = true, notice = NoteNotice.TemplateMissing("templates/daily.md"))
+        val nav = Navigator(listOf(Route.List(), note))
+        assertEquals(nav.stack.value, Navigator.decode(nav.encode()))
+        assertEquals(Route.Note(3).entryId, note.entryId)
+    }
 }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -48,6 +49,7 @@ import app.citti.ui.components.ModeSwitch
 import app.citti.ui.components.NoteRow
 import app.citti.ui.components.SearchBar
 import app.citti.ui.components.SearchLeading
+import app.citti.ui.components.TodayButton
 import app.citti.ui.components.colored
 import app.citti.ui.create.NewNoteButton
 import app.citti.ui.resources.Res
@@ -102,6 +104,8 @@ class BrowseActions(
     val onSignInAgain: () -> Unit,
     /** The New note button; null hides it. */
     val onNewNote: (() -> Unit)? = null,
+    /** The Today button, left of New note; null hides it. */
+    val onToday: (() -> Unit)? = null,
 )
 
 /**
@@ -119,6 +123,8 @@ fun BrowseScreen(
     actions: BrowseActions,
     /** The New note check is running: the button shows a progress ring. */
     newNoteBusy: Boolean = false,
+    /** Today's note is being opened: the Today button shows a progress ring. */
+    todayBusy: Boolean = false,
 ) {
     val now by produceState(nowSeconds()) {
         while (true) {
@@ -146,15 +152,20 @@ fun BrowseScreen(
             favoritesOnly,
             bottomBar = onNewNote != null && !floating,
             newNoteBusy,
+            todayBusy,
             fabRoom =
                 onNewNote != null && floating,
         )
         if (onNewNote != null && floating) {
-            NewNoteButton(
-                onNewNote,
+            // The Today disc sits on the New note disc's baseline, `space-3` to its left.
+            Row(
                 Modifier.align(Alignment.BottomEnd).padding(end = NotesSpacing.space5, bottom = NotesSpacing.space8),
-                busy = newNoteBusy,
-            )
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(NotesSpacing.space3),
+            ) {
+                actions.onToday?.let { TodayButton(it, busy = todayBusy) }
+                NewNoteButton(onNewNote, busy = newNoteBusy)
+            }
         }
     }
 }
@@ -170,6 +181,7 @@ private fun BrowseColumn(
     favoritesOnly: Boolean,
     bottomBar: Boolean,
     newNoteBusy: Boolean,
+    todayBusy: Boolean,
     // The floating button covers the end of the last rows: let the list scroll them clear of it.
     fabRoom: Boolean,
 ) {
@@ -186,7 +198,6 @@ private fun BrowseColumn(
                 modifier = Modifier.padding(vertical = NotesSpacing.space2),
             )
         }
-        // The right side stays free for the Calendar button (M6).
         Row(Modifier.fillMaxWidth().padding(horizontal = CittiTheme.shape.gutter, vertical = NotesSpacing.space1)) {
             ModeSwitch(tree = view is BrowseView.Tree, onSelectList = actions.onShowList, onSelectTree = actions.onShowTree)
         }
@@ -207,13 +218,18 @@ private fun BrowseColumn(
             }
         }
         val onNewNote = actions.onNewNote
-        if (bottomBar && onNewNote != null) BottomBar { NewNoteButton(onNewNote, busy = newNoteBusy) }
+        if (bottomBar && onNewNote != null) {
+            BottomBar {
+                actions.onToday?.let { TodayButton(it, busy = todayBusy) }
+                NewNoteButton(onNewNote, busy = newNoteBusy)
+            }
+        }
     }
 }
 
-/** The bottom bar of Paper and Index: a `line` hairline on top, the New note button at the end. */
+/** The bottom bar of Paper and Index: a `line` hairline on top, the Today and New note buttons at the end. */
 @Composable
-private fun BottomBar(content: @Composable () -> Unit) {
+private fun BottomBar(content: @Composable RowScope.() -> Unit) {
     val line = CittiTheme.colors.line
     Row(
         Modifier
@@ -222,7 +238,7 @@ private fun BottomBar(content: @Composable () -> Unit) {
             .drawBehind { drawLine(line, Offset.Zero, Offset(size.width, 0f), strokeWidth = Stroke.HairlineWidth) }
             .padding(horizontal = CittiTheme.shape.gutter, vertical = NotesSpacing.space1),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.End,
+        horizontalArrangement = Arrangement.spacedBy(NotesSpacing.space3, Alignment.End),
     ) {
         content()
     }

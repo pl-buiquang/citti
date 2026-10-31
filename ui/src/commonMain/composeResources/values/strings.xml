@@ -249,6 +249,7 @@
     <string name="create_past_title">Create daily note for %1$s?</string>
     <string name="template_missing">Template “%1$s” not found</string>
     <string name="open_settings">Settings</string>
+    <string name="action_dismiss">Dismiss</string>
     <string name="guard_banner">Daily notes need the Journal folder “%1$s”, which is an Unsynced folder. Change one of them.</string>
     <string name="guard_snackbar">The Journal folder is an Unsynced folder</string>
     <string name="exclusion_journal_refused">The Journal folder “%1$s” is inside it. Change the Journal folder first.</string>

@@ -48,6 +48,9 @@ import app.citti.ui.create.NewNoteController
 import app.citti.ui.create.NewNoteHost
 import app.citti.ui.create.actions
 import app.citti.ui.create.newNoteFolder
+import app.citti.ui.daily.CoreDailyGateway
+import app.citti.ui.daily.TodayAction
+import app.citti.ui.daily.droppedDaily
 import app.citti.ui.image.ImageEnv
 import app.citti.ui.image.rememberImagePicker
 import app.citti.ui.login.LoginController
@@ -108,6 +111,21 @@ class MainActivity : ComponentActivity() {
     private val noteCreation by lazy { CoreNoteCreation(container::noteCreator, container.exclusions, Dispatchers.IO) }
     private val rowDates by lazy { JavaTimeRowDateFormatter(zone = container.config.timeZone) }
     private val noteDateTime by lazy { JavaTimeDateTimeFormatter(zone = container.config.timeZone) }
+    private val calendarLabels by lazy { JavaTimeCalendarLabels() }
+
+    /** Today's date and the Daily notes of the signed-in account, for the Today button and the Dropped wording. */
+    private val dailyGateway by lazy {
+        CoreDailyGateway(
+            notes = container::dailyNotes,
+            today = {
+                container.config.clock
+                    .now()
+                    .toLocalDateTime(TimeZone.of(container.config.timeZone().id))
+                    .date
+            },
+            io = Dispatchers.IO,
+        )
+    }
 
     // POST_NOTIFICATIONS: asked once, never blocks anything; the sync works without it.
     private val notificationPermission =
@@ -168,6 +186,8 @@ class MainActivity : ComponentActivity() {
             known.addAll(keys)
         }
         BackHandler(enabled = stack.size > 1) { navigator.pop() }
+        // With the back stack, not a screen: the Today button now, the Calendar and a citti://daily link later.
+        val today = remember(navigator) { TodayAction(container.appScope, dailyGateway, navigator::push, snackbars::show) }
         // The automatic Import from Obsidian, after the first Sync: a snackbar only when it read something.
         LaunchedEffect(Unit) {
             container.dailyImportReports.collect { if (it.readSomething) snackbars.show(Snack.DailyImported) }
@@ -177,7 +197,7 @@ class MainActivity : ComponentActivity() {
         Box(Modifier.fillMaxSize()) {
             saved.SaveableStateProvider(entryKey(index, route)) {
                 when (route) {
-                    is Route.List, is Route.Tree -> BrowseRoute(navigator, index, route)
+                    is Route.List, is Route.Tree -> BrowseRoute(navigator, index, route, today)
                     Route.Settings -> SettingsRoute(navigator, index)
                     is Route.Search -> SearchRoute(navigator, index, route)
                     is Route.Note -> NoteRoute(navigator, index, route, root)
@@ -188,7 +208,7 @@ class MainActivity : ComponentActivity() {
                 snackbars,
                 onAction = { snack ->
                     when (snack) {
-                        Snack.LinkUnsynced -> navigator.push(Route.Settings)
+                        Snack.LinkUnsynced, Snack.JournalUnsynced -> navigator.push(Route.Settings)
                         is Snack.LinkMissing -> createFromLink(navigator, snack)
                         else -> Unit
                     }
@@ -253,12 +273,14 @@ class MainActivity : ComponentActivity() {
         navigator: Navigator,
         index: Int,
         route: Route,
+        today: TodayAction,
     ) {
         val controller = remember { browseController ?: newBrowseController().also { browseController = it } }
         val state by controller.state.collectAsState()
         // One New note flow per List or Tree entry, so its dialog survives recomposition.
         val newNote = remember(index, route) { newNoteFlow(navigator, index, route) }
         val newNoteState by newNote.state.collectAsState()
+        val todayBusy by today.busy.collectAsState()
         LaunchedEffect(controller) {
             controller.onShown()
             askNotificationPermissionOnce()
@@ -341,8 +363,10 @@ class MainActivity : ComponentActivity() {
                         onSyncNow = controller::syncNow,
                         onSignInAgain = { signInAgain() },
                         onNewNote = { newNote.open(newNoteFolder(route)) },
+                        onToday = today::openToday,
                     ),
                 newNoteBusy = newNoteState?.checking == true,
+                todayBusy = todayBusy != null,
             )
         }
         NewNoteHost(newNoteState, pickerFolders, remember(newNote) { newNote.actions() })
@@ -429,6 +453,8 @@ class MainActivity : ComponentActivity() {
                     onMenuItem = controller::onMenu,
                     onDismissMenu = controller::dismissMenu,
                     dialogs = remember(controller) { controller.dialogActions() },
+                    onOpenSettings = { navigator.push(Route.Settings) },
+                    onDismissNotice = controller::dismissNotice,
                 ),
             images = images,
             folders = pickerFolders,
@@ -527,6 +553,7 @@ class MainActivity : ComponentActivity() {
         editorContext = Dispatchers.Main.immediate,
         menuGateway = container.noteMenu(route.localId),
         creation = noteCreation,
+        droppedDaily = { folder, title -> dailyGateway.droppedDaily(folder, title, calendarLabels) },
     )
 
     private fun newScope() = CoroutineScope(SupervisorJob(container.appScope.coroutineContext[Job]) + Dispatchers.Default)

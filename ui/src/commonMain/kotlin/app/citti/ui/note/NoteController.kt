@@ -15,6 +15,7 @@ import app.citti.core.note.NoteBadge
 import app.citti.core.note.NoteEditor.SaveResult
 import app.citti.core.note.RenameResult
 import app.citti.core.sync.SyncStatus
+import app.citti.ui.components.DroppedDaily
 import app.citti.ui.components.FolderPickerState
 import app.citti.ui.components.MenuItem
 import app.citti.ui.components.Snack
@@ -26,6 +27,7 @@ import app.citti.ui.image.PickedImage
 import app.citti.ui.markdown.EditorState
 import app.citti.ui.markdown.Marker
 import app.citti.ui.nav.Navigator
+import app.citti.ui.nav.NoteNotice
 import app.citti.ui.nav.Route
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -93,6 +95,8 @@ data class NoteUiState(
     val menu: List<MenuItem> = emptyList(),
     /** The dialog or sheet of a ⋮ menu item, over the screen. */
     val dialog: NoteDialog? = null,
+    /** The route's notice: a new Daily note whose Template was not found (a banner until dismissed). */
+    val notice: NoteNotice? = null,
 )
 
 /**
@@ -124,6 +128,8 @@ class NoteController(
     private val menuGateway: NoteMenuGateway? = null,
     /** "Create note" from an unresolved link; null: no New note flow on this screen. */
     creation: NoteCreation? = null,
+    /** The Daily wording of the Dropped snackbar for a dropped title and folder; null: the generic one. */
+    private val droppedDaily: suspend (folder: String, title: String) -> DroppedDaily? = { _, _ -> null },
 ) {
     private val localId = route.localId
     private val route = MutableStateFlow(route)
@@ -190,6 +196,7 @@ class NoteController(
                 menuOpen = m.menuOpen,
                 menu = menu(row, m.ready),
                 dialog = m.dialog,
+                notice = r.notice,
             )
         }.stateIn(scope, SharingStarted.Eagerly, NoteUiState())
 
@@ -296,17 +303,35 @@ class NoteController(
         model.update { it.copy(gone = true) }
     }
 
-    /** Dropped while open: the screen becomes the server's Note. False when this Note is no longer on top. */
-    private fun switchToServerNote(
+    /**
+     * Dropped while open: the screen becomes the server's Note, with a snackbar (the Daily wording for a Daily note).
+     * False when this Note is no longer on top.
+     */
+    private suspend fun switchToServerNote(
         serverLocalId: Long,
         row: EditorDoc?,
         snack: Boolean,
     ): Boolean {
+        if (!onTop()) return false
+        // Before the switch: the new route is another entry, and this controller's scope ends with it.
+        val daily = if (snack && row != null) droppedDaily(row.folder, row.title) else null
         val top = navigator.top
         if (top !is Route.Note || top.localId != localId) return false
         navigator.replaceTop(Route.Note(serverLocalId, preview = top.preview))
-        if (snack && row != null) notify(Snack.Dropped(row.title, row.folder))
+        if (snack && row != null) notify(Snack.Dropped(row.title, row.folder, daily))
         return true
+    }
+
+    private fun onTop(): Boolean {
+        val top = navigator.top
+        return top is Route.Note && top.localId == localId
+    }
+
+    /** Dismisses the route's notice (the Template missing banner): it is cleared from the route, so it stays gone. */
+    fun dismissNotice() {
+        route.update { it.copy(notice = null) }
+        val top = navigator.top
+        if (top is Route.Note && top.localId == localId && top.notice != null) navigator.replaceTop(top.copy(notice = null))
     }
 
     // ---- saving ----

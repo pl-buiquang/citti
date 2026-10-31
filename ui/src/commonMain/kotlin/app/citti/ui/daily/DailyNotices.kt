@@ -12,6 +12,7 @@ import app.citti.ui.components.CittiButton
 import app.citti.ui.components.CittiDialog
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.action_cancel
+import app.citti.ui.resources.action_dismiss
 import app.citti.ui.resources.create
 import app.citti.ui.resources.create_past_title
 import app.citti.ui.resources.guard_banner
@@ -56,12 +57,16 @@ fun GuardBanner(
     )
 }
 
-/** On a new Daily note whose Template was not found: "Template “templates/daily.md” not found" with "Settings". */
+/**
+ * On a new Daily note whose Template was not found: "Template “templates/daily.md” not found" with "Settings", and
+ * "Dismiss" before it when [onDismiss] is given.
+ */
 @Composable
 fun TemplateMissingBanner(
     path: String,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    onDismiss: (() -> Unit)? = null,
 ) {
     Banner(
         stringResource(Res.string.template_missing, path),
@@ -69,5 +74,7 @@ fun TemplateMissingBanner(
         modifier,
         actionLabel = stringResource(Res.string.open_settings),
         onAction = onSettings,
+        secondaryLabel = onDismiss?.let { stringResource(Res.string.action_dismiss) },
+        onSecondary = onDismiss,
     )
 }

@@ -19,6 +19,7 @@ import app.citti.core.note.NoteEditor.SaveResult
 import app.citti.core.note.NoteInfo
 import app.citti.core.note.RenameResult
 import app.citti.core.sync.SyncStatus
+import app.citti.ui.components.DroppedDaily
 import app.citti.ui.components.MenuItem
 import app.citti.ui.components.Snack
 import app.citti.ui.create.NewNoteState
@@ -29,6 +30,7 @@ import app.citti.ui.image.PickedImage
 import app.citti.ui.markdown.EditorHost
 import app.citti.ui.markdown.EditorState
 import app.citti.ui.nav.Navigator
+import app.citti.ui.nav.NoteNotice
 import app.citti.ui.nav.Route
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -229,6 +231,7 @@ class NoteControllerTest {
         imageUpload: ImageUpload? = null,
         menu: ((FakeGateway) -> NoteMenuGateway)? = null,
         creation: NoteCreation? = null,
+        droppedDaily: suspend (String, String) -> DroppedDaily? = { _, _ -> null },
         setup: FakeGateway.() -> Unit = {},
     ): Fixture {
         val gateway =
@@ -253,6 +256,7 @@ class NoteControllerTest {
                 imageUpload = imageUpload,
                 menuGateway = menu?.invoke(gateway),
                 creation = creation,
+                droppedDaily = droppedDaily,
             )
         runCurrent()
         return Fixture(this, gateway, navigator, snacks, controller)
@@ -473,6 +477,46 @@ class NoteControllerTest {
             assertTrue(f.controller.state.value.gone)
             assertTrue(f.snacks.isEmpty())
             assertTrue(f.gateway.saves.isEmpty())
+        }
+
+    @Test
+    fun aDroppedDailyNoteUsesTheDailyWording() =
+        runTest {
+            val f =
+                open(
+                    doc("", pending = true),
+                    droppedDaily = { folder, title -> if (folder == "work" && title == "Title") DroppedDaily.Today else null },
+                )
+            f.gateway.drops.tryEmit(42)
+            runCurrent()
+            f.gateway.row.value = null
+            runCurrent()
+            assertEquals(Route.Note(42), f.navigator.top)
+            assertEquals(listOf<Snack>(Snack.Dropped("Title", "work", DroppedDaily.Today)), f.snacks)
+        }
+
+    @Test
+    fun theTemplateMissingNoticeShowsUntilDismissed() =
+        runTest {
+            val notice = NoteNotice.TemplateMissing("templates/daily.md")
+            val f = open(route = Route.Note(1, focus = true, notice = notice))
+            assertEquals(notice, f.controller.state.value.notice)
+            // Applying the focus keeps the notice in the route.
+            assertEquals(Route.Note(1, notice = notice), f.navigator.top)
+
+            f.controller.dismissNotice()
+            runCurrent()
+            assertNull(f.controller.state.value.notice)
+            assertEquals(listOf(Route.List(), Route.Note(1)), f.navigator.stack.value)
+        }
+
+    @Test
+    fun aNoteWithoutANoticeShowsNone() =
+        runTest {
+            val f = open()
+            assertNull(f.controller.state.value.notice)
+            f.controller.dismissNotice()
+            assertEquals(listOf(Route.List(), Route.Note(1)), f.navigator.stack.value)
         }
 
     @Test

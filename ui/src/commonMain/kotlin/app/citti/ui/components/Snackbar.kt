@@ -25,11 +25,15 @@ import app.citti.ui.resources.Res
 import app.citti.ui.resources.action_open_exclusions
 import app.citti.ui.resources.conflict_snackbar
 import app.citti.ui.resources.deleted_snackbar
+import app.citti.ui.resources.dropped_daily
 import app.citti.ui.resources.dropped_snackbar
+import app.citti.ui.resources.dropped_today
+import app.citti.ui.resources.guard_snackbar
 import app.citti.ui.resources.import_done
 import app.citti.ui.resources.link_create
 import app.citti.ui.resources.link_missing
 import app.citti.ui.resources.link_unsynced
+import app.citti.ui.resources.open_settings
 import app.citti.ui.resources.toast_deleted
 import app.citti.ui.resources.toast_favorite_added
 import app.citti.ui.resources.toast_favorite_removed
@@ -55,11 +59,18 @@ sealed interface Snack {
         val copyTitle: String,
     ) : Snack
 
-    /** The open New note was dropped at Sync: the server already had [title] in [folder], and the screen shows it. */
+    /**
+     * The open New note was dropped at Sync: the server already had [title] in [folder], and the screen shows it.
+     * [daily] is set when it was a Daily note, for the Daily wording.
+     */
     data class Dropped(
         val title: String,
         val folder: String,
+        val daily: DroppedDaily? = null,
     ) : Snack
+
+    /** Today or a Calendar day was tapped while the Journal folder is an Unsynced folder: nothing was created. */
+    data object JournalUnsynced : Snack
 
     /** A tap on a link to no Note; its Create note action opens the New note dialog on [folder] and [title]. */
     data class LinkMissing(
@@ -88,6 +99,15 @@ sealed interface Snack {
     data class UploadFailed(
         val reason: String,
     ) : Snack
+}
+
+/** Which Daily note was dropped at Sync: today's, or another day's ([label], "12 Oct" in the phone locale). */
+sealed interface DroppedDaily {
+    data object Today : DroppedDaily
+
+    data class Day(
+        val label: String,
+    ) : DroppedDaily
 }
 
 /** The one snackbar of the app; a new one replaces the shown one. */
@@ -121,7 +141,8 @@ fun SnackbarHost(
         when (shown) {
             is Snack.ConflictCopy -> stringResource(Res.string.conflict_snackbar, shown.copyTitle)
             is Snack.Deleted -> stringResource(Res.string.deleted_snackbar, shown.copyTitle)
-            is Snack.Dropped -> stringResource(Res.string.dropped_snackbar)
+            is Snack.Dropped -> droppedMessage(shown.daily)
+            Snack.JournalUnsynced -> stringResource(Res.string.guard_snackbar)
             is Snack.LinkMissing -> stringResource(Res.string.link_missing, shown.name)
             Snack.LinkUnsynced -> stringResource(Res.string.link_unsynced)
             Snack.DailyImported -> stringResource(Res.string.import_done)
@@ -135,6 +156,7 @@ fun SnackbarHost(
         when (shown) {
             Snack.LinkUnsynced -> stringResource(Res.string.action_open_exclusions)
             is Snack.LinkMissing -> stringResource(Res.string.link_create)
+            Snack.JournalUnsynced -> stringResource(Res.string.open_settings)
             else -> null
         }
     val colors = CittiTheme.colors
@@ -169,5 +191,13 @@ fun SnackbarHost(
         }
     }
 }
+
+@Composable
+private fun droppedMessage(daily: DroppedDaily?): String =
+    when (daily) {
+        null -> stringResource(Res.string.dropped_snackbar)
+        DroppedDaily.Today -> stringResource(Res.string.dropped_today)
+        is DroppedDaily.Day -> stringResource(Res.string.dropped_daily, daily.label)
+    }
 
 private const val SNACK_MILLIS = 5_000L

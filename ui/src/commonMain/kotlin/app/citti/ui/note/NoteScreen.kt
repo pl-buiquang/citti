@@ -42,12 +42,14 @@ import app.citti.ui.components.PickerFolders
 import app.citti.ui.components.StateLabel
 import app.citti.ui.components.UploadChip
 import app.citti.ui.components.colored
+import app.citti.ui.daily.TemplateMissingBanner
 import app.citti.ui.image.ImageEnv
 import app.citti.ui.image.PickSource
 import app.citti.ui.markdown.EditorState
 import app.citti.ui.markdown.FormatToolbar
 import app.citti.ui.markdown.MarkdownEditor
 import app.citti.ui.markdown.MarkdownPreview
+import app.citti.ui.nav.NoteNotice
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.action_back
 import app.citti.ui.resources.action_open
@@ -94,14 +96,17 @@ class NoteActions(
     val onDismissMenu: () -> Unit = {},
     /** The ⋮ menu's dialogs; null: none is shown. */
     val dialogs: NoteDialogActions? = null,
+    /** The Template missing banner's "Settings" and "Dismiss". */
+    val onOpenSettings: () -> Unit = {},
+    val onDismissNotice: () -> Unit = {},
 )
 
 /**
  * The Note screen ([design-brief] §5, §6): top bar (←, title and save indicator, ↶ ↷ while the editor has focus,
- * the Edit/Preview toggle, ⋮), at most one banner (Conflict, then auth failure), the body (the editor in Edit mode, the
- * Preview in Preview mode, "Downloading…" while the text is not on the device) and the format toolbar above the
- * keyboard while the editor has focus. [previewListState] is owned by the caller so the reading position survives
- * the toggle. [images] loads the Images of the Preview (null: a box with the file name).
+ * the Edit/Preview toggle, ⋮), at most one banner (Conflict, then auth failure, then Template missing), the body (the
+ * editor in Edit mode, the Preview in Preview mode, "Downloading…" while the text is not on the device) and the format
+ * toolbar above the keyboard while the editor has focus. [previewListState] is owned by the caller so the reading
+ * position survives the toggle. [images] loads the Images of the Preview (null: a box with the file name).
  */
 @Composable
 fun NoteScreen(
@@ -276,13 +281,14 @@ private fun NoteTopBar(
     }
 }
 
-/** At most one: the Conflict banner, else the auth failure banner. */
+/** At most one: the Conflict banner, else the auth failure banner, else the route's notice (Template missing). */
 @Composable
 private fun NoteBanner(
     state: NoteUiState,
     actions: NoteActions,
 ) {
     val conflict = state.conflict
+    val notice = state.notice
     when {
         conflict != null -> {
             val message =
@@ -297,6 +303,10 @@ private fun NoteBanner(
                 actionLabel = stringResource(Res.string.banner_sign_in_again),
                 onAction = actions.onSignInAgain,
             )
+        }
+
+        notice is NoteNotice.TemplateMissing -> {
+            TemplateMissingBanner(notice.path, onSettings = actions.onOpenSettings, onDismiss = actions.onDismissNotice)
         }
     }
 }
