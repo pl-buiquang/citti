@@ -2,6 +2,7 @@ package app.citti.core.fake
 
 import io.ktor.client.HttpClient
 import io.ktor.client.request.delete
+import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -12,7 +13,14 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.parameters
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.io.IOException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -406,5 +414,136 @@ class FakeNotesServerTest {
             val all = client(server).get("$api/notes?exclude=content&chunkSize=2000").array()
             assertEquals(2000, all.size)
             assertEquals(1, server.notes.count { it.id == 1L && it.favorite })
+        }
+
+    private suspend fun HttpClient.poll(endpoint: String) = submitForm(endpoint, parameters { append("token", "fake-login-token") })
+
+    @Test
+    fun loginFlowPollsUntilApprovedThenAcceptsTheAppPassword() =
+        runTest {
+            val server = FakeNotesServer(basePath = "/cloud")
+            val http = client(server)
+            val start = http.post("$E2E_SERVER/cloud/index.php/login/v2").obj()
+            val poll = start.getValue("poll").jsonObject
+            val endpoint = poll.getValue("endpoint").jsonPrimitive.content
+            assertEquals("$E2E_SERVER/cloud/index.php/login/v2/poll", endpoint)
+            assertEquals("fake-login-token", poll.getValue("token").jsonPrimitive.content)
+            assertTrue(
+                start
+                    .getValue("login")
+                    .jsonPrimitive.content
+                    .startsWith("$E2E_SERVER/cloud/"),
+            )
+
+            assertEquals(HttpStatusCode.NotFound, http.poll(endpoint).status)
+            server.approveLogin("alice", "app-pw", pollsBeforeSuccess = 2)
+            assertEquals(HttpStatusCode.NotFound, http.poll(endpoint).status)
+            assertEquals(HttpStatusCode.NotFound, http.poll(endpoint).status)
+            val approved = http.poll(endpoint)
+            assertEquals(HttpStatusCode.OK, approved.status)
+            val body = approved.obj()
+            assertEquals("$E2E_SERVER/cloud", body.getValue("server").jsonPrimitive.content)
+            assertEquals("alice", body.getValue("loginName").jsonPrimitive.content)
+            assertEquals("app-pw", body.getValue("appPassword").jsonPrimitive.content)
+            // The token is single use.
+            assertEquals(HttpStatusCode.NotFound, http.poll(endpoint).status)
+
+            assertEquals(1, server.count(Endpoint.LOGIN_START))
+            assertEquals(5, server.count(Endpoint.LOGIN_POLL))
+            assertEquals("alice" to "app-pw", server.credentials)
+            assertEquals(HttpStatusCode.Unauthorized, http.get("$E2E_SERVER/cloud$api/notes").status)
+        }
+
+    @Test
+    fun deniedLoginAnswers403AndAWrongTokenIs404() =
+        runTest {
+            val server = FakeNotesServer()
+            val http = client(server)
+            http.post("$E2E_SERVER/index.php/login/v2")
+            val endpoint = "$E2E_SERVER/index.php/login/v2/poll"
+            assertEquals(
+                HttpStatusCode.NotFound,
+                http.submitForm(endpoint, parameters { append("token", "other") }).status,
+            )
+            server.denyLogin()
+            assertEquals(HttpStatusCode.Forbidden, http.poll(endpoint).status)
+        }
+
+    @Test
+    fun offlineThrowsForEveryEndpointAndRecordsANullStatus() =
+        runTest {
+            val server = FakeNotesServer().apply { addNote("A") }
+            val http = client(server)
+            server.offline = true
+            assertFailsWith<IOException> { http.get("$api/notes") }
+            assertFailsWith<IOException> { http.post("/index.php/login/v2") }
+            assertFailsWith<IOException> { http.get("/remote.php/dav/files/alice/Notes/a.png") }
+            assertEquals(listOf(Endpoint.LIST, Endpoint.LOGIN_START, Endpoint.DAV_GET), server.requests.map { it.endpoint })
+            assertTrue(server.requests.all { it.status == null })
+
+            server.offline = false
+            assertEquals(HttpStatusCode.OK, http.get("$api/notes").status)
+        }
+
+    @Test
+    fun requestsKeepTheirBody() =
+        runTest {
+            val server = FakeNotesServer()
+            val id = server.addNote("A", "old")
+            client(server).put("$api/notes/$id") { setBody("""{"content":"new"}""") }
+            assertEquals("""{"content":"new"}""", server.requests.single().body)
+        }
+
+    @Test
+    fun awaitRequestReturnsAMatchingRequestOnceItArrives() =
+        runTest {
+            val server = FakeNotesServer()
+            val id = server.addNote("A", "old")
+            val http = client(server)
+            http.get("$api/notes")
+            assertEquals(Endpoint.LIST, server.awaitRequest(Endpoint.LIST).endpoint)
+
+            // MockEngine answers on a real thread, so the waits run on real time.
+            withContext(Dispatchers.Default) {
+                val pending = async { server.awaitRequest(Endpoint.UPDATE) { "new" in it.body } }
+                launch { http.put("$api/notes/$id") { setBody("""{"content":"new"}""") } }
+                assertEquals(200, pending.await().status)
+
+                assertFailsWith<TimeoutCancellationException> { server.awaitRequest(Endpoint.DELETE, timeoutMillis = 50) }
+            }
+        }
+
+    @Test
+    fun concurrentRequestsAndTestSideChangesDoNotCorruptState() =
+        runTest {
+            val server = FakeNotesServer()
+            val http = client(server)
+            withContext(Dispatchers.Default) {
+                (1..200)
+                    .map { i ->
+                        async {
+                            if (i % 2 == 0) server.addNote("N$i") else http.get("$api/notes")
+                        }
+                    }.awaitAll()
+            }
+            assertEquals(100, server.notes.size)
+            assertEquals(100, server.count(Endpoint.LIST))
+            assertEquals(
+                100,
+                server.notes
+                    .map { it.id }
+                    .toSet()
+                    .size,
+            )
+        }
+
+    @Test
+    fun capabilitiesCanLackTheNotesApp() =
+        runTest {
+            val server = FakeNotesServer()
+            val http = client(server)
+            assertContains(http.get("/ocs/v2.php/cloud/capabilities").bodyAsText(), "\"notes\"")
+            server.notesAppInstalled = false
+            assertFalse("\"notes\"" in http.get("/ocs/v2.php/cloud/capabilities").bodyAsText())
         }
 }

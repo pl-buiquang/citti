@@ -8,8 +8,15 @@ import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HeadersBuilder
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.content.OutgoingContent
+import io.ktor.http.content.OutgoingContent.ByteArrayContent
 import io.ktor.http.content.TextContent
+import io.ktor.http.parseUrlEncodedParameters
+import io.ktor.http.protocolWithAuthority
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 import kotlinx.io.IOException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -19,6 +26,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
+import kotlin.concurrent.Volatile
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -28,7 +36,27 @@ enum class HeaderCasing { LOWERCASE, CANONICAL }
 /** A failure injected with [FakeNotesServer.failNext]; consumed by the next request(s). */
 enum class FakeFailure { NETWORK_ERROR, SERVER_ERROR, UNAUTHORIZED }
 
-enum class Endpoint { LIST, GET_NOTE, CREATE, UPDATE, DELETE, SETTINGS, CAPABILITIES, CLOUD_USER, DAV_GET, UNKNOWN }
+enum class Endpoint {
+    LIST,
+    GET_NOTE,
+    CREATE,
+    UPDATE,
+    DELETE,
+    SETTINGS,
+    CAPABILITIES,
+    CLOUD_USER,
+    DAV_GET,
+
+    /** `POST /index.php/login/v2`: starts Login Flow v2. */
+    LOGIN_START,
+
+    /** `POST /index.php/login/v2/poll`: 404 until the login is approved. */
+    LOGIN_POLL,
+    UNKNOWN,
+}
+
+/** Base URL of the fake in the E2E tests. It never resolves, so a request that misses the fake engine fails. */
+const val E2E_SERVER = "https://cloud.example.test"
 
 data class RecordedRequest(
     val method: HttpMethod,
@@ -38,8 +66,10 @@ data class RecordedRequest(
     /** Header names as sent by the client; use [header] for case-insensitive lookup. */
     val headers: Map<String, List<String>>,
     val endpoint: Endpoint,
-    /** Status returned, or null when a network error was injected. */
+    /** Status returned, or null when a network error was injected or the server is [FakeNotesServer.offline]. */
     val status: Int?,
+    /** The text body (JSON or form), empty when there is none. */
+    val body: String = "",
 ) {
     fun header(name: String): String? =
         headers.entries
@@ -68,6 +98,9 @@ data class FakeNote(
  * (see the "Server probe" section of the M2 plan). Independent of the app's own API client.
  *
  * All times are epoch seconds from [now]; nothing reads the real clock.
+ *
+ * Thread safe: the app calls it from IO threads while the test thread changes it. Every public method and the
+ * request handler run under one lock; [beforeDispatch] runs outside it.
  */
 class FakeNotesServer(
     /** Path prefix of the Nextcloud install, for example `/cloud`. Empty when served at the root. */
@@ -78,10 +111,30 @@ class FakeNotesServer(
     /** Current server time in epoch seconds; set it or call [advance] to move time. */
     var now: Long = 1_800_000_000L,
 ) {
+    private val lock = SynchronizedObject()
+
+    private inline fun <T> locked(block: () -> T): T = synchronized(lock, block)
+
     private val noteMap = LinkedHashMap<Long, FakeNote>()
     private var nextId = 1L
     private val failures = ArrayDeque<Pair<FakeFailure, Endpoint?>>()
     private val log = mutableListOf<RecordedRequest>()
+
+    /** Bumped on every recorded request; [awaitRequest] waits on it. */
+    private val logSize = MutableStateFlow(0)
+
+    /**
+     * When true, every request (Notes API, DAV, login) throws `IOException("offline")`. It is still recorded,
+     * with `status = null`.
+     */
+    @Volatile
+    var offline: Boolean = false
+
+    private var login: LoginState = LoginState.Pending
+
+    /** False: the capabilities have no `notes` entry, as on a server without the Notes app. */
+    @Volatile
+    var notesAppInstalled: Boolean = true
 
     /**
      * Called before a request is answered (after auth and injected failures), so a test can change the local DB
@@ -99,33 +152,67 @@ class FakeNotesServer(
     fun putFile(
         vaultPath: String,
         bytes: ByteArray,
-    ) {
+    ) = locked {
         val key = "$notesPath/$vaultPath"
         files[key] = bytes to ((files[key]?.second ?: 0) + 1)
     }
 
     fun removeFile(vaultPath: String) {
-        files.remove("$notesPath/$vaultPath")
+        locked { files.remove("$notesPath/$vaultPath") }
     }
 
-    fun fileEtag(vaultPath: String): String? = files["$notesPath/$vaultPath"]?.let { hash("${it.first.size}/${it.second}") }
+    fun fileEtag(vaultPath: String): String? = locked { files["$notesPath/$vaultPath"]?.let { hash("${it.first.size}/${it.second}") } }
 
     var fileSuffix: String = ".md"
 
     val engine: MockEngine = MockEngine { request -> handle(request) }
 
-    val requests: List<RecordedRequest> get() = log.toList()
-    val notes: List<FakeNote> get() = noteMap.values.toList()
+    val requests: List<RecordedRequest> get() = locked { log.toList() }
+    val notes: List<FakeNote> get() = locked { noteMap.values.toList() }
 
-    fun count(endpoint: Endpoint): Int = log.count { it.endpoint == endpoint }
+    fun count(endpoint: Endpoint): Int = locked { log.count { it.endpoint == endpoint } }
 
-    fun clearRequests() = log.clear()
+    fun clearRequests() = locked { log.clear() }
 
     fun advance(seconds: Long) {
-        now += seconds
+        locked { now += seconds }
     }
 
-    fun note(id: Long): FakeNote? = noteMap[id]
+    fun note(id: Long): FakeNote? = locked { noteMap[id] }
+
+    /**
+     * Suspends until a request to [endpoint] matching [predicate] is in the log (it may already be there), and
+     * returns it. Throws `TimeoutCancellationException` after [timeoutMillis].
+     */
+    suspend fun awaitRequest(
+        endpoint: Endpoint,
+        timeoutMillis: Long = 5_000,
+        predicate: (RecordedRequest) -> Boolean = { true },
+    ): RecordedRequest {
+        fun find() = locked { log.firstOrNull { it.endpoint == endpoint && predicate(it) } }
+        return withTimeout(timeoutMillis) {
+            logSize.first { find() != null }
+            find()!!
+        }
+    }
+
+    /**
+     * Approves the pending Login Flow v2: the poll answers 404 [pollsBeforeSuccess] more times, then returns
+     * [loginName] and [appPassword], with [server] (default: the URL the app called). The pair becomes the
+     * accepted [credentials].
+     */
+    fun approveLogin(
+        loginName: String,
+        appPassword: String,
+        pollsBeforeSuccess: Int = 0,
+        server: String? = null,
+    ) = locked {
+        login = LoginState.Approved(loginName, appPassword, pollsBeforeSuccess, server)
+        credentials = loginName to appPassword
+    }
+
+    /** The poll answers 403 from now on, as an expired or refused login token does. */
+    fun denyLogin() = locked { login = LoginState.Denied }
 
     // ---- test-side state ----
 
@@ -136,11 +223,12 @@ class FakeNotesServer(
         favorite: Boolean = false,
         modified: Long = now,
         readonly: Boolean = false,
-    ): Long {
-        val id = nextId++
-        noteMap[id] = FakeNote(id, title, content, category, favorite, modified, 1, readonly)
-        return id
-    }
+    ): Long =
+        locked {
+            val id = nextId++
+            noteMap[id] = FakeNote(id, title, content, category, favorite, modified, 1, readonly)
+            id
+        }
 
     /** Edits a note as another client would: bumps etag and modified (to [modified], default now). */
     fun editOnServer(
@@ -149,7 +237,7 @@ class FakeNotesServer(
         title: String? = null,
         category: String? = null,
         modified: Long = now,
-    ) {
+    ) = locked {
         val n = noteMap.getValue(id)
         noteMap[id] =
             n.copy(
@@ -162,18 +250,18 @@ class FakeNotesServer(
     }
 
     fun deleteOnServer(id: Long) {
-        noteMap.remove(id)
+        locked { noteMap.remove(id) }
     }
 
     fun setFavorite(
         id: Long,
         favorite: Boolean,
-    ) {
+    ) = locked {
         val n = noteMap.getValue(id)
         noteMap[id] = n.copy(favorite = favorite, modified = now, version = n.version + 1)
     }
 
-    fun clearFailures() = failures.clear()
+    fun clearFailures() = locked { failures.clear() }
 
     /**
      * Queues [times] failures, applied to the next requests in order. With an [endpoint], only requests to
@@ -183,7 +271,7 @@ class FakeNotesServer(
         failure: FakeFailure,
         times: Int = 1,
         endpoint: Endpoint? = null,
-    ) {
+    ) = locked {
         repeat(times) { failures.addLast(failure to endpoint) }
     }
 
@@ -194,6 +282,14 @@ class FakeNotesServer(
     fun generateNotes(
         count: Int = 2300,
         topLevels: List<String> = listOf("_work", "journal", "archives", "projects", ""),
+    ): List<Long> =
+        locked {
+            generated(count, topLevels)
+        }
+
+    private fun generated(
+        count: Int,
+        topLevels: List<String>,
     ): List<Long> =
         List(count) { i ->
             val top = topLevels[i % topLevels.size]
@@ -217,34 +313,42 @@ class FakeNotesServer(
                 .entries()
                 .associate { it.key to it.value.first() }
         val headers = request.headers.entries().associate { it.key to it.value }
+        val body = bodyText(request)
 
         fun record(status: Int?) {
-            log += RecordedRequest(request.method, path, query, headers, endpoint, status)
+            locked {
+                log += RecordedRequest(request.method, path, query, headers, endpoint, status, body)
+                logSize.value += 1
+            }
         }
 
-        val queued = failures.indexOfFirst { it.second == null || it.second == endpoint }
-        val failure = if (queued >= 0) failures.removeAt(queued).first else null
-        if (failure == FakeFailure.NETWORK_ERROR) {
-            record(null)
-            throw IOException("fake network error")
-        }
+        // Offline and injected failures are decided under the lock; beforeDispatch runs outside it.
+        val early: HttpResponseData? =
+            locked {
+                if (offline) throw recordedIOException("offline", ::record)
+                val queued = failures.indexOfFirst { it.second == null || it.second == endpoint }
+                when (if (queued >= 0) failures.removeAt(queued).first else null) {
+                    FakeFailure.NETWORK_ERROR -> throw recordedIOException("fake network error", ::record)
+                    FakeFailure.UNAUTHORIZED -> text(HttpStatusCode.Unauthorized, "unauthorized")
+                    FakeFailure.SERVER_ERROR -> text(HttpStatusCode.InternalServerError, "boom")
+                    null -> if (authorized(request, endpoint)) null else text(HttpStatusCode.Unauthorized, "unauthorized")
+                }
+            }
         val response =
-            when {
-                failure == FakeFailure.UNAUTHORIZED || !authorized(request) -> {
-                    text(HttpStatusCode.Unauthorized, "unauthorized")
-                }
-
-                failure == FakeFailure.SERVER_ERROR -> {
-                    text(HttpStatusCode.InternalServerError, "boom")
-                }
-
-                else -> {
-                    beforeDispatch?.invoke(endpoint)
-                    dispatch(request, endpoint, path, query)
-                }
+            early ?: run {
+                beforeDispatch?.invoke(endpoint)
+                locked { dispatch(request, endpoint, path, query, body) }
             }
         record(response.statusCode.value)
         return response
+    }
+
+    private fun recordedIOException(
+        message: String,
+        record: (Int?) -> Unit,
+    ): IOException {
+        record(null)
+        return IOException(message)
     }
 
     private fun route(
@@ -275,6 +379,14 @@ class FakeNotesServer(
                 Endpoint.CLOUD_USER
             }
 
+            rest == LOGIN_V2 && method == HttpMethod.Post -> {
+                Endpoint.LOGIN_START
+            }
+
+            rest == "$LOGIN_V2/poll" && method == HttpMethod.Post -> {
+                Endpoint.LOGIN_POLL
+            }
+
             rest.startsWith(DAV_FILES) && method == HttpMethod.Get -> {
                 Endpoint.DAV_GET
             }
@@ -295,7 +407,12 @@ class FakeNotesServer(
     }
 
     @OptIn(ExperimentalEncodingApi::class)
-    private fun authorized(request: HttpRequestData): Boolean {
+    private fun authorized(
+        request: HttpRequestData,
+        endpoint: Endpoint,
+    ): Boolean {
+        // The login flow carries no credentials, like on the real server.
+        if (endpoint == Endpoint.LOGIN_START || endpoint == Endpoint.LOGIN_POLL) return true
         val (user, password) = credentials ?: return true
         val expected = "Basic " + Base64.encode("$user:$password".encodeToByteArray())
         return request.headers["Authorization"] == expected
@@ -306,6 +423,7 @@ class FakeNotesServer(
         endpoint: Endpoint,
         path: String,
         query: Map<String, String>,
+        body: String,
     ): HttpResponseData =
         when (endpoint) {
             Endpoint.LIST -> {
@@ -313,7 +431,7 @@ class FakeNotesServer(
             }
 
             Endpoint.CREATE -> {
-                val body = bodyJson(request)
+                val body = bodyJson(body)
                 val category = body.str("category") ?: ""
                 val id =
                     addNote(
@@ -336,7 +454,7 @@ class FakeNotesServer(
                     if (ifMatch != null && ifMatch != n.etag) {
                         text(HttpStatusCode.PreconditionFailed, "etag mismatch")
                     } else {
-                        val body = bodyJson(request)
+                        val body = bodyJson(body)
                         val updated =
                             n.copy(
                                 title = body.str("title") ?: n.title,
@@ -374,10 +492,11 @@ class FakeNotesServer(
             }
 
             Endpoint.CAPABILITIES -> {
+                val notes = if (notesAppInstalled) """"notes":{"api_version":["0.2","1.3","1.4"],"version":"6.1.0"}""" else ""
                 json(
                     """{"ocs":{"meta":{"status":"ok","statuscode":200,"message":"OK"},""" +
                         """"data":{"version":{"major":33,"string":"33.0.0"},""" +
-                        """"capabilities":{"notes":{"api_version":["0.2","1.3","1.4"],"version":"6.1.0"}}}}}""",
+                        """"capabilities":{$notes}}}}""",
                 )
             }
 
@@ -389,10 +508,78 @@ class FakeNotesServer(
                 davGet(request, path)
             }
 
+            Endpoint.LOGIN_START -> {
+                val origin = request.url.protocolWithAuthority + basePath
+                login = LoginState.Pending
+                json(
+                    buildJsonObject {
+                        put(
+                            "poll",
+                            buildJsonObject {
+                                put("token", LOGIN_TOKEN)
+                                put("endpoint", "$origin$LOGIN_V2/poll")
+                            },
+                        )
+                        put("login", "$origin$LOGIN_V2/flow/$LOGIN_TOKEN")
+                    }.toString(),
+                )
+            }
+
+            Endpoint.LOGIN_POLL -> {
+                loginPoll(request, body)
+            }
+
             Endpoint.UNKNOWN -> {
                 text(HttpStatusCode.NotFound, "not found")
             }
         }
+
+    private fun MockRequestHandleScope.loginPoll(
+        request: HttpRequestData,
+        body: String,
+    ): HttpResponseData {
+        val token = body.parseUrlEncodedParameters()["token"]
+        if (token != LOGIN_TOKEN) return text(HttpStatusCode.NotFound, "unknown token")
+        return when (val state = login) {
+            LoginState.Pending -> {
+                text(HttpStatusCode.NotFound, "not yet")
+            }
+
+            LoginState.Denied -> {
+                text(HttpStatusCode.Forbidden, "denied")
+            }
+
+            is LoginState.Approved -> {
+                if (state.pollsLeft > 0) {
+                    login = state.copy(pollsLeft = state.pollsLeft - 1)
+                    text(HttpStatusCode.NotFound, "not yet")
+                } else {
+                    // One use, like the real token.
+                    login = LoginState.Pending
+                    json(
+                        buildJsonObject {
+                            put("server", state.server ?: (request.url.protocolWithAuthority + basePath))
+                            put("loginName", state.loginName)
+                            put("appPassword", state.appPassword)
+                        }.toString(),
+                    )
+                }
+            }
+        }
+    }
+
+    private sealed interface LoginState {
+        data object Pending : LoginState
+
+        data object Denied : LoginState
+
+        data class Approved(
+            val loginName: String,
+            val appPassword: String,
+            val pollsLeft: Int,
+            val server: String?,
+        ) : LoginState
+    }
 
     private fun MockRequestHandleScope.davGet(
         request: HttpRequestData,
@@ -545,15 +732,15 @@ class FakeNotesServer(
             put("errorType", "")
         }
 
-    private fun bodyJson(request: HttpRequestData): JsonObject {
-        val text =
-            when (val body = request.body) {
-                is TextContent -> body.text
-                is OutgoingContent.ByteArrayContent -> body.bytes().decodeToString()
-                else -> ""
-            }
-        return runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: JsonObject(emptyMap())
-    }
+    private fun bodyText(request: HttpRequestData): String =
+        when (val body = request.body) {
+            is TextContent -> body.text
+            is ByteArrayContent -> body.bytes().decodeToString()
+            else -> ""
+        }
+
+    private fun bodyJson(text: String): JsonObject =
+        runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: JsonObject(emptyMap())
 
     private fun JsonObject.str(key: String): String? = (get(key) as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
 
@@ -564,6 +751,8 @@ class FakeNotesServer(
         const val CAPABILITIES = "/ocs/v2.php/cloud/capabilities"
         const val CLOUD_USER = "/ocs/v2.php/cloud/user"
         const val DAV_FILES = "/remote.php/dav/files/"
+        const val LOGIN_V2 = "/index.php/login/v2"
+        const val LOGIN_TOKEN = "fake-login-token"
     }
 }
 
