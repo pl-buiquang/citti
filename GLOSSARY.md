@@ -209,3 +209,11 @@ _Avoid_: Accent mode
 **Density**:
 How much room rows and gutters take: Compact, Default or Comfortable.
 _Avoid_: Spacing, size
+
+**Theme file**:
+The JSON file that holds a custom theme (its base theme and overrides), exported and imported through the file picker.
+_Avoid_: Theme export, theme preset file
+
+**Text size**:
+A scale from 85 % to 130 % applied to every text in the app and widgets, on top of the system font size.
+_Avoid_: Font size, zoom
