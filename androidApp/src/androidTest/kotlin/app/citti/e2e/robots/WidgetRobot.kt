@@ -2,12 +2,14 @@ package app.citti.e2e.robots
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import kotlinx.coroutines.runBlocking
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -20,6 +22,8 @@ import kotlin.time.Duration.Companion.seconds
  */
 class WidgetRobot(
     private val receiver: String,
+    /** Redraws the placed widget (`SomeWidget().updateAll(context)`): the first draw does not always come by itself. */
+    private val redraw: suspend (Context) -> Unit = {},
 ) {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
@@ -36,16 +40,19 @@ class WidgetRobot(
     }
 
     /**
-     * Pins the widget to the home screen and returns its id. It reuses a placed instance: widgets cannot be removed
-     * reliably from a test, so one placed by an earlier flow stays until the emulator is wiped.
+     * Removes every widget from the launcher by clearing its data: a test cannot remove a single widget (see
+     * [remove]), and widgets placed by earlier flows would push this one to a second page. The launcher restarts empty.
      */
-    fun place(): Int {
-        widgetId()?.let {
-            goHome()
-            return it
-        }
-        check(manager.isRequestPinAppWidgetSupported) { "This launcher cannot pin widgets: run on api36Google" }
+    fun reset() {
+        device.executeShellCommand("pm clear ${launcherPackage()}")
+        waitUntil("no widget of $receiver left") { widgetId() == null }
         goHome()
+    }
+
+    /** Pins the widget to the home screen of a freshly reset launcher and returns its id. */
+    fun place(): Int {
+        reset()
+        check(manager.isRequestPinAppWidgetSupported) { "This launcher cannot pin widgets: run on api36Google" }
         check(manager.requestPinAppWidget(provider, null, null)) { "requestPinAppWidget refused for $receiver" }
         val launcher = launcherPackage()
         check(device.wait(Until.hasObject(By.res(launcher, "add_item_bottom_sheet_content")), TIMEOUT.inWholeMilliseconds)) {
@@ -54,6 +61,7 @@ class WidgetRobot(
         val add = device.wait(Until.findObject(By.text(ADD_TO_HOME)), TIMEOUT.inWholeMilliseconds)
         checkNotNull(add) { "No '$ADD_TO_HOME' button in the pin dialog" }.click()
         waitUntil("a placed $receiver") { widgetId() != null }
+        runBlocking { redraw(context) }
         return checkNotNull(widgetId())
     }
 
@@ -100,6 +108,21 @@ class WidgetRobot(
         }
     }
 
+    /**
+     * The Note picker the launcher opens after "Add to home screen" (or when a widget whose Note is gone is tapped):
+     * picks the Note titled [title] from its list, which closes the picker.
+     */
+    fun pickNote(title: String) {
+        checkNotNull(device.wait(Until.findObject(By.text(WidgetStrings.PICKER_TITLE)), TIMEOUT.inWholeMilliseconds)) {
+            "The Note picker did not show"
+        }
+        checkNotNull(device.wait(Until.findObject(By.text(title)), TIMEOUT.inWholeMilliseconds)) {
+            "'$title' is not in the Note picker; on screen:\n" +
+                device.findObjects(By.pkg(context.packageName)).flatMap { listOfNotNull(it.text, it.contentDescription) }.joinToString("\n")
+        }.click()
+        check(device.wait(Until.gone(By.text(WidgetStrings.PICKER_TITLE)), TIMEOUT.inWholeMilliseconds)) { "The Note picker stayed open" }
+    }
+
     /** Every text and content description on the launcher, in tree order: what a failure message shows. */
     fun texts(): List<String> =
         device
@@ -120,18 +143,35 @@ class WidgetRobot(
         }
     }
 
+    /**
+     * The launcher app. `resolveActivity` can answer `com.android.settings` (its `FallbackHome`, a HOME activity that
+     * stands in while the launcher starts), so every HOME activity is listed and Settings is skipped.
+     */
     private fun launcherPackage(): String =
         context.packageManager
-            .resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
-            ?.activityInfo
-            ?.packageName
+            .queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
+            .map { it.activityInfo.packageName }
+            .firstOrNull { it != SETTINGS }
             ?: FALLBACK_LAUNCHER
 
     private companion object {
         const val ADD_TO_HOME = "Add to home screen"
+        const val SETTINGS = "com.android.settings"
         const val FALLBACK_LAUNCHER = "com.google.android.apps.nexuslauncher"
         const val DRAG_SPEED = 600
         const val POLL_MS = 250L
         val TIMEOUT = 10.seconds
     }
+}
+
+/** The English copy of the widgets (`androidApp/src/main/res/values/strings.xml`). */
+object WidgetStrings {
+    const val FAVORITES_RECEIVER = "app.citti.widget.FavoritesWidgetReceiver"
+    const val NOTE_RECEIVER = "app.citti.widget.NoteWidgetReceiver"
+    const val DAILY_RECEIVER = "app.citti.widget.DailyNoteWidgetReceiver"
+    const val TODAY_ROW = "Today"
+    const val NOTE_MORE = "Open to read more"
+    const val NOTE_GONE = "Note not available. Tap to pick another."
+    const val DAILY_MISSING = "No note for today yet. Tap to create."
+    const val PICKER_TITLE = "Pick a note"
 }

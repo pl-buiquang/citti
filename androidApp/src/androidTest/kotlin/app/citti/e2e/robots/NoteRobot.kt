@@ -316,6 +316,70 @@ class NoteRobot(
         return text
     }
 
+    /** The caret is at the start of source line [line] (0-based, split on `\n`), as a link with `?line=` or a widget tap leaves it. */
+    fun assertCaretLine(line: Int) {
+        assertEditMode()
+        waitForView {
+            editText().perform(
+                onEditText("caret at the start of line $line") { view ->
+                    val before = view.text.substring(0, view.selectionStart)
+                    assertEquals(line, before.count { it == '\n' }, "source line of the caret")
+                    assertEquals(0, before.length - (before.lastIndexOf('\n') + 1), "caret column")
+                },
+            )
+        }
+    }
+
+    /**
+     * The source line (0-based) at the top of the viewport is [line] (within [tolerance] lines): what the Reading
+     * position records. The highlighter restyles lines after the scroll is set and heading spans change line heights, so
+     * the line at the top can be the one above (see the M7a plan, Known gaps).
+     */
+    fun assertTopLine(
+        line: Int,
+        tolerance: Int = 1,
+    ) {
+        assertEditMode()
+        var last = -1
+        try {
+            waitUntil("source line $line at the top of the editor") {
+                last = runCatching { topLine() }.getOrDefault(-1)
+                last in (line - tolerance)..line
+            }
+        } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("source line at the top of the editor: expected $line (-$tolerance), was $last", e)
+        }
+    }
+
+    /** The source line at the top of the editor now. */
+    fun topLine(): Int {
+        var top = -1
+        editText().perform(
+            onEditText("top line") { view ->
+                val layout = checkNotNull(view.layout) { "no layout yet" }
+                val offset = layout.getLineStart(layout.getLineForVertical(view.scrollY))
+                top = view.text.substring(0, offset).count { it == '\n' }
+            },
+        )
+        return top
+    }
+
+    /** Scrolls the editor so that source line [line] is at the top, without moving the caret (a reader scrolling). */
+    fun scrollEditorToLine(line: Int) {
+        assertEditMode()
+        waitForView {
+            editText().perform(
+                onEditText("scroll to line $line") { view ->
+                    val text = view.text
+                    var offset = 0
+                    repeat(line) { offset = text.indexOf('\n', offset) + 1 }
+                    val layout = checkNotNull(view.layout) { "no layout yet" }
+                    view.scrollTo(0, layout.getLineTop(layout.getLineForOffset(offset)))
+                },
+            )
+        }
+    }
+
     private fun editText() = onView(isAssignableFrom(EditText::class.java))
 
     private fun onEditText(
