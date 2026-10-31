@@ -22,6 +22,7 @@ import app.citti.core.search.NoteSearch
 import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.SyncSettingsRepository
 import app.citti.core.settings.UiSettings
+import app.citti.core.sync.AfterEditPush
 import app.citti.core.sync.PullSync
 import app.citti.core.sync.PushSync
 import app.citti.core.sync.SyncEngine
@@ -92,6 +93,7 @@ class AppContainer(
     private class SyncStack(
         val client: HttpClient,
         val engine: SyncEngine,
+        val afterEdit: AfterEditPush,
     )
 
     private val stackLock = Mutex()
@@ -256,11 +258,17 @@ class AppContainer(
                         now = now,
                     )
                 }
-            SyncStack(client, engine).also { stack.value = it }
+            SyncStack(client, engine, AfterEditPush(appScope, engine)).also { stack.value = it }
         }
+
+    /** Called by the editor after each successful save; pushes about 2 s after the last one. No-op while signed out. */
+    fun scheduleAfterEditPush() {
+        stack.value?.afterEdit?.schedule()
+    }
 
     private suspend fun dropStack() {
         stackLock.withLock {
+            stack.value?.afterEdit?.cancel()
             stack.value?.client?.close()
             stack.value = null
         }

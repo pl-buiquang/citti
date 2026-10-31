@@ -124,6 +124,9 @@ class SyncEngine(
     private val pending = PendingChanges(db)
     private val mutex = Mutex()
 
+    /** Set when [push] found the engine busy: the holder runs one more push before it releases the mutex. */
+    private var pushRequested = false
+
     private var lastSuccessAt: Long? = settings.selectSetting(KEY_LAST_AT).executeAsOneOrNull()?.toLongOrNull()
     private var lastResult: SyncResultKind? =
         settings.selectSetting(KEY_LAST_RESULT).executeAsOneOrNull()?.let { name ->
@@ -172,6 +175,7 @@ class SyncEngine(
                 }
             val ms = started.elapsedNow().inWholeMilliseconds
             log.info("sync done trigger=$trigger ${summary(outcome)} duration=${ms}ms$traffic")
+            pushRequestedMeanwhile()
             return outcome
         } catch (e: CancellationException) {
             log.warn("sync cancelled trigger=$trigger after ${started.elapsedNow().inWholeMilliseconds}ms")
@@ -180,6 +184,71 @@ class SyncEngine(
         } finally {
             mutex.unlock()
         }
+    }
+
+    /**
+     * Pushes the queue and nothing else: no list request (it costs a round trip even when the answer is a 304).
+     * Meant for [SyncTrigger.AfterEdit]. When a run is in progress it only records the request and the run pushes
+     * again before it ends, so edits made during a long sync do not wait for the next periodic one.
+     */
+    suspend fun push(trigger: SyncTrigger = SyncTrigger.AfterEdit): SyncOutcome {
+        if (!mutex.tryLock()) {
+            pushRequested = true
+            log.info("push skipped trigger=$trigger: already running, will push when it ends")
+            return SyncOutcome.AlreadyRunning
+        }
+        try {
+            val outcome = pushOnly(trigger)
+            pushRequestedMeanwhile()
+            return outcome
+        } catch (e: CancellationException) {
+            log.warn("push cancelled trigger=$trigger")
+            _state.value = idle()
+            throw e
+        } finally {
+            mutex.unlock()
+        }
+    }
+
+    /** Runs the one more push that a busy [push] asked for, if anything is still pending. Holds the mutex. */
+    private suspend fun pushRequestedMeanwhile() {
+        while (pushRequested) {
+            pushRequested = false
+            if (pending.count() == 0) return
+            val outcome = pushOnly(SyncTrigger.AfterEdit)
+            // Offline or failed: leave it to the periodic job and the next app open.
+            if (outcome is SyncOutcome.Failed) return
+        }
+    }
+
+    private suspend fun pushOnly(trigger: SyncTrigger): SyncOutcome {
+        val started = TimeSource.Monotonic.markNow()
+        val before = stats?.snapshot()
+        log.info("push start trigger=$trigger pending=${pending.count()}")
+        running(SyncPhase.Pushing, null)
+        val outcome =
+            when (val result = push.push()) {
+                is PushResult.Failed -> {
+                    log.error("push failed ${result.error.logText()}")
+                    fail(result.error)
+                }
+
+                is PushResult.Done -> {
+                    val count = result.updated + result.created + result.deleted
+                    val failures = result.failures.map { NoteFailure(it.localId, null, it.error) }
+                    // lastSuccessAt stays: only a full sync, with its pull, says the whole Vault is up to date.
+                    _state.value = idle()
+                    if (count == 0 && result.conflicts.isEmpty() && failures.isEmpty()) {
+                        SyncOutcome.NothingChanged
+                    } else {
+                        SyncOutcome.Synced(count, 0, result.conflicts.size, failures)
+                    }
+                }
+            }
+        val after = stats?.snapshot()
+        val traffic = if (before != null && after != null) " requests=${after.requests - before.requests}" else ""
+        log.info("push done trigger=$trigger ${summary(outcome)} duration=${started.elapsedNow().inWholeMilliseconds}ms$traffic")
+        return outcome
     }
 
     private fun shouldRetryStart(
