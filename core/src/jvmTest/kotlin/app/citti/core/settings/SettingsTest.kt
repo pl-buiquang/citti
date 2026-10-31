@@ -106,10 +106,10 @@ class SettingsTest {
     @Test
     fun exclusionsAddNormalizeRemove() {
         val repo = ExclusionRepository(db)
-        assertEquals("a/b", repo.add(ExclusionKind.UNSYNCED, " /a//b/ "))
-        assertNull(repo.add(ExclusionKind.UNSYNCED, "a/b"))
-        assertNull(repo.add(ExclusionKind.UNSYNCED, "  / "))
-        assertEquals("a/b", repo.add(ExclusionKind.HIDDEN, "a/b"))
+        assertEquals(AddResult.Added("a/b"), repo.add(ExclusionKind.UNSYNCED, " /a//b/ "))
+        assertEquals(AddResult.Duplicate, repo.add(ExclusionKind.UNSYNCED, "a/b"))
+        assertEquals(AddResult.Blank, repo.add(ExclusionKind.UNSYNCED, "  / "))
+        assertEquals(AddResult.Added("a/b"), repo.add(ExclusionKind.HIDDEN, "a/b"))
         assertEquals(listOf("a/b"), repo.list(ExclusionKind.UNSYNCED))
         repo.remove(ExclusionKind.UNSYNCED, "a/b")
         assertEquals(emptyList(), repo.list(ExclusionKind.UNSYNCED))
@@ -135,7 +135,7 @@ class SettingsTest {
         db.noteQueries.upsertFromServer(3, "e", "T", "a/bc", false, 1, false, false)
         val repo = ExclusionRepository(db)
 
-        assertEquals("a/b", repo.add(ExclusionKind.HIDDEN, "a/b"))
+        assertEquals(AddResult.Added("a/b"), repo.add(ExclusionKind.HIDDEN, "a/b"))
         assertEquals(mapOf(1L to true, 2L to true, 3L to false), hiddenByRemoteId())
 
         repo.remove(ExclusionKind.HIDDEN, "a/b")

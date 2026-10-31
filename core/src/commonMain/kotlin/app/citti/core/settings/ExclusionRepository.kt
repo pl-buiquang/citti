@@ -9,6 +9,19 @@ import kotlinx.coroutines.flow.Flow
 
 enum class ExclusionKind { UNSYNCED, HIDDEN }
 
+/** What [ExclusionRepository.add] did: the stored path, or why the folder was refused. */
+sealed interface AddResult {
+    data class Added(
+        val path: String,
+    ) : AddResult
+
+    /** Nothing is left once the path is normalized. */
+    data object Blank : AddResult
+
+    /** The folder is already in that list. */
+    data object Duplicate : AddResult
+}
+
 /** Trims and strips leading, trailing and doubled slashes; null when nothing is left. */
 fun normalizeFolderPath(raw: String): String? =
     raw
@@ -36,21 +49,21 @@ class ExclusionRepository(
     fun knownFolders(): Flow<List<String>> = notes.selectDistinctCategories().asFlow().mapToList(dispatcher)
 
     /**
-     * Adds [path] (normalized); returns the stored path, or null when it is blank or already listed.
+     * Adds [path] (normalized); returns [AddResult.Added] with the stored path, or the reason it was refused.
      * A Hidden folder hides its Notes at once, in the same transaction. An Unsynced one waits for the pull.
      * Either way the Folder refresh ETags (`list:<folder>`) are dropped, so the next refresh is a full 200.
      */
     fun add(
         kind: ExclusionKind,
         path: String,
-    ): String? {
-        val p = normalizeFolderPath(path) ?: return null
+    ): AddResult {
+        val p = normalizeFolderPath(path) ?: return AddResult.Blank
         return db.transactionWithResult {
-            if (p in list(kind)) return@transactionWithResult null
+            if (p in list(kind)) return@transactionWithResult AddResult.Duplicate
             settings.insertExclusion(p, kind.name)
             if (kind == ExclusionKind.HIDDEN) notes.recomputeHidden()
             syncState.deleteFolderKeys()
-            p
+            AddResult.Added(p)
         }
     }
 

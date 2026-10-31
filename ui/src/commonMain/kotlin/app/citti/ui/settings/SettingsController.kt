@@ -1,5 +1,6 @@
 package app.citti.ui.settings
 
+import app.citti.core.settings.AddResult
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.ImageSettings
@@ -33,11 +34,11 @@ interface SettingsStore {
 
     fun setImageCacheMb(mb: Int)
 
-    /** Returns the stored path, or null when blank or already listed. */
+    /** Returns [AddResult.Added] with the stored path, or why the folder was refused. */
     fun addExclusion(
         kind: ExclusionKind,
         path: String,
-    ): String?
+    ): AddResult
 
     fun removeExclusion(
         kind: ExclusionKind,
@@ -295,9 +296,20 @@ class SettingsController(
         kind: ExclusionKind,
         path: String,
     ) {
-        store.addExclusion(kind, path)
-        local.value = Local()
-        syncAfterChange()
+        when (store.addExclusion(kind, path)) {
+            is AddResult.Added -> {
+                local.value = Local()
+                syncAfterChange()
+            }
+
+            AddResult.Blank -> {
+                local.update { it.copy(confirm = null, folderError = FolderError.Blank) }
+            }
+
+            AddResult.Duplicate -> {
+                local.update { it.copy(confirm = null, folderError = FolderError.AlreadyListed) }
+            }
+        }
     }
 
     private fun syncAfterChange() {

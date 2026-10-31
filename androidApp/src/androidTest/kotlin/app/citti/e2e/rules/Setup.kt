@@ -3,6 +3,7 @@ package app.citti.e2e.rules
 import app.citti.core.auth.Credentials
 import app.citti.core.fake.FixtureVault
 import app.citti.core.fake.seed
+import app.citti.core.settings.AddResult
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.sync.SyncOutcome
 import app.citti.core.sync.SyncTrigger
@@ -43,8 +44,12 @@ class Setup private constructor(
         runBlocking {
             container.onSignedIn(Credentials(E2e.SERVER, E2e.USER, E2e.APP_PASSWORD))
             withContext(Dispatchers.IO) {
-                hidden.forEach { container.exclusions.add(ExclusionKind.HIDDEN, it) }
-                unsynced.forEach { container.exclusions.add(ExclusionKind.UNSYNCED, it) }
+                hidden.forEach { check(container.exclusions.add(ExclusionKind.HIDDEN, it) is AddResult.Added) { "Hidden $it refused" } }
+                unsynced.forEach {
+                    check(
+                        container.exclusions.add(ExclusionKind.UNSYNCED, it) is AddResult.Added,
+                    ) { "Unsynced $it refused" }
+                }
             }
         }
         if (sync) {

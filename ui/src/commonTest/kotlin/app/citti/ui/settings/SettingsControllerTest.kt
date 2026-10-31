@@ -1,5 +1,6 @@
 package app.citti.ui.settings
 
+import app.citti.core.settings.AddResult
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.SyncNetwork
 import app.citti.core.sync.SyncTrigger
@@ -39,11 +40,11 @@ private class FakeStore(
     override fun addExclusion(
         kind: ExclusionKind,
         path: String,
-    ): String? {
+    ): AddResult {
         val flow = if (kind == ExclusionKind.UNSYNCED) unsynced else hidden
-        if (path in flow.value) return null
+        if (path in flow.value) return AddResult.Duplicate
         flow.value = flow.value + path
-        return path
+        return AddResult.Added(path)
     }
 
     override fun removeExclusion(
