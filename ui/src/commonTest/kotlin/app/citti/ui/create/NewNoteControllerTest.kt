@@ -5,6 +5,7 @@ import app.citti.core.note.NameRules
 import app.citti.core.note.NoteCreator.Check
 import app.citti.ui.nav.Navigator
 import app.citti.ui.nav.Route
+import app.citti.ui.note.LinkRef
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -305,5 +306,30 @@ class NewNoteControllerTest {
             )
             f.controller.back()
             assertNull(f.controller.state.value)
+        }
+
+    @Test
+    fun aWikilinkCreateIsPrefilledFromTheTarget() {
+        assertEquals(NewNotePrefill("a/b", "T"), linkPrefill(LinkRef.Wiki("a/b/T|alias#h"), "work"))
+        assertEquals(NewNotePrefill("work", "T"), linkPrefill(LinkRef.Wiki("T"), "work"))
+        assertEquals(NewNotePrefill("", "T"), linkPrefill(LinkRef.Wiki("T#Heading"), ""))
+        assertEquals(NewNotePrefill("work", "T"), linkPrefill(LinkRef.Wiki("T^block"), "work"))
+        assertEquals(NewNotePrefill("a", "My note"), linkPrefill(LinkRef.Wiki("/a/My%20note.md"), "work"))
+        // A Markdown link is relative to the Note's Folder.
+        assertEquals(NewNotePrefill("work/sub", "My note"), linkPrefill(LinkRef.Markdown("sub/My%20note.md#h"), "work"))
+        assertEquals(NewNotePrefill("other", "T"), linkPrefill(LinkRef.Markdown("../other/T.md"), "work"))
+    }
+
+    @Test
+    fun aWikilinkCreateOpensTheDialogPrefilledThenTheSameFlow() =
+        runTest {
+            val f = fixture()
+            val prefill = linkPrefill(LinkRef.Wiki("a/b/T|alias#h"), "work")
+            f.controller.open(prefill.folder, prefill.title)
+            assertEquals(NewNoteState("T", "a/b"), f.controller.state.value)
+            f.controller.create()
+            runCurrent()
+            assertEquals(listOf("a/b" to "T"), f.creation.checks)
+            assertEquals(Route.Note(100, focus = true), f.navigator.top)
         }
 }

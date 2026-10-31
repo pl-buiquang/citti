@@ -74,6 +74,7 @@
     <string name="save_failed">Sync failed</string>
     <string name="properties">Properties</string>
     <string name="link_missing">No note named “%s”</string>
+    <string name="link_create">Create note</string>
     <string name="link_unsynced">Not synced on this device</string>
     <string name="action_open_exclusions">Change in Settings › Exclusions</string>
     <string name="conflict_banner">Your version was saved as “%s”</string>

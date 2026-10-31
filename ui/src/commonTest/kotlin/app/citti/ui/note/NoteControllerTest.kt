@@ -14,12 +14,15 @@ import app.citti.core.note.InvalidNameException
 import app.citti.core.note.LinkTarget
 import app.citti.core.note.NameError
 import app.citti.core.note.NoteBadge
+import app.citti.core.note.NoteCreator.Check
 import app.citti.core.note.NoteEditor.SaveResult
 import app.citti.core.note.NoteInfo
 import app.citti.core.note.RenameResult
 import app.citti.core.sync.SyncStatus
 import app.citti.ui.components.MenuItem
 import app.citti.ui.components.Snack
+import app.citti.ui.create.NewNoteState
+import app.citti.ui.create.NoteCreation
 import app.citti.ui.image.ImageUpload
 import app.citti.ui.image.LoadedImage
 import app.citti.ui.image.PickedImage
@@ -220,6 +223,7 @@ class NoteControllerTest {
         scope: CoroutineScope = backgroundScope,
         imageUpload: ImageUpload? = null,
         menu: ((FakeGateway) -> NoteMenuGateway)? = null,
+        creation: NoteCreation? = null,
         setup: FakeGateway.() -> Unit = {},
     ): Fixture {
         val gateway =
@@ -243,6 +247,7 @@ class NoteControllerTest {
                 parseDispatcher = dispatcher,
                 imageUpload = imageUpload,
                 menuGateway = menu?.invoke(gateway),
+                creation = creation,
             )
         runCurrent()
         return Fixture(this, gateway, navigator, snacks, controller)
@@ -532,8 +537,48 @@ class NoteControllerTest {
             f.controller.onLink(LinkRef.Wiki("Title"))
             runCurrent()
             assertEquals(Route.Note(5), f.navigator.top)
-            assertEquals(listOf<Snack>(Snack.LinkUnsynced, Snack.LinkMissing("c")), f.snacks)
+            assertEquals(listOf<Snack>(Snack.LinkUnsynced, Snack.LinkMissing("c", "work", "c")), f.snacks)
             assertEquals(3, f.navigator.stack.value.size)
+        }
+
+    @Test
+    fun createOnAnUnresolvedLinkFlushesThenOpensTheNewNoteDialogPrefilled() =
+        runTest {
+            val creation = LinkCreation()
+            val f = open(doc("[[a/b/T|x#h]] [[c]]"), creation = creation)
+            f.attach()
+            f.host.type("typed ")
+            f.controller.onLink(LinkRef.Wiki("a/b/T"))
+            f.controller.onLink(LinkRef.Wiki("c"))
+            runCurrent()
+            val (path, bare) = f.snacks.map { it as Snack.LinkMissing }
+            assertEquals(Snack.LinkMissing("T", "a/b", "T"), path)
+            assertEquals(Snack.LinkMissing("c", "work", "c"), bare)
+            f.controller.createFromLink(path)
+            runCurrent()
+            // The typed text is saved before the new Note opens over this one.
+            assertTrue(f.host.text.endsWith("typed "))
+            assertEquals(
+                f.host.text,
+                f.gateway.saves
+                    .last()
+                    .first,
+            )
+            val newNote = f.controller.newNote!!
+            assertEquals(NewNoteState("T", "a/b"), newNote.state.value)
+            newNote.create()
+            runCurrent()
+            assertEquals(listOf("a/b" to "T"), creation.created)
+            assertEquals(Route.Note(7, focus = true), f.navigator.top)
+        }
+
+    @Test
+    fun withoutANoteCreationThereIsNoCreateFlow() =
+        runTest {
+            val f = open()
+            assertNull(f.controller.newNote)
+            f.controller.createFromLink(Snack.LinkMissing("T", "", "T"))
+            assertEquals(2, f.navigator.stack.value.size)
         }
 
     @Test
@@ -962,4 +1007,28 @@ class NoteControllerTest {
             assertNull(ui(f).dialog)
             assertEquals(Route.Note(9), f.navigator.top)
         }
+}
+
+private class LinkCreation : NoteCreation {
+    val created = mutableListOf<Pair<String, String>>()
+
+    override suspend fun normaliseFolder(path: String) = Result.success(path)
+
+    override suspend fun check(
+        folder: String,
+        title: String,
+    ) = Check.Free
+
+    override suspend fun freeTitle(
+        folder: String,
+        title: String,
+    ) = title
+
+    override suspend fun create(
+        folder: String,
+        title: String,
+    ): Long {
+        created += folder to title
+        return 7
+    }
 }

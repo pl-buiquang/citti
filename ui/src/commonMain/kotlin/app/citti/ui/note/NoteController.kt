@@ -18,6 +18,9 @@ import app.citti.core.sync.SyncStatus
 import app.citti.ui.components.FolderPickerState
 import app.citti.ui.components.MenuItem
 import app.citti.ui.components.Snack
+import app.citti.ui.create.NewNoteController
+import app.citti.ui.create.NoteCreation
+import app.citti.ui.create.linkPrefill
 import app.citti.ui.image.ImageUpload
 import app.citti.ui.image.PickedImage
 import app.citti.ui.markdown.EditorState
@@ -116,12 +119,17 @@ class NoteController(
     private val editorContext: CoroutineContext = EmptyCoroutineContext,
     /** The ⋮ menu's Favorite, Rename, Move, Delete and Note info; null: the menu acts on nothing. */
     private val menuGateway: NoteMenuGateway? = null,
+    /** "Create note" from an unresolved link; null: no New note flow on this screen. */
+    creation: NoteCreation? = null,
 ) {
     private val localId = route.localId
     private val route = MutableStateFlow(route)
 
     /** The text of the Note: owned here, so it survives the view and its recomposition. */
     val editor = EditorState(clockMs)
+
+    /** The New note dialog of "Create note" on an unresolved link (M5 spec §3); null without [NoteCreation]. */
+    val newNote: NewNoteController? = creation?.let { NewNoteController(scope, it, navigator) }
 
     /** Everything the state shows that is not the editor's or the sync's. */
     private data class Model(
@@ -724,11 +732,30 @@ class NoteController(
                     .orEmpty()
             val target = model.value.links[ref] ?: gateway.resolve(folder, ref)
             when (target) {
-                is LinkTarget.Note -> if (target.localId != localId) navigator.push(Route.Note(target.localId))
-                is LinkTarget.Unsynced -> notify(Snack.LinkUnsynced)
-                LinkTarget.Missing -> notify(Snack.LinkMissing(ref.displayName()))
+                is LinkTarget.Note -> {
+                    if (target.localId != localId) navigator.push(Route.Note(target.localId))
+                }
+
+                is LinkTarget.Unsynced -> {
+                    notify(Snack.LinkUnsynced)
+                }
+
+                LinkTarget.Missing -> {
+                    val prefill = linkPrefill(ref, folder)
+                    notify(Snack.LinkMissing(ref.displayName(), prefill.folder, prefill.title))
+                }
             }
         }
+    }
+
+    /**
+     * The Create note action of [snack]: flushes the text, then opens the New note dialog prefilled; the same flow as
+     * the New note button follows.
+     */
+    fun createFromLink(snack: Snack.LinkMissing) {
+        val newNote = newNote ?: return
+        scope.launch { saveNow() }
+        newNote.open(snack.folder, snack.title)
     }
 
     /** A tap on an Image in Preview mode opens the Image viewer. */

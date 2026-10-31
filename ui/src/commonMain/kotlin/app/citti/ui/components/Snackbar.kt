@@ -25,6 +25,7 @@ import app.citti.ui.resources.Res
 import app.citti.ui.resources.action_open_exclusions
 import app.citti.ui.resources.conflict_snackbar
 import app.citti.ui.resources.deleted_snackbar
+import app.citti.ui.resources.link_create
 import app.citti.ui.resources.link_missing
 import app.citti.ui.resources.link_unsynced
 import app.citti.ui.resources.toast_deleted
@@ -52,8 +53,11 @@ sealed interface Snack {
         val copyTitle: String,
     ) : Snack
 
+    /** A tap on a link to no Note; its Create note action opens the New note dialog on [folder] and [title]. */
     data class LinkMissing(
         val name: String,
+        val folder: String,
+        val title: String,
     ) : Snack
 
     data object LinkUnsynced : Snack
@@ -114,7 +118,12 @@ fun SnackbarHost(
             Snack.UploadOffline -> stringResource(Res.string.upload_offline)
             is Snack.UploadFailed -> stringResource(Res.string.upload_failed, shown.reason)
         }
-    val action = if (shown == Snack.LinkUnsynced) stringResource(Res.string.action_open_exclusions) else null
+    val action =
+        when (shown) {
+            Snack.LinkUnsynced -> stringResource(Res.string.action_open_exclusions)
+            is Snack.LinkMissing -> stringResource(Res.string.link_create)
+            else -> null
+        }
     val colors = CittiTheme.colors
     Box(modifier.fillMaxWidth().padding(CittiTheme.shape.gutter), contentAlignment = Alignment.BottomCenter) {
         Row(

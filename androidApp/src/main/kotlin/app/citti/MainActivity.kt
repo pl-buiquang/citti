@@ -179,11 +179,40 @@ class MainActivity : ComponentActivity() {
             }
             SnackbarHost(
                 snackbars,
-                onAction = { if (it == Snack.LinkUnsynced) navigator.push(Route.Settings) },
+                onAction = { snack ->
+                    when (snack) {
+                        Snack.LinkUnsynced -> navigator.push(Route.Settings)
+                        is Snack.LinkMissing -> createFromLink(navigator, snack)
+                        else -> Unit
+                    }
+                },
                 modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding(),
             )
         }
     }
+
+    /**
+     * The Create note action of an unresolved link: the New note dialog of the shown entry, the Note's own, or the
+     * List or Tree one if the Note has been left since the snackbar came up.
+     */
+    private fun createFromLink(
+        navigator: Navigator,
+        snack: Snack.LinkMissing,
+    ) {
+        val stack = navigator.stack.value
+        val index = stack.lastIndex
+        when (val top = stack.last()) {
+            is Route.Note -> routes.controller(index, top) { newNoteController(it, top, navigator) }.createFromLink(snack)
+            is Route.List, is Route.Tree -> newNoteFlow(navigator, index, top).open(snack.folder, snack.title)
+            else -> Unit
+        }
+    }
+
+    private fun newNoteFlow(
+        navigator: Navigator,
+        index: Int,
+        route: Route,
+    ): NewNoteController = routes.controller(index, route) { NewNoteController(it, noteCreation, navigator) }
 
     // The text of an open Note is written when the app leaves the foreground, not only when the screen closes.
     override fun onStop() {
@@ -221,7 +250,7 @@ class MainActivity : ComponentActivity() {
         val controller = remember { browseController ?: newBrowseController().also { browseController = it } }
         val state by controller.state.collectAsState()
         // One New note flow per List or Tree entry, so its dialog survives recomposition.
-        val newNote = remember(index, route) { routes.controller(index, route) { NewNoteController(it, noteCreation, navigator) } }
+        val newNote = remember(index, route) { newNoteFlow(navigator, index, route) }
         val newNoteState by newNote.state.collectAsState()
         LaunchedEffect(controller) {
             controller.onShown()
@@ -398,6 +427,12 @@ class MainActivity : ComponentActivity() {
             folders = pickerFolders,
             dateTime = noteDateTime::format,
         )
+        // "Create note" on an unresolved link: the New note dialog, over the Note.
+        controller.newNote?.let { newNote ->
+            val newNoteState by newNote.state.collectAsState()
+            BackHandler(enabled = newNoteState != null, onBack = newNote::back)
+            NewNoteHost(newNoteState, pickerFolders, remember(newNote) { newNote.actions() })
+        }
     }
 
     /** The Images of a Note in [folder]; null while signed out (the Preview then shows the file names). */
@@ -482,6 +517,7 @@ class MainActivity : ComponentActivity() {
         imageUpload = container.imageUpload,
         editorContext = Dispatchers.Main.immediate,
         menuGateway = container.noteMenu(route.localId),
+        creation = noteCreation,
     )
 
     private fun newScope() = CoroutineScope(SupervisorJob(container.appScope.coroutineContext[Job]) + Dispatchers.Default)
