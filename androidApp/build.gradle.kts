@@ -31,4 +31,6 @@ dependencies {
     implementation(libs.sqldelight.runtime)
     implementation(libs.sqldelight.coroutines)
     implementation(libs.sqldelight.android.driver)
+    implementation(libs.androidx.work.runtime.ktx)
+    testImplementation(libs.kotlin.test.junit)
 }
