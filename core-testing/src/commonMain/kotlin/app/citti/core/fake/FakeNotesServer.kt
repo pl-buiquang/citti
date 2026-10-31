@@ -223,9 +223,13 @@ class FakeNotesServer(
         favorite: Boolean = false,
         modified: Long = now,
         readonly: Boolean = false,
+        /** A fixed server id (fixtures); default: the next free one. */
+        fixedId: Long? = null,
     ): Long =
         locked {
-            val id = nextId++
+            require(fixedId == null || fixedId !in noteMap) { "note id $fixedId is taken" }
+            val id = fixedId ?: nextId
+            nextId = maxOf(nextId, id + 1)
             noteMap[id] = FakeNote(id, title, content, category, favorite, modified, 1, readonly)
             id
         }

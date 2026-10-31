@@ -1,0 +1,171 @@
+{
+  "comment": "Synthetic Vault for the E2E tests; never real notes. Each .md file is a Note, its folder the category, its name the title. Other files are served by the fake WebDAV only. 'files' lists every file, since a classpath folder cannot be listed in an APK.",
+  "files": [
+    ".obsidian/app.json",
+    ".obsidian/daily-notes.json",
+    "Ideas.md",
+    "Inbox.md",
+    "Packing list.md",
+    "Quotes.md",
+    "Reading list.md",
+    "Recipes.md",
+    "Shopping.md",
+    "Welcome.md",
+    "archive/2024 review.md",
+    "archive/Old ideas.md",
+    "archive/Old plan.md",
+    "archive/Taxes 2023.md",
+    "attachments/by-attachment.png",
+    "attachments/by-note.png",
+    "attachments/by-root.png",
+    "journal/2026-10-29.md",
+    "journal/2026-10-30.md",
+    "links.md",
+    "long.md",
+    "personal/Books.md",
+    "personal/Garden.md",
+    "personal/Gift ideas.md",
+    "personal/Travel.md",
+    "personal/trips/Kyoto.md",
+    "personal/trips/Lisbon.md",
+    "private/Diary.md",
+    "private/Health.md",
+    "private/Secrets.md",
+    "templates/daily.md",
+    "todo.md",
+    "work/Duplicate.md",
+    "work/Hiring.md",
+    "work/Meeting notes.md",
+    "work/Roadmap.md",
+    "work/Standup.md",
+    "work/images.md",
+    "work/projects/Duplicate.md",
+    "work/projects/Retro.md",
+    "work/projects/alpha.md",
+    "work/projects/beta.md",
+    "work/projects/gamma.md"
+  ],
+  "notes": {
+    "Ideas.md": {
+      "modified": 1793188800
+    },
+    "Inbox.md": {
+      "modified": 1793185200
+    },
+    "Packing list.md": {
+      "modified": 1793181600
+    },
+    "Quotes.md": {
+      "modified": 1793178000
+    },
+    "Reading list.md": {
+      "modified": 1793174400
+    },
+    "Recipes.md": {
+      "modified": 1793170800
+    },
+    "Shopping.md": {
+      "modified": 1793167200
+    },
+    "Welcome.md": {
+      "favorite": true,
+      "modified": 1790769600
+    },
+    "archive/2024 review.md": {
+      "modified": 1793160000
+    },
+    "archive/Old ideas.md": {
+      "modified": 1793156400
+    },
+    "archive/Old plan.md": {
+      "modified": 1793152800
+    },
+    "archive/Taxes 2023.md": {
+      "modified": 1793149200
+    },
+    "journal/2026-10-29.md": {
+      "modified": 1793275200
+    },
+    "journal/2026-10-30.md": {
+      "modified": 1793350800
+    },
+    "links.md": {
+      "id": 1002,
+      "modified": 1793138400
+    },
+    "long.md": {
+      "id": 1004,
+      "modified": 1793134800
+    },
+    "personal/Books.md": {
+      "modified": 1793131200
+    },
+    "personal/Garden.md": {
+      "modified": 1793127600
+    },
+    "personal/Gift ideas.md": {
+      "modified": 1793124000
+    },
+    "personal/Travel.md": {
+      "modified": 1793120400
+    },
+    "personal/trips/Kyoto.md": {
+      "modified": 1793116800
+    },
+    "personal/trips/Lisbon.md": {
+      "modified": 1793113200
+    },
+    "private/Diary.md": {
+      "modified": 1793109600
+    },
+    "private/Health.md": {
+      "modified": 1793106000
+    },
+    "private/Secrets.md": {
+      "modified": 1793102400
+    },
+    "templates/daily.md": {
+      "modified": 1793098800
+    },
+    "todo.md": {
+      "favorite": true,
+      "modified": 1793354400,
+      "id": 1001
+    },
+    "work/Duplicate.md": {
+      "modified": 1793091600
+    },
+    "work/Hiring.md": {
+      "modified": 1793088000
+    },
+    "work/Meeting notes.md": {
+      "modified": 1793084400
+    },
+    "work/Roadmap.md": {
+      "favorite": true,
+      "modified": 1793358000
+    },
+    "work/Standup.md": {
+      "modified": 1793077200
+    },
+    "work/images.md": {
+      "id": 1003,
+      "modified": 1793073600
+    },
+    "work/projects/Duplicate.md": {
+      "modified": 1793070000
+    },
+    "work/projects/Retro.md": {
+      "modified": 1793066400
+    },
+    "work/projects/alpha.md": {
+      "modified": 1793062800
+    },
+    "work/projects/beta.md": {
+      "modified": 1793059200
+    },
+    "work/projects/gamma.md": {
+      "modified": 1793055600
+    }
+  }
+}

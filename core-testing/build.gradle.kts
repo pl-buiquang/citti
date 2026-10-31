@@ -23,6 +23,10 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.atomicfu)
         }
+        // Classpath resource loading (FixtureVault), shared by Android and JVM.
+        val jvmCommonMain by creating { dependsOn(commonMain.get()) }
+        androidMain.get().dependsOn(jvmCommonMain)
+        jvmMain.get().dependsOn(jvmCommonMain)
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
