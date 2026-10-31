@@ -83,7 +83,7 @@ deleteByCategoryPrefix:
 DELETE FROM note WHERE category = :prefix OR substr(category, 1, length(:prefix) + 1) = :prefix || '/';
 
 selectAllForList:
-SELECT * FROM note WHERE sync_state != 'DELETED' ORDER BY favorite DESC, modified DESC;
+SELECT * FROM note WHERE sync_state != 'DELETED' AND hidden = 0 ORDER BY favorite DESC, modified DESC;
 
 countNotes:
 SELECT count(*) FROM note WHERE sync_state != 'DELETED';
@@ -107,3 +107,16 @@ SELECT count(*) FROM note WHERE category = :category AND title = :title AND sync
 
 countConflictCopies:
 SELECT count(*) FROM note WHERE conflict_of IS NOT NULL AND sync_state != 'DELETED';
+
+-- Settings: the Folders known locally (Notes at the Vault root have an empty category).
+selectDistinctCategories:
+SELECT DISTINCT category FROM note WHERE category != '' AND sync_state != 'DELETED' ORDER BY category;
+
+-- Notes in the Folder or below it, for the "delete local Notes" confirm. Pending ones are kept by the sync.
+countUnderPrefix:
+SELECT count(*) FROM note
+WHERE sync_state != 'DELETED' AND (category = :prefix OR substr(category, 1, length(:prefix) + 1) = :prefix || '/');
+
+countPendingUnderPrefix:
+SELECT count(*) FROM note
+WHERE sync_state IN ('DIRTY', 'NEW') AND (category = :prefix OR substr(category, 1, length(:prefix) + 1) = :prefix || '/');

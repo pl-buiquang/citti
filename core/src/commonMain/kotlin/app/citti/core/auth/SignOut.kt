@@ -9,6 +9,11 @@ suspend fun signOut(
 ) {
     // Credentials first: if the wipe fails the app is signed out with stale data, never the reverse.
     store.clear()
+    wipeLocalData(db)
+}
+
+/** Deletes every Note, the sync state, the settings and the exclusions; keeps `meta`. */
+fun wipeLocalData(db: CittiDatabase) {
     db.transaction {
         db.accountQueries.deleteAllNotes()
         db.accountQueries.deleteAllSyncState()

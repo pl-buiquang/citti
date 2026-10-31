@@ -27,6 +27,25 @@ class NoteQueriesTest {
     ) = notes.upsertFromServer(id, etag, title, category, favorite, modified, false, hidden)
 
     @Test
+    fun listHidesHiddenNotesButStillStoresThem() {
+        server(1)
+        server(2, category = "secret", hidden = true)
+        assertEquals(listOf(1L), notes.selectAllForList().executeAsList().mapNotNull { it.remote_id })
+        assertEquals(2, notes.countNotes().executeAsOne())
+    }
+
+    @Test
+    fun distinctCategoriesAndPrefixCounts() {
+        server(1)
+        server(2, category = "a/b")
+        server(3, category = "a/b")
+        server(4, category = "a/bc")
+        assertEquals(listOf("a/b", "a/bc"), notes.selectDistinctCategories().executeAsList())
+        assertEquals(2, notes.countUnderPrefix("a/b").executeAsOne())
+        assertEquals(0, notes.countPendingUnderPrefix("a/b").executeAsOne())
+    }
+
+    @Test
     fun upsertIsIdempotentAndKeepsLocalId() {
         server(1)
         val first = notes.selectByRemoteId(1).executeAsOne()
