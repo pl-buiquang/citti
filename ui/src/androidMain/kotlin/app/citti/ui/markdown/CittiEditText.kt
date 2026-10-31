@@ -255,6 +255,47 @@ internal class CittiEditText(
         requestRectangleOnScreen(rect)
     }
 
+    override fun firstVisibleOffset(): Int {
+        val layout = layout ?: return 0
+        return layout.getLineStart(layout.getLineForVertical(scrollY))
+    }
+
+    override fun scrollToOffset(offset: Int) {
+        whenLaidOut {
+            val layout = layout ?: return@whenLaidOut
+            val line = layout.getLineForOffset(offset.coerceIn(0, text.length))
+            val room = (layout.height + totalPaddingTop + totalPaddingBottom - height).coerceAtLeast(0)
+            scrollTo(0, layout.getLineTop(line).coerceAtMost(room))
+        }
+    }
+
+    /** Runs [action] now, or after the first layout when the text has no [layout] yet. */
+    private fun whenLaidOut(action: () -> Unit) {
+        if (layout != null && height > 0) {
+            action()
+            return
+        }
+        addOnLayoutChangeListener(
+            object : OnLayoutChangeListener {
+                override fun onLayoutChange(
+                    v: android.view.View,
+                    left: Int,
+                    top: Int,
+                    right: Int,
+                    bottom: Int,
+                    oldLeft: Int,
+                    oldTop: Int,
+                    oldRight: Int,
+                    oldBottom: Int,
+                ) {
+                    if (layout == null || height <= 0) return
+                    removeOnLayoutChangeListener(this)
+                    action()
+                }
+            },
+        )
+    }
+
     private companion object {
         const val MARGIN = 6
         const val EDGE = 3

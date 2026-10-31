@@ -161,4 +161,42 @@ class NoteEditorTest {
         assertIs<SaveResult.Conflict>(e.save("b", "e5"))
         assertEquals(1, pushes)
     }
+
+    @Test
+    fun toggleTaskFlipsOnlyTheBox() {
+        val text = "---\ntags: a\n---\n- [ ] one\r\n- [x] two\n"
+        val id = synced(content = text)
+        val e = editor(id).also { it.load() }
+        val box = text.indexOf("[ ]")
+        assertEquals(SaveResult.Saved, e.toggleTask(box, "[ ]", "e1"))
+        val expected = text.substring(0, box + 1) + "x" + text.substring(box + 2)
+        assertEquals(expected, row(id).content)
+        assertEquals(expected, e.savedText)
+        assertEquals("DIRTY", row(id).sync_state)
+        assertEquals(1, pushes)
+        assertEquals(SaveResult.Saved, e.toggleTask(expected.indexOf("[x] two"), "[x]", "e1"))
+        assertEquals(expected.replace("[x] two", "[ ] two"), row(id).content)
+    }
+
+    @Test
+    fun toggleTaskMismatchWritesNothing() {
+        val id = synced(content = "- [ ] one")
+        val e = editor(id).also { it.load() }
+        assertEquals(SaveResult.Mismatch, e.toggleTask(2, "[x]", "e1"))
+        assertEquals(SaveResult.Mismatch, e.toggleTask(100, "[ ]", "e1"))
+        assertEquals("- [ ] one", row(id).content)
+        assertEquals("SYNCED", row(id).sync_state)
+        assertEquals(0, pushes)
+    }
+
+    @Test
+    fun toggleTaskUsesTheEditBase() {
+        val id = synced(content = "- [ ] one")
+        val e = editor(id).also { it.load() }
+        notes.upsertFromServer(1, "e2", "Plan", "work", false, 200, false, false)
+        notes.updateContent("- [ ] one", "e2", id)
+        val result = assertIs<SaveResult.Conflict>(e.toggleTask(2, "[ ]", "e1"))
+        assertEquals("- [x] one", row(result.copyLocalId).content)
+        assertEquals("- [ ] one", row(id).content)
+    }
 }

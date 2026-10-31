@@ -12,6 +12,8 @@ import kotlinx.coroutines.cancel
  */
 class RouteHost(
     private val newScope: () -> CoroutineScope,
+    /** Called with a controller just before its entry is dropped by [retain] or replaced, e.g. to flush a Note's text. */
+    private val onDrop: (Any) -> Unit = {},
 ) {
     private class Entry(
         val route: Route,
@@ -29,7 +31,7 @@ class RouteHost(
         create: (CoroutineScope) -> T,
     ): T {
         entries[index]?.takeIf { it.route.entryId == route.entryId }?.let { return it.controller as T }
-        entries.remove(index)?.scope?.cancel()
+        entries.remove(index)?.drop()
         val scope = newScope()
         return create(scope).also { entries[index] = Entry(route, scope, it) }
     }
@@ -37,8 +39,18 @@ class RouteHost(
     /** Drops the entries that are no longer on [stack] at the same index. */
     fun retain(stack: List<Route>) {
         val gone = entries.filter { (index, entry) -> stack.getOrNull(index)?.entryId != entry.route.entryId }.keys
-        for (index in gone) entries.remove(index)?.scope?.cancel()
+        for (index in gone) entries.remove(index)?.drop()
     }
+
+    private fun Entry.drop() {
+        onDrop(controller)
+        scope.cancel()
+    }
+
+    /** The live controllers of type [T], e.g. to flush every open Note when the app goes to the background. */
+    inline fun <reified T : Any> controllers(): List<T> = allControllers().filterIsInstance<T>()
+
+    fun allControllers(): List<Any> = entries.values.map { it.controller }
 
     /** Sign out or sign in again: every entry goes. */
     fun clear() {

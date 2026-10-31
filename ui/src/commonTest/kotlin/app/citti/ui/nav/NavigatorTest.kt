@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -72,6 +73,20 @@ class NavigatorTest {
             )
         val encoded = Navigator(stack).encode()
         assertEquals(stack, Navigator.decode(encoded))
+    }
+
+    @Test
+    fun aStackSavedBeforeThePreviewToggleDecodesWithDefaults() {
+        val saved = """[{"type":"app.citti.ui.nav.Route.Note","localId":7}]"""
+        assertEquals(listOf<Route>(Route.Note(7)), Navigator.decode(saved))
+        val toggled = Route.Note(7, preview = true, searchQuery = "q")
+        assertEquals(listOf<Route>(toggled), Navigator.decode(Navigator(listOf(toggled)).encode()))
+    }
+
+    @Test
+    fun aNoteKeepsItsEntryWhenTheModeOrPrefillChanges() {
+        assertEquals(Route.Note(7).entryId, Route.Note(7, preview = true, searchQuery = "q").entryId)
+        assertNotEquals(Route.Note(7).entryId, Route.Note(8).entryId)
     }
 
     @Test

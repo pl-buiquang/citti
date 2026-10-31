@@ -3,7 +3,6 @@ package app.citti
 import android.content.Context
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
-import app.cash.sqldelight.coroutines.mapToOneOrNull
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import app.citti.core.api.NotesApi
 import app.citti.core.api.NotesApiConfig
@@ -21,7 +20,8 @@ import app.citti.core.dav.ImageResolver
 import app.citti.core.dav.ObsidianConfig
 import app.citti.core.db.CittiDatabase
 import app.citti.core.note.ExcerptBackfill
-import app.citti.core.note.noteBadgeOf
+import app.citti.core.note.LinkResolver
+import app.citti.core.note.NoteEditor
 import app.citti.core.search.NoteSearch
 import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.SyncSettingsRepository
@@ -35,8 +35,7 @@ import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
 import app.citti.ui.browse.NoteRowItem
 import app.citti.ui.browse.toRowItem
-import app.citti.ui.components.toRowBadge
-import app.citti.ui.note.NoteViewUiState
+import app.citti.ui.note.NoteGateway
 import app.citti.ui.settings.AccountInfo
 import app.citti.ui.settings.CoreSettingsStore
 import io.ktor.client.HttpClient
@@ -233,17 +232,14 @@ class AppContainer(
             .mapToList(Dispatchers.IO)
             .map { rows -> rows.map { it.toRowItem() } }
 
-    /** The Note of the Note screen, or null once it is deleted (a DELETED row awaiting its push counts as gone). */
-    fun noteView(localId: Long): Flow<NoteViewUiState?> =
-        database.noteQueries
-            .selectByLocalId(localId)
-            .asFlow()
-            .mapToOneOrNull(Dispatchers.IO)
-            .map { note ->
-                note?.takeIf { it.sync_state != "DELETED" }?.let {
-                    NoteViewUiState(it.title, it.category, it.content, noteBadgeOf(it.conflict_of, it.sync_state)?.toRowBadge())
-                }
-            }
+    /** The data of one open Note for its [app.citti.ui.note.NoteController]. */
+    fun noteGateway(localId: Long): NoteGateway =
+        DbNoteGateway(
+            database,
+            localId,
+            NoteEditor(database, localId, { System.currentTimeMillis() / 1000 }, ::scheduleAfterEditPush),
+            LinkResolver(database),
+        )
 
     private suspend fun buildStack(credentials: Credentials): SyncStack =
         stackLock.withLock {

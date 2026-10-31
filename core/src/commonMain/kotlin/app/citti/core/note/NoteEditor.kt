@@ -12,6 +12,10 @@ data class EditorDoc(
     val readonly: Boolean,
     val badge: NoteBadge?,
     val conflictCopy: Pair<Long, String>?,
+    /** True while the Note has changes the server does not have (DIRTY, NEW). */
+    val pending: Boolean = false,
+    /** True when this Note is itself a Conflict copy; then [conflictCopy] is its original. */
+    val isConflictCopy: Boolean = false,
 )
 
 /**
@@ -31,14 +35,19 @@ class NoteEditor(
         /** The edit was based on a stale server version; [copyLocalId] holds the text. The row is unchanged. */
         data class Conflict(
             val copyLocalId: Long,
+            val copyTitle: String,
         ) : SaveResult
 
         /** The Note is gone or deleted; [copyLocalId] holds the text (`conflict_of` NULL). */
         data class Gone(
             val copyLocalId: Long,
+            val copyTitle: String,
         ) : SaveResult
 
         data object ReadOnly : SaveResult
+
+        /** [toggleTask] found something else than the expected checkbox at the offset; nothing was written. */
+        data object Mismatch : SaveResult
     }
 
     private val queries = db.noteQueries
@@ -72,40 +81,85 @@ class NoteEditor(
                     null
                 },
             conflictCopy = copy?.let { it.local_id to it.title } ?: original?.let { it.local_id to it.title },
+            pending = row.sync_state != "SYNCED",
+            isConflictCopy = original != null,
         )
     }
+
+    /** The text last read from or written to the row; what [save] compares with to skip a no-op. */
+    val savedText: String? get() = lastSaved
 
     /** Saves [text], based on [baseEtag]. A text equal to the last saved one is a no-op. */
     fun save(
         text: String,
         baseEtag: String?,
+    ): SaveResult = db.transactionWithResult { write(text, baseEtag) }
+
+    /**
+     * Flips the checkbox whose `[` is at [box] (`Task.box`): re-reads the row's text, checks that the three characters
+     * there still equal [expected] (`[ ]` or `[x]`), swaps only the inner one and saves like [save]. Anything else
+     * there writes nothing and gives [SaveResult.Mismatch]. On [SaveResult.Saved] the new text is [savedText].
+     */
+    fun toggleTask(
+        box: Int,
+        expected: String,
+        baseEtag: String?,
     ): SaveResult =
         db.transactionWithResult {
-            val row = queries.selectByLocalId(localId).executeAsOneOrNull()
-            when {
-                // Deleted meanwhile (on the server, or by the user): keep the text, unlinked, in the Folder it was in.
-                row == null || row.sync_state == "DELETED" -> {
-                    SaveResult.Gone(copies.create(title, folder, text, null))
-                }
+            val current =
+                queries
+                    .selectByLocalId(localId)
+                    .executeAsOneOrNull()
+                    ?.takeIf { it.sync_state != "DELETED" }
+                    ?.content
+            if (current == null || box < 0 || box + 3 > current.length || current.substring(box, box + 3) != expected) {
+                SaveResult.Mismatch
+            } else {
+                val inner = if (expected[1] == ' ') 'x' else ' '
+                write(current.substring(0, box + 1) + inner + current.substring(box + 2), baseEtag)
+            }
+        }
 
-                row.readonly -> {
-                    SaveResult.ReadOnly
-                }
+    private fun write(
+        text: String,
+        baseEtag: String?,
+    ): SaveResult {
+        val row = queries.selectByLocalId(localId).executeAsOneOrNull()
+        return when {
+            // Deleted meanwhile (on the server, or by the user): keep the text, unlinked, in the Folder it was in.
+            row == null || row.sync_state == "DELETED" -> {
+                copy(title, folder, text, null) { id, name -> SaveResult.Gone(id, name) }
+            }
 
-                text == lastSaved -> {
+            row.readonly -> {
+                SaveResult.ReadOnly
+            }
+
+            text == lastSaved -> {
+                SaveResult.Saved
+            }
+
+            else -> {
+                val changed = queries.saveEdit(text, excerptOf(text, row.title), clock(), localId, baseEtag).value
+                if (changed > 0) {
+                    lastSaved = text
+                    afterEdit()
                     SaveResult.Saved
-                }
-
-                else -> {
-                    val changed = queries.saveEdit(text, excerptOf(text, row.title), clock(), localId, baseEtag).value
-                    if (changed > 0) {
-                        lastSaved = text
-                        afterEdit()
-                        SaveResult.Saved
-                    } else {
-                        SaveResult.Conflict(copies.create(row.title, row.category, text, localId))
-                    }
+                } else {
+                    copy(row.title, row.category, text, localId) { id, name -> SaveResult.Conflict(id, name) }
                 }
             }
         }
+    }
+
+    private fun copy(
+        title: String,
+        category: String,
+        text: String,
+        conflictOf: Long?,
+        result: (Long, String) -> SaveResult,
+    ): SaveResult {
+        val id = copies.create(title, category, text, conflictOf)
+        return result(id, queries.selectByLocalId(id).executeAsOne().title)
+    }
 }

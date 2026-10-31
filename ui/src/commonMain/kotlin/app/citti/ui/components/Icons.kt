@@ -29,7 +29,7 @@ import kotlin.math.sin
  * Outline icons on a 24-unit grid with a 2-unit stroke (design-system README › Iconography), drawn
  * with Canvas so `:ui` needs no icon library.
  */
-enum class CittiIcon { Menu, Back, Close, Search, Folder, Chevron, Star, Settings }
+enum class CittiIcon { Menu, Back, Close, Search, Folder, Chevron, Star, Settings, Undo, Redo, Eye, Pencil }
 
 /** Decorative icon (no semantics): pair it with a label, or use [IconButton]. */
 @Composable
@@ -131,6 +131,26 @@ private fun DrawScope.drawIcon(
                 val a = i * PI.toFloat() / 4f
                 line(12f + 6.5f * cos(a), 12f + 6.5f * sin(a), 12f + 9.5f * cos(a), 12f + 9.5f * sin(a))
             }
+        }
+
+        CittiIcon.Undo -> {
+            path(9f to 5f, 4f to 10f, 9f to 15f)
+            path(4f to 10f, 14f to 10f, 20f to 14f, 20f to 19f)
+        }
+
+        CittiIcon.Redo -> {
+            path(15f to 5f, 20f to 10f, 15f to 15f)
+            path(20f to 10f, 10f to 10f, 4f to 14f, 4f to 19f)
+        }
+
+        CittiIcon.Eye -> {
+            path(2f to 12f, 7f to 6.5f, 12f to 5f, 17f to 6.5f, 22f to 12f, 17f to 17.5f, 12f to 19f, 7f to 17.5f, close = true)
+            drawCircle(color, radius = 3f * u, center = p(12f, 12f), style = stroke)
+        }
+
+        CittiIcon.Pencil -> {
+            path(4f to 20f, 5f to 15f, 16f to 4f, 20f to 8f, 9f to 19f, close = true)
+            line(13f, 7f, 17f, 11f)
         }
 
         CittiIcon.Star -> {

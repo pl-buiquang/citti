@@ -2,6 +2,8 @@ package app.citti.ui.markdown
 
 import app.citti.core.markdown.Selection
 import app.citti.core.markdown.ToolbarAction
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -42,6 +44,14 @@ private class FakeHost(
     override fun selection() = sel
 
     override fun scrollToCaret() = Unit
+
+    var top = 0
+
+    override fun firstVisibleOffset() = top
+
+    override fun scrollToOffset(offset: Int) {
+        top = offset
+    }
 
     /** What the user typing [s] at the caret does. */
     fun type(s: String) {
@@ -129,5 +139,41 @@ class EditorStateTest {
         state.attach(host)
         assertEquals(Selection(2), host.sel)
         assertEquals("later", host.text)
+    }
+
+    @Test
+    fun aNoteOpensScrolledToItsEnd() {
+        open("one\ntwo\nthree")
+        assertEquals(13, host.top)
+    }
+
+    @Test
+    fun theScrollPositionSurvivesTheViewAndAReplacementKeepsItsLine() {
+        open("a\nb\nc\nd")
+        state.scrollTo(4)
+        assertEquals(4, host.top)
+        state.detach(host)
+        assertEquals(4, state.firstVisibleOffset())
+        host = FakeHost { state }
+        state.attach(host)
+        assertEquals(4, host.top)
+        // Line 2 stays at the top when the text is replaced.
+        state.replaceAll("xx\nyy\nzz\nww", caret = 0)
+        assertEquals(6, host.top)
+    }
+
+    @Test
+    fun editsAreTheUsersAndReplaceAllIsNot() {
+        open("a")
+        var edits = 0
+        var changes = 0
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined)
+        scope.launch { state.edits.collect { edits++ } }
+        scope.launch { state.changes.collect { changes++ } }
+        host.type("b")
+        state.replaceAll("server")
+        assertEquals(1, edits)
+        assertEquals(2, changes)
+        scope.cancel()
     }
 }

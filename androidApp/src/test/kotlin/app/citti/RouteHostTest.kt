@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 
 class RouteHostTest {
     private val scopes = mutableListOf<CoroutineScope>()
-    private val host = RouteHost { CoroutineScope(Job()).also { scopes += it } }
+    private val host = RouteHost(newScope = { CoroutineScope(Job()).also { scopes += it } })
 
     @Test
     fun sameEntryKeepsItsController() {
@@ -29,6 +29,18 @@ class RouteHostTest {
         host.retain(listOf(Route.List()))
         assertFalse(scopes.single().isActive)
         assertEquals(0, host.size)
+    }
+
+    @Test
+    fun aNoteKeepsItsControllerWhenItsModeChangesAndIsFlushedWhenItLeaves() {
+        val dropped = mutableListOf<Any>()
+        val noteHost = RouteHost({ CoroutineScope(Job()).also { scopes += it } }, onDrop = { dropped += it })
+        val a = noteHost.controller(1, Route.Note(4)) { Any() }
+        assertSame(a, noteHost.controller(1, Route.Note(4, preview = true)) { Any() })
+        noteHost.retain(listOf(Route.List(), Route.Note(4, preview = true)))
+        assertTrue(dropped.isEmpty())
+        noteHost.retain(listOf(Route.List()))
+        assertEquals(listOf(a), dropped)
     }
 
     @Test

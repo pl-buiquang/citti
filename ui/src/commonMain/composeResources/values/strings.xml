@@ -59,8 +59,28 @@
     <string name="empty_favorites">No favorites</string>
     <string name="empty_folder">This folder is empty</string>
 
-    <!-- Note (read-only) -->
+    <!-- Note -->
     <string name="note_downloading">Downloading…</string>
+    <string name="note_not_downloaded">Not downloaded yet. Connect to load this note.</string>
+    <string name="note_preview">Preview</string>
+    <string name="note_edit">Edit</string>
+    <string name="note_undo">Undo</string>
+    <string name="note_redo">Redo</string>
+    <string name="note_readonly">Read-only</string>
+    <string name="save_saved">Saved</string>
+    <string name="save_pending">Pending</string>
+    <string name="save_syncing">Syncing</string>
+    <string name="save_offline">Offline (will sync)</string>
+    <string name="save_failed">Sync failed</string>
+    <string name="properties">Properties</string>
+    <string name="link_missing">No note named “%s”</string>
+    <string name="link_unsynced">Not synced on this device</string>
+    <string name="action_open_exclusions">Change in Settings › Exclusions</string>
+    <string name="conflict_banner">Your version was saved as “%s”</string>
+    <string name="conflict_copy_of">Conflict copy of “%s”</string>
+    <string name="action_open">Open</string>
+    <string name="conflict_snackbar">Changed on the server. Your text was saved as “%s”</string>
+    <string name="deleted_snackbar">This note was deleted. Your text was saved as “%s”</string>
     <string name="toolbar_bold">Bold</string>
     <string name="toolbar_italic">Italic</string>
     <string name="toolbar_heading">Heading</string>

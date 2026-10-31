@@ -23,9 +23,15 @@ sealed interface Route {
         val query: String = "",
     ) : Route
 
+    /**
+     * A Note. [preview] is the Edit/Preview toggle of this entry (`replaceTop`, so it survives process death without
+     * becoming a back stack entry); [searchQuery] is the Search query that opened it (used by in-note search).
+     */
     @Serializable
     data class Note(
         val localId: Long,
+        val preview: Boolean = false,
+        val searchQuery: String? = null,
     ) : Route
 
     @Serializable
@@ -34,6 +40,12 @@ sealed interface Route {
 
 /**
  * What identifies a back stack entry for its controller and saved UI state: the route itself, except that a
- * Search entry stays the same entry while its query changes.
+ * Search entry stays the same entry while its query changes and a Note entry while its mode or prefill changes.
  */
-val Route.entryId: Route get() = if (this is Route.Search) Route.Search() else this
+val Route.entryId: Route
+    get() =
+        when (this) {
+            is Route.Search -> Route.Search()
+            is Route.Note -> Route.Note(localId)
+            else -> this
+        }

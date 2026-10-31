@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,6 +27,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.MainMode
@@ -36,6 +38,9 @@ import app.citti.ui.browse.BrowseScreen
 import app.citti.ui.browse.BrowseView
 import app.citti.ui.browse.DrawerActions
 import app.citti.ui.components.CittiDrawer
+import app.citti.ui.components.Snack
+import app.citti.ui.components.SnackbarHost
+import app.citti.ui.components.SnackbarState
 import app.citti.ui.components.breadcrumbPaths
 import app.citti.ui.components.rememberCittiDrawerState
 import app.citti.ui.login.LoginController
@@ -44,9 +49,9 @@ import app.citti.ui.login.LoginScreen
 import app.citti.ui.nav.Navigator
 import app.citti.ui.nav.Route
 import app.citti.ui.nav.entryId
-import app.citti.ui.note.NoteViewController
-import app.citti.ui.note.NoteViewScreen
-import app.citti.ui.note.NoteViewState
+import app.citti.ui.note.NoteActions
+import app.citti.ui.note.NoteController
+import app.citti.ui.note.NoteScreen
 import app.citti.ui.search.SearchActions
 import app.citti.ui.search.SearchController
 import app.citti.ui.search.SearchScreen
@@ -78,7 +83,10 @@ class MainActivity : ComponentActivity() {
     private var browseScope: CoroutineScope? = null
 
     /** The controllers of the other route entries (Search, Note, Settings), one scope each. */
-    private val routes = RouteHost(::newScope)
+    private val routes = RouteHost(::newScope, onDrop = { (it as? NoteController)?.onLeave() })
+
+    /** The one snackbar of the app; it outlives a Note that pops itself. */
+    private val snackbars = SnackbarState()
 
     /** [reportFullyDrawn] is called once per Activity, when the first List rows are on screen. */
     private var fullyDrawn = false
@@ -147,14 +155,27 @@ class MainActivity : ComponentActivity() {
         BackHandler(enabled = stack.size > 1) { navigator.pop() }
         val index = stack.lastIndex
         val route = stack.last()
-        saved.SaveableStateProvider(entryKey(index, route)) {
-            when (route) {
-                is Route.List, is Route.Tree -> BrowseRoute(navigator, route)
-                Route.Settings -> SettingsRoute(navigator, index)
-                is Route.Search -> SearchRoute(navigator, index, route)
-                is Route.Note -> NoteRoute(navigator, index, route, root)
+        Box(Modifier.fillMaxSize()) {
+            saved.SaveableStateProvider(entryKey(index, route)) {
+                when (route) {
+                    is Route.List, is Route.Tree -> BrowseRoute(navigator, route)
+                    Route.Settings -> SettingsRoute(navigator, index)
+                    is Route.Search -> SearchRoute(navigator, index, route)
+                    is Route.Note -> NoteRoute(navigator, index, route, root)
+                }
             }
+            SnackbarHost(
+                snackbars,
+                onAction = { if (it == Snack.LinkUnsynced) navigator.push(Route.Settings) },
+                modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding(),
+            )
         }
+    }
+
+    // The text of an open Note is written when the app leaves the foreground, not only when the screen closes.
+    override fun onStop() {
+        routes.controllers<NoteController>().forEach { it.onLeave() }
+        super.onStop()
     }
 
     private fun entryKey(
@@ -310,15 +331,34 @@ class MainActivity : ComponentActivity() {
         route: Route.Note,
         root: Route,
     ) {
-        val controller = remember(index) { routes.controller(index, route) { NoteViewController(it, container.noteView(route.localId)) } }
+        val controller = remember(index) { routes.controller(index, route) { newNoteController(it, route, navigator) } }
+        LaunchedEffect(controller, route) { controller.show(route) }
         val state by controller.state.collectAsState()
-        LaunchedEffect(state) {
-            if (state == NoteViewState.Gone && navigator.top == route && !navigator.pop()) navigator.reset(listOf(root))
+        LaunchedEffect(state.gone) {
+            if (state.gone && navigator.top.entryId == route.entryId && !navigator.pop()) navigator.reset(listOf(root))
         }
-        NoteViewScreen(
-            note = (state as? NoteViewState.Shown)?.note,
-            listState = rememberLazyListState(),
-            onBack = { navigator.pop() },
+        val leave = {
+            controller.onLeave()
+            navigator.pop()
+            Unit
+        }
+        BackHandler(onBack = leave)
+        NoteScreen(
+            state = state,
+            editor = controller.editor,
+            previewListState = rememberLazyListState(),
+            actions =
+                NoteActions(
+                    onBack = leave,
+                    onTogglePreview = controller::togglePreview,
+                    onUndo = controller::undo,
+                    onRedo = controller::redo,
+                    onToolbar = controller::onToolbar,
+                    onTask = controller::onTaskToggle,
+                    onLink = controller::onLink,
+                    onOpenConflict = controller::openConflict,
+                    onSignInAgain = { signInAgain() },
+                ),
         )
     }
 
@@ -369,6 +409,21 @@ class MainActivity : ComponentActivity() {
             endSession()
         }
     }
+
+    private fun newNoteController(
+        scope: CoroutineScope,
+        route: Route.Note,
+        navigator: Navigator,
+    ) = NoteController(
+        scope = scope,
+        leaveScope = container.appScope,
+        gateway = container.noteGateway(route.localId),
+        status = container.syncStatus,
+        route = route,
+        navigator = navigator,
+        notify = snackbars::show,
+        clockMs = System::currentTimeMillis,
+    )
 
     private fun newScope() = CoroutineScope(SupervisorJob(container.appScope.coroutineContext[Job]) + Dispatchers.Default)
 

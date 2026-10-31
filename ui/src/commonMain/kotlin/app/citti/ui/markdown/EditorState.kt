@@ -40,6 +40,12 @@ interface EditorHost {
     fun selection(): Selection
 
     fun scrollToCaret()
+
+    /** Source offset of the first line that shows at the top of the view. */
+    fun firstVisibleOffset(): Int
+
+    /** Scrolls so that the line holding [offset] is at the top (as far as the text allows). */
+    fun scrollToOffset(offset: Int)
 }
 
 /**
@@ -57,12 +63,20 @@ class EditorState(
 
     private var host: EditorHost? = null
     private var pendingCaret = caret
+
+    // Where the view scrolls to when it attaches; null is the caret (a Note opens at its end).
+    private var pendingScroll: Int? = null
     private val history = EditorHistory()
 
     private val _changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     /** Emits after each change of the text, whoever made it. */
     val changes: SharedFlow<Unit> = _changes
+
+    private val _edits = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** Emits after each change made by the user (typing, toolbar, Enter, undo, redo), not by [replaceAll]: the saves follow these. */
+    val edits: SharedFlow<Unit> = _edits
 
     private val _canUndo = MutableStateFlow(false)
     val canUndo: StateFlow<Boolean> = _canUndo
@@ -85,11 +99,14 @@ class EditorState(
     fun attach(host: EditorHost) {
         this.host = host
         host.setAll(document.text(), pendingCaret.coerceIn(0, document.length))
+        host.scrollToOffset(pendingScroll ?: pendingCaret)
+        pendingScroll = null
     }
 
     fun detach(host: EditorHost) {
         if (this.host === host) {
             pendingCaret = host.selection().start
+            pendingScroll = host.firstVisibleOffset()
             this.host = null
         }
     }
@@ -99,10 +116,14 @@ class EditorState(
         text: String,
         caret: Int = text.length,
     ) {
+        val h = host
+        // The scroll position stays on the same line number.
+        val topLine = h?.let { document.lineOf(it.firstVisibleOffset().coerceIn(0, document.length)) }
         document = MarkdownDocument(text)
         history.clear()
         pendingCaret = caret.coerceIn(0, text.length)
-        host?.setAll(text, pendingCaret)
+        h?.setAll(text, pendingCaret)
+        if (h != null && topLine != null) h.scrollToOffset(document.lineStart(topLine.coerceAtMost(document.lineCount - 1)))
         publishHistory()
         updatePressed()
         _changes.tryEmit(Unit)
@@ -117,6 +138,16 @@ class EditorState(
         selectionAfter: Selection,
     ) {
         committed(start, removed, inserted, selectionBefore, selectionAfter, record = true)
+    }
+
+    /** Source offset of the first visible line (or where the view will scroll to when it attaches). */
+    fun firstVisibleOffset(): Int = host?.firstVisibleOffset() ?: pendingScroll ?: pendingCaret
+
+    /** Scrolls the view, or the view that attaches next, so that the line holding [offset] is at the top. */
+    fun scrollTo(offset: Int) {
+        val at = offset.coerceIn(0, document.length)
+        pendingScroll = at
+        host?.scrollToOffset(at)
     }
 
     fun selectionChanged() = updatePressed()
@@ -188,6 +219,7 @@ class EditorState(
         }
         updatePressed()
         _changes.tryEmit(Unit)
+        _edits.tryEmit(Unit)
     }
 
     private fun publishHistory() {
