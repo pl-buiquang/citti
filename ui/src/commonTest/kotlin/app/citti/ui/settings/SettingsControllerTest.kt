@@ -115,6 +115,7 @@ private class FakeDailyStore : DailySettingsStore {
 
     override suspend fun setFormat(format: String): FormatResult {
         if ('/' in format || '\\' in format) return FormatResult.Slash
+        if (':' in format) return FormatResult.InvalidTitle(NameError.UnsafeCharacter)
         if ("D" !in format || "M" !in format || "Y" !in format) return FormatResult.RoundTrip
         config.update { it.copy(format = format) }
         return FormatResult.Saved(format)
@@ -399,6 +400,9 @@ class SettingsControllerTest {
             c.onFormat("YYYY/MM/DD")
             assertEquals(FormatResult.Slash, c.state.value.daily.formatError)
             assertEquals("YYYY/MM/DD", c.state.value.daily.format)
+            assertEquals("DD.MM.YYYY", daily.config.value.format)
+            c.onFormat("YYYY-MM-DD HH:mm")
+            assertEquals(FormatResult.InvalidTitle(NameError.UnsafeCharacter), c.state.value.daily.formatError)
             assertEquals("DD.MM.YYYY", daily.config.value.format)
             c.onFormat("YYYY-MM")
             assertEquals(FormatResult.RoundTrip, c.state.value.daily.formatError)

@@ -102,6 +102,11 @@ sealed interface FormatResult {
 
     /** A date written in the format can't be read back (no day, month or year, for example). */
     data object RoundTrip : FormatResult
+
+    /** A date written in the format isn't a valid Note title ([NameError.UnsafeCharacter] for `:`, for example). */
+    data class InvalidTitle(
+        val error: NameError,
+    ) : FormatResult
 }
 
 /**
@@ -173,8 +178,9 @@ class DailySettings(
     fun format(): String = queries.selectSetting(KEY_DAILY_FORMAT).executeAsOneOrNull() ?: DEFAULT_DAILY_FORMAT
 
     /**
-     * Sets the Date format; blank resets it to [DEFAULT_DAILY_FORMAT]. Refuses `/` and `\`, and a format that the
-     * check dates don't survive a round trip through ([MomentFormat] with the manual or detected Date locale).
+     * Sets the Date format; blank resets it to [DEFAULT_DAILY_FORMAT]. Refuses `/` and `\`, a format that writes a
+     * check date as an invalid Note title ([NameRules.validateTitle]), and one that the check dates don't survive a
+     * round trip through ([MomentFormat] with the manual or detected Date locale).
      */
     fun setFormat(format: String): FormatResult {
         if (format.isBlank()) {
@@ -184,6 +190,10 @@ class DailySettings(
         if (format.any { it == '/' || it == '\\' }) return FormatResult.Slash
         val config = config()
         val locale = DateLocales.forCode(config.locale ?: config.localeDetected)
+        FORMAT_CHECK_DATES
+            .firstNotNullOfOrNull { date ->
+                NameRules.validateTitle(MomentFormat.format(date, LocalTime(0, 0), format, locale))
+            }?.let { return FormatResult.InvalidTitle(it) }
         val roundTrips =
             FORMAT_CHECK_DATES.all { date ->
                 MomentFormat.parse(MomentFormat.format(date, LocalTime(0, 0), format, locale), format, locale) == date
@@ -233,6 +243,8 @@ class DailySettings(
         }
 
     fun setTemplateCache(cache: TemplateCache) = queries.upsertSetting(KEY_DAILY_TEMPLATE_CACHE, json.encodeToString(cache))
+
+    fun clearTemplateCache() = queries.deleteSetting(KEY_DAILY_TEMPLATE_CACHE)
 
     /** True once Import from Obsidian ran automatically. */
     fun importDone(): Boolean = queries.selectSetting(KEY_DAILY_IMPORT_DONE).executeAsOneOrNull() != null

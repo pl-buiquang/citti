@@ -72,6 +72,15 @@ object MomentFormat {
         return date.takeIf { format(it, time, pattern, locale) == text }
     }
 
+    /**
+     * True when [pattern] writes something that depends on the Date locale: a month or weekday name, or the locale
+     * week (`ww`, `w`). A pattern without them gives the same text in every Date locale.
+     */
+    fun usesLocale(pattern: String): Boolean = parts(pattern).any { it is Part.Field && it.token in localeTokens }
+
+    private val localeTokens =
+        setOf(Token.MONTH_NAME, Token.MONTH_SHORT, Token.WEEKDAY_NAME, Token.WEEKDAY_SHORT, Token.WEEK_2, Token.WEEK)
+
     /** Moment's `weekOfYear(mom, dow, doy)`, ported as is: the week number and the year that week belongs to. */
     internal fun weekOfYear(
         date: LocalDate,

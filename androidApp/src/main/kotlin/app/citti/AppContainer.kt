@@ -15,8 +15,12 @@ import app.citti.core.auth.LoginFlow
 import app.citti.core.auth.prepareForSignIn
 import app.citti.core.auth.signOut
 import app.citti.core.daily.DailyGuard
+import app.citti.core.daily.DailyIndex
+import app.citti.core.daily.DailyNotes
 import app.citti.core.daily.ImportReport
+import app.citti.core.daily.LocaleDetector
 import app.citti.core.daily.ObsidianDailyImport
+import app.citti.core.daily.TemplateSource
 import app.citti.core.dav.DavClient
 import app.citti.core.dav.DavSetup
 import app.citti.core.dav.ImageResolver
@@ -88,7 +92,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.TimeZone
 import okio.Path.Companion.toOkioPath
+import java.util.Locale
 
 /**
  * The app's object graph, held by [CittiApp]. Everything is built lazily on first use.
@@ -136,6 +142,12 @@ class AppContainer(
     val dailySettingsStore: DailySettingsStore by lazy {
         CoreDailySettingsStore(dailySettings, dailyGuard, exclusions, LinkResolver(database), { stack.value?.dailyImport }, Dispatchers.IO)
     }
+
+    /** The Date locale of Daily notes: the setting, else detected from the Journal folder, else the phone's language. */
+    val localeDetector: LocaleDetector by lazy { LocaleDetector(database, dailySettings) { Locale.getDefault().language } }
+
+    /** The Daily notes of the Journal folder by date, for the Calendar; works offline from the local DB. */
+    val dailyIndex: DailyIndex by lazy { DailyIndex(database, localeDetector) }
 
     val settingsStore: CoreSettingsStore by lazy { CoreSettingsStore(syncSettings, exclusions, imageSettings) }
 
@@ -198,6 +210,7 @@ class AppContainer(
         val uploader: ImageUploader,
         val actions: NoteActions,
         val dailyImport: ObsidianDailyImport,
+        val dailyNotes: DailyNotes,
     )
 
     private val stackLock = Mutex()
@@ -365,6 +378,9 @@ class AppContainer(
     /** Every Note creation goes through it (ADR 0006); null while signed out. */
     fun noteCreator(): NoteCreator? = stack.value?.creator
 
+    /** Today and the Calendar open or create Daily notes through it; null while signed out. */
+    fun dailyNotes(): DailyNotes? = stack.value?.dailyNotes
+
     /** Favorite, Rename, Move, Delete and Note info of the ⋮ menu; null while signed out. */
     fun noteActions(): NoteActions? = stack.value?.actions
 
@@ -422,7 +438,22 @@ class AppContainer(
             val creator = NoteCreator(database, engine, appScope, exclusions, afterEdit::schedule, now)
             val actions = NoteActions(database, creator, exclusions, afterEdit::schedule, now)
             val dailyImport = ObsidianDailyImport(dav, dailySettings)
-            SyncStack(client, engine, afterEdit, dav, images, creator, uploader, actions, dailyImport).also { stack.value = it }
+            val templates = TemplateSource(database, api, dav, dailySettings, engine::fetchContent, appScope, AndroidSyncLog)
+            val dailyNotes =
+                DailyNotes(
+                    database,
+                    dailySettings,
+                    creator,
+                    templates,
+                    localeDetector,
+                    engine::fetchContent,
+                    exclusions,
+                    appScope,
+                    clock = config.clock::now,
+                    zone = { TimeZone.of(config.timeZone().id) },
+                )
+            SyncStack(client, engine, afterEdit, dav, images, creator, uploader, actions, dailyImport, dailyNotes)
+                .also { stack.value = it }
         }
 
     /** No sync is running and no push after an edit is pending (signed out counts as idle). For the E2E idling resource. */

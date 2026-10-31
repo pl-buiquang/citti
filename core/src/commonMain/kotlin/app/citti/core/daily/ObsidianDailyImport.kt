@@ -37,7 +37,8 @@ sealed interface Refusal {
         override val key: String get() = IMPORT_FOLDER
     }
 
-    /** The Date format is refused: [result] is [FormatResult.Slash] or [FormatResult.RoundTrip]. */
+    /** The Date format is refused: [result] is [FormatResult.Slash], [FormatResult.InvalidTitle] or
+     * [FormatResult.RoundTrip]. */
     data class Format(
         override val value: String,
         val result: FormatResult,

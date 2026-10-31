@@ -38,6 +38,17 @@ class LocaleDetector(
         return DateLocales.forCode(code)
     }
 
+    /**
+     * The Date locales a Daily note title may be written in, without running detection: the manual or detected one
+     * when known, else all of them, the phone's first. Reading titles (the Calendar, the Dropped wording) tries them
+     * in order.
+     */
+    fun readingLocales(config: DailyConfig): List<DateLocale> {
+        (config.locale ?: config.localeDetected)?.let { return listOf(DateLocales.forCode(it)) }
+        val phone = phoneLocale()
+        return listOfNotNull(phone) + DateLocales.all.filter { it != phone }
+    }
+
     /** The Date locale code the Journal folder's notes are written in, stored on success; null without a decision. */
     internal fun detect(config: DailyConfig): String? {
         val dated =
@@ -82,11 +93,7 @@ class LocaleDetector(
     private fun dateOf(
         title: String,
         format: String,
-    ): LocalDate? {
-        val phone = phoneLocale()
-        val locales = listOfNotNull(phone) + DateLocales.all.filter { it != phone }
-        return locales.firstNotNullOfOrNull { MomentFormat.parse(title, format, it) }
-    }
+    ): LocalDate? = readingLocales(DailyConfig(format = format)).firstNotNullOfOrNull { MomentFormat.parse(title, format, it) }
 
     private class DatedLine(
         val date: LocalDate,

@@ -175,11 +175,7 @@ internal fun DailyNotesSection(
         modifier = Modifier.testTag(TestTags.SETTINGS_DATE_FORMAT),
         keyboardType = KeyboardType.Ascii,
         error =
-            when (state.formatError) {
-                FormatResult.Slash -> stringResource(Res.string.format_error_slash)
-                FormatResult.RoundTrip -> stringResource(Res.string.format_error_roundtrip)
-                is FormatResult.Saved, null -> null
-            },
+            state.formatError?.let { formatErrorText(it) },
     )
     BasicText(
         stringResource(Res.string.settings_date_format_example, state.formatExample),
@@ -381,6 +377,16 @@ private fun refusalReason(refusal: Refusal): String =
         }
 
         is Refusal.Format -> {
-            stringResource(if (refusal.result == FormatResult.Slash) Res.string.format_error_slash else Res.string.format_error_roundtrip)
+            formatErrorText(refusal.result).orEmpty()
         }
+    }
+
+/** The text of a refused Date format; null for [FormatResult.Saved]. */
+@Composable
+private fun formatErrorText(result: FormatResult): String? =
+    when (result) {
+        FormatResult.Slash -> stringResource(Res.string.format_error_slash)
+        FormatResult.RoundTrip -> stringResource(Res.string.format_error_roundtrip)
+        is FormatResult.InvalidTitle -> nameErrorText(result.error)
+        is FormatResult.Saved -> null
     }

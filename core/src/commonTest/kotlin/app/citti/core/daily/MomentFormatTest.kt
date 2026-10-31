@@ -143,6 +143,16 @@ class MomentFormatTest {
     }
 
     @Test
+    fun usesLocaleSpotsNamesAndLocaleWeeks() {
+        listOf("YYYY-MM-DD", "DD.MM.YYYY", "YYYY-[W]WW", "Q HH:mm", "[MMMM dddd ww]").forEach {
+            assertEquals(false, MomentFormat.usesLocale(it), it)
+        }
+        listOf("D MMMM YYYY", "D MMM", "dddd", "ddd", "YYYY-[W]ww", "w").forEach {
+            assertEquals(true, MomentFormat.usesLocale(it), it)
+        }
+    }
+
+    @Test
     fun unknownCodesFallBackToEn() {
         assertEquals(DateLocales.en, DateLocales.forCode("ja"))
         assertEquals(DateLocales.en, DateLocales.forCode(null))
