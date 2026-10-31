@@ -30,6 +30,8 @@ The spec lives in the vault, `~/Nextcloud/Notes/projects/citti/`:
 - **Images and other Vault files go through `DavClient`**; never build a WebDAV URL by hand.
 - **Search goes through `note_fts`** (ADR 0007): never query `content` with LIKE.
 - **Every HTTP client is built from `AppConfig.httpEngine`**, so the E2E fake sees every request (a request it does not route fails the test).
+- **Dates go through kotlinx-datetime and `MomentFormat`**; never format a Daily note title or a Template date any other way.
+- **The Journal folder can never be an Unsynced folder** (`ExclusionRepository.add`, `DailySettings.setFolder`).
 
 ## Commands
 

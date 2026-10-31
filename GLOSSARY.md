@@ -43,8 +43,20 @@ A note whose text, with its placeholders filled in, becomes the starting text of
 _Avoid_: Snippet, boilerplate
 
 **Calendar**:
-The month view that shows which days have a Daily note and opens or creates one.
+The third main view, next to List and Tree mode, that shows which days have a Daily note and opens or creates one.
 _Avoid_: Agenda, date picker
+
+**Today button**:
+The button next to New note that opens or creates today's Daily note.
+_Avoid_: Daily button, journal button
+
+**Date format**:
+The pattern, in Moment.js tokens, that turns a date into a Daily note's title.
+_Avoid_: Date pattern, file name format
+
+**Date locale**:
+The language used for month and weekday names when a Template is filled in; detected from the journal unless set by hand.
+_Avoid_: Locale (alone), language
 
 ## Visibility
 
