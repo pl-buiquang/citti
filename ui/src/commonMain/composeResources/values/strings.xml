@@ -61,6 +61,12 @@
 
     <!-- Note (read-only) -->
     <string name="note_downloading">Downloading…</string>
+    <string name="toolbar_bold">Bold</string>
+    <string name="toolbar_italic">Italic</string>
+    <string name="toolbar_heading">Heading</string>
+    <string name="toolbar_list">List</string>
+    <string name="toolbar_checkbox">Checkbox</string>
+    <string name="toolbar_link">Link</string>
 
     <!-- Sync status line and banners -->
     <string name="sync_syncing">Syncing</string>
