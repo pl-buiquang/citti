@@ -41,6 +41,28 @@
                 android:resource="@xml/favorites_widget_info" />
         </receiver>
 
+        <receiver
+            android:name=".widget.NoteWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_note_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/note_widget_info" />
+        </receiver>
+
+        <!-- The launcher starts it when a Note widget is placed or reconfigured. -->
+        <activity
+            android:name=".widget.NotePickerActivity"
+            android:excludeFromRecents="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <!-- Insert image: the camera app writes its shot into cacheDir/camera/ through this provider. No CAMERA
              permission: with it declared but not granted, ACTION_IMAGE_CAPTURE throws. -->
         <provider

@@ -5,4 +5,12 @@
     <string name="widget_favorites_empty">No favorites yet. Star notes in Nextcloud Notes.</string>
     <string name="widget_signed_out">Sign in to citti</string>
     <string name="widget_root_folder">Notes</string>
+    <string name="widget_note_name">Note</string>
+    <string name="widget_note_description">One note, where you left it.</string>
+    <string name="widget_note_more">Open to read more</string>
+    <string name="widget_note_gone">Note not available. Tap to pick another.</string>
+    <string name="widget_note_downloading">Downloading…</string>
+    <string name="picker_title">Pick a note</string>
+    <string name="picker_signed_out">Sign in to citti first.</string>
+    <string name="picker_open_app">Open citti</string>
 </resources>

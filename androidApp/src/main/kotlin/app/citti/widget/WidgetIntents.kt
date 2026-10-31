@@ -1,5 +1,6 @@
 package app.citti.widget
 
+import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -18,6 +19,15 @@ object WidgetIntents {
         context: Context,
         resume: Boolean,
     ): Intent = view(context, DeepLink.dailyUri(resume))
+
+    /** The Note picker of one widget. The data makes the PendingIntent distinct per widget (extras are ignored for that). */
+    fun picker(
+        context: Context,
+        appWidgetId: Int,
+    ): Intent =
+        Intent(context, NotePickerActivity::class.java)
+            .setData(Uri.parse("citti://picker/$appWidgetId"))
+            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
 
     /** Opens the app where it was. */
     fun app(context: Context): Intent = Intent(context, MainActivity::class.java)

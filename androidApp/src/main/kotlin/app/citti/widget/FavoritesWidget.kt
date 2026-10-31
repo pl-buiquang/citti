@@ -24,6 +24,7 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
 import androidx.glance.text.Text
+import app.citti.AppContainer
 import app.citti.CittiApp
 import app.citti.R
 import app.citti.ui.theme.NotesSpacing
@@ -57,12 +58,21 @@ class FavoritesWidgetReceiver : GlanceAppWidgetReceiver() {
 
 /** Reads the local DB only; never the network. */
 internal suspend fun loadFavoritesState(context: Context): FavoritesState {
-    val container = (context.applicationContext as CittiApp).container
-    // Right after a cold start the stored credentials are still being read.
-    val signedIn = withTimeoutOrNull(SIGNED_IN_WAIT_MS) { container.signedIn.filterNotNull().first() }
-    if (signedIn != true) return FavoritesState.SignedOut
-    return FavoritesState.Loaded(container.favoriteWidgetRows())
+    if (!isSignedIn(context)) return FavoritesState.SignedOut
+    return FavoritesState.Loaded(context.container().favoriteWidgetRows())
 }
+
+internal fun Context.container(): AppContainer = (applicationContext as CittiApp).container
+
+/** Right after a cold start the stored credentials are still being read, so wait for them briefly. */
+internal suspend fun isSignedIn(context: Context): Boolean =
+    withTimeoutOrNull(SIGNED_IN_WAIT_MS) {
+        context
+            .container()
+            .signedIn
+            .filterNotNull()
+            .first()
+    } == true
 
 internal const val SIGNED_IN_WAIT_MS = 5_000L
 

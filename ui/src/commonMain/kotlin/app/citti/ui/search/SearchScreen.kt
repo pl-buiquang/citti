@@ -52,7 +52,7 @@ class SearchActions(
 
 /**
  * Search: ← and the focused search field, "N notes", then the hits with their Folder and snippet (the
- * Excerpt when there is none) and the Hidden badge. An empty query shows nothing. [listState] is the scroll
+ * Excerpt when there is none) and the Hidden badge. An empty query shows nothing, or [idleRows] when given (the Note picker). [listState] is the scroll
  * position of this route entry; the rows on screen are reported to [SearchActions.onVisible] for snippets.
  */
 @Composable
@@ -62,6 +62,7 @@ fun SearchScreen(
     dates: RowDateFormatter,
     listState: LazyListState,
     actions: SearchActions,
+    idleRows: List<NoteRowItem> = emptyList(),
 ) {
     val now by produceState(nowSeconds()) {
         while (true) {
@@ -108,7 +109,10 @@ fun SearchScreen(
         }
         // The hits are drawn from the first row, so the reported indexes are hit indexes.
         LazyColumn(Modifier.weight(1f).testTag(TestTags.SEARCH_RESULTS), state = listState) {
-            if (!showResults) return@LazyColumn
+            if (!showResults) {
+                if (state.query.isBlank()) items(idleRows, key = { it.localId }) { item -> HitRow(item, now, dates, actions.onOpenNote) }
+                return@LazyColumn
+            }
             if (state.hits.isEmpty()) {
                 item(key = "empty") {
                     EmptyState(stringResource(Res.string.search_empty, state.query.trim()), Modifier.fillParentMaxSize())
