@@ -6,7 +6,8 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import app.citti.core.db.CittiDatabase
+import app.citti.core.settings.SyncNetwork
+import app.citti.core.settings.SyncSettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -37,7 +38,7 @@ fun planFor(config: ScheduleConfig): PeriodicPlan? =
  */
 class SyncScheduler(
     context: Context,
-    private val database: CittiDatabase,
+    private val settings: SyncSettingsRepository,
 ) {
     private val workManager = WorkManager.getInstance(context.applicationContext)
 
@@ -60,13 +61,7 @@ class SyncScheduler(
     }
 
     private suspend fun readConfig(): ScheduleConfig =
-        withContext(Dispatchers.IO) {
-            val q = database.settingQueries
-            scheduleFrom(
-                q.selectSetting(SyncScheduleKeys.INTERVAL_MINUTES).executeAsOneOrNull(),
-                q.selectSetting(SyncScheduleKeys.NETWORK).executeAsOneOrNull(),
-            )
-        }
+        withContext(Dispatchers.IO) { ScheduleConfig(settings.intervalMinutes(), settings.network()) }
 
     companion object {
         const val UNIQUE_NAME = "citti-periodic-sync"
