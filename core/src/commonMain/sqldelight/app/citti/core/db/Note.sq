@@ -90,3 +90,17 @@ SELECT count(*) FROM note WHERE sync_state != 'DELETED';
 
 countNotesWithContent:
 SELECT count(*) FROM note WHERE content IS NOT NULL AND sync_state != 'DELETED';
+
+-- Push: store the server's version in place of the local one (server wins on a 412).
+replaceWithServer:
+UPDATE note
+SET title = :title, category = :category, content = :content, favorite = :favorite, etag = :etag,
+    modified = :modified, readonly = :readonly, sync_state = 'SYNCED'
+WHERE local_id = :localId;
+
+-- Push: the server Note is gone, keep the local text as a new Note.
+resetToNew:
+UPDATE note SET remote_id = NULL, etag = NULL, sync_state = 'NEW' WHERE local_id = ?;
+
+folderHasTitle:
+SELECT count(*) FROM note WHERE category = :category AND title = :title AND sync_state != 'DELETED';
