@@ -25,6 +25,7 @@ object Strings {
     const val BANNER_AUTH_FAILED = "The server refused the saved sign-in. Your Notes stay on this device."
     const val BANNER_SIGN_IN_AGAIN = "Sign in again"
 
+    const val BACK = "Back"
     const val NOTE_EDIT = "Edit"
     const val NOTE_PREVIEW = "Preview"
     const val NOTE_UNDO = "Undo"
@@ -36,4 +37,42 @@ object Strings {
 
     const val SETTINGS_ADD = "Add"
     const val SETTINGS_SIGN_OUT = "Sign out"
+
+    const val NEW_NOTE = "New note"
+    const val CREATE = "Create"
+    const val NEW_FOLDER = "New folder…"
+
+    /** The New note dialog's Folder line; the Vault root shows as [TREE_ROOT]. */
+    fun newNoteFolder(folder: String) = "Folder: ${folder.ifEmpty { TREE_ROOT }}"
+
+    fun titleClashCreate(title: String) = "Create “$title”"
+
+    const val MENU_FAVORITE_ADD = "Add to favorites"
+    const val MENU_FAVORITE_REMOVE = "Remove from favorites"
+    const val MENU_MOVE = "Move…"
+    const val MENU_RENAME = "Rename…"
+    const val MENU_INSERT_IMAGE = "Insert image"
+    const val MENU_NOTE_INFO = "Note info"
+    const val MENU_DELETE = "Delete"
+    const val TOAST_FAVORITE_ADDED = "Added to favorites"
+    const val TOAST_FAVORITE_REMOVED = "Removed from favorites"
+    const val TOAST_DELETED = "Deleted"
+
+    /** Rename and Move refused: the target Folder has the title. */
+    fun clashError(
+        title: String,
+        folder: String,
+    ) = "A note named “$title” already exists in “${folder.ifEmpty { TREE_ROOT }}”"
+
+    const val INFO_TITLE = "Title"
+    const val INFO_FOLDER = "Folder"
+    const val INFO_WORDS = "Words"
+    const val INFO_LINES = "Lines"
+    const val INFO_STATE = "Sync state"
+    const val INFO_FAVORITE = "Favorite"
+    const val INFO_READONLY = "Read-only"
+    const val INFO_SYNCED = "Synced"
+    const val INFO_PENDING = "Pending"
+    const val YES = "Yes"
+    const val NO = "No"
 }

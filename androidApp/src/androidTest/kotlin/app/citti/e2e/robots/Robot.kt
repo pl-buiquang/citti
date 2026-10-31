@@ -73,7 +73,8 @@ abstract class Robot(
     protected fun waitGone(
         matcher: SemanticsMatcher,
         timeout: Duration = TIMEOUT,
-    ) = waitUntil("$matcher to go", timeout) { !exists(matcher) }
+        unmerged: Boolean = false,
+    ) = waitUntil("$matcher to go", timeout) { !exists(matcher, unmerged) }
 
     /** Taps the button or tab labelled [label]; buttons show their label in capitals, so case is ignored. */
     protected fun click(label: String) {
@@ -107,6 +108,11 @@ abstract class Robot(
         val found = runCatching { list.performScrollToNode(item) }.isSuccess
         runCatching { list.performScrollToIndex(0) }
         return found
+    }
+
+    /** A snackbar or toast reading [text]. */
+    fun assertSnackbar(text: String) {
+        waitFor(hasText(text))
     }
 
     fun pressBack() {
