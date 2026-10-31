@@ -80,7 +80,7 @@ class FakeNotesServer(
 ) {
     private val noteMap = LinkedHashMap<Long, FakeNote>()
     private var nextId = 1L
-    private val failures = ArrayDeque<FakeFailure>()
+    private val failures = ArrayDeque<Pair<FakeFailure, Endpoint?>>()
     private val log = mutableListOf<RecordedRequest>()
 
     var notesPath: String = "Notes"
@@ -147,12 +147,16 @@ class FakeNotesServer(
         noteMap[id] = n.copy(favorite = favorite, modified = now, version = n.version + 1)
     }
 
-    /** Queues [times] failures, applied to the next requests in order. */
+    /**
+     * Queues [times] failures, applied to the next requests in order. With an [endpoint], only requests to
+     * that endpoint consume them (other requests pass through untouched).
+     */
     fun failNext(
         failure: FakeFailure,
         times: Int = 1,
+        endpoint: Endpoint? = null,
     ) {
-        repeat(times) { failures.addLast(failure) }
+        repeat(times) { failures.addLast(failure to endpoint) }
     }
 
     /**
@@ -190,7 +194,8 @@ class FakeNotesServer(
             log += RecordedRequest(request.method, path, query, headers, endpoint, status)
         }
 
-        val failure = failures.removeFirstOrNull()
+        val queued = failures.indexOfFirst { it.second == null || it.second == endpoint }
+        val failure = if (queued >= 0) failures.removeAt(queued).first else null
         if (failure == FakeFailure.NETWORK_ERROR) {
             record(null)
             throw IOException("fake network error")

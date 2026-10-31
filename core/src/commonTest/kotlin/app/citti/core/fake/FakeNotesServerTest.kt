@@ -319,6 +319,21 @@ class FakeNotesServerTest {
         }
 
     @Test
+    fun failNextCanTargetOneEndpoint() =
+        runTest {
+            val server = FakeNotesServer()
+            val id = server.addNote("A", "a")
+            val http = client(server)
+            server.failNext(FakeFailure.NETWORK_ERROR, times = 2, endpoint = Endpoint.GET_NOTE)
+            // The list passes through and leaves the queued failures alone.
+            assertEquals(HttpStatusCode.OK, http.get("$api/notes").status)
+            assertFailsWith<IOException> { http.get("$api/notes/$id") }
+            assertEquals(HttpStatusCode.OK, http.get("$api/notes").status)
+            assertFailsWith<IOException> { http.get("$api/notes/$id") }
+            assertEquals(HttpStatusCode.OK, http.get("$api/notes/$id").status)
+        }
+
+    @Test
     fun requestLogRecordsMethodPathQueryHeadersAndCounts() =
         runTest {
             val server = FakeNotesServer(basePath = "/cloud")
