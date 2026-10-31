@@ -25,13 +25,20 @@ actual fun MarkdownEditor(
     editable: Boolean,
 ) {
     val colors = CittiTheme.colors
-    val editorStyle = CittiTheme.typography.editor
+    val bodyStyle = CittiTheme.typography.body
+    val markStyle = CittiTheme.typography.editor
     val density = LocalDensity.current
     val resolver = LocalFontFamilyResolver.current
     val face: Typeface =
-        remember(editorStyle.fontFamily, resolver) {
+        remember(bodyStyle.fontFamily, resolver) {
             resolver
-                .resolve(editorStyle.fontFamily ?: FontFamily.Default, FontWeight.Normal, FontStyle.Normal, FontSynthesis.All)
+                .resolve(bodyStyle.fontFamily ?: FontFamily.Default, FontWeight.Normal, FontStyle.Normal, FontSynthesis.All)
+                .value as? Typeface ?: Typeface.DEFAULT
+        }
+    val markFace: Typeface =
+        remember(markStyle.fontFamily, resolver) {
+            resolver
+                .resolve(markStyle.fontFamily ?: FontFamily.Default, FontWeight.Normal, FontStyle.Normal, FontSynthesis.All)
                 .value as? Typeface ?: Typeface.MONOSPACE
         }
     val styles =
@@ -41,7 +48,7 @@ actual fun MarkdownEditor(
             inkFaint = colors.inkFaint.toArgb(),
             accentInk = colors.accentInk.toArgb(),
             highlight = colors.highlight.toArgb(),
-            mono = Typeface.MONOSPACE,
+            mono = markFace,
         )
     val padding = with(density) { NotesSpacing.space4.roundToPx() }
     val currentStyles by rememberUpdatedState(styles)
@@ -51,8 +58,8 @@ actual fun MarkdownEditor(
         factory = { context ->
             CittiEditText(context, state, currentStyles).also { view ->
                 view.typeface = face
-                view.setTextSize(TypedValue.COMPLEX_UNIT_SP, editorStyle.fontSize.value)
-                view.lineHeight = with(density) { editorStyle.lineHeight.toPx().toInt() }
+                view.setTextSize(TypedValue.COMPLEX_UNIT_SP, bodyStyle.fontSize.value)
+                view.lineHeight = with(density) { bodyStyle.lineHeight.toPx().toInt() }
                 view.setPadding(padding, padding, padding, padding)
                 state.attach(view)
             }
