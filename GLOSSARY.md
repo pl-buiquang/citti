@@ -156,10 +156,25 @@ _Avoid_: Filter, find, lookup
 ## Widgets
 
 **Note widget**:
-A home-screen widget that shows one chosen note and opens it for editing.
+A home-screen widget that shows one chosen note from its Reading position and opens it there.
+
+**Note picker**:
+The screen shown when a Note widget is placed or reconfigured, to choose its note. It searches every synced note.
+_Avoid_: Chooser, selector
+
+**Reading position**:
+The line at the top of the Note screen when you last left a note. Kept on this device only. The Note widget starts there.
+_Avoid_: Scroll position, bookmark
 
 **Favorites widget**:
-A home-screen widget that lists the favorites and opens the tapped one.
+A home-screen widget that lists the favorites, with today's Daily note pinned first, and opens the tapped one.
+
+**Daily note widget**:
+A home-screen widget that shows today's Daily note from its Reading position and opens it there, creating it when missing.
+_Avoid_: Journal widget, today widget
+
+**Deep link**:
+A `citti://note/<id>` or `citti://daily` link that opens one note, or today's Daily note, in the app. The widgets use them.
 
 ## Appearance
 
