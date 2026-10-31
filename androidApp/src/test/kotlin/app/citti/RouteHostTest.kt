@@ -41,6 +41,14 @@ class RouteHostTest {
     }
 
     @Test
+    fun searchKeepsItsControllerWhileTheQueryChanges() {
+        val a = host.controller(1, Route.Search("a")) { Any() }
+        host.retain(listOf(Route.List(), Route.Search("ab")))
+        assertSame(a, host.controller(1, Route.Search("ab")) { Any() })
+        assertTrue(scopes.single().isActive)
+    }
+
+    @Test
     fun clearCancelsEverything() {
         host.controller(1, Route.Settings) { Any() }
         host.controller(2, Route.Note(4)) { Any() }

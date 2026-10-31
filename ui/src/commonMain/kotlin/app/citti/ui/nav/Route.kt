@@ -17,6 +17,7 @@ sealed interface Route {
         val folder: String = "",
     ) : Route
 
+    /** Search; [query] follows what is typed (`replaceTop`), so it survives process death. */
     @Serializable
     data class Search(
         val query: String = "",
@@ -30,3 +31,9 @@ sealed interface Route {
     @Serializable
     data object Settings : Route
 }
+
+/**
+ * What identifies a back stack entry for its controller and saved UI state: the route itself, except that a
+ * Search entry stays the same entry while its query changes.
+ */
+val Route.entryId: Route get() = if (this is Route.Search) Route.Search() else this

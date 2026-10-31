@@ -37,6 +37,10 @@ import app.citti.ui.login.LoginFlowBackend
 import app.citti.ui.login.LoginScreen
 import app.citti.ui.nav.Navigator
 import app.citti.ui.nav.Route
+import app.citti.ui.nav.entryId
+import app.citti.ui.search.SearchActions
+import app.citti.ui.search.SearchController
+import app.citti.ui.search.SearchScreen
 import app.citti.ui.settings.AccountInfo
 import app.citti.ui.settings.SettingsActions
 import app.citti.ui.settings.SettingsController
@@ -51,7 +55,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Not signed in shows Login. Signed in shows the back stack of [Navigator] (List, Tree, Settings), saved across
+ * Not signed in shows Login. Signed in shows the back stack of [Navigator] (List, Tree, Search, Settings), saved across
  * process death; Login is not a route.
  */
 class MainActivity : ComponentActivity() {
@@ -64,7 +68,7 @@ class MainActivity : ComponentActivity() {
     // One scope per controller, cancelled when the controller is dropped, so no stateIn job outlives it.
     private var browseScope: CoroutineScope? = null
 
-    /** The controllers of the other route entries (Settings), one scope each. */
+    /** The controllers of the other route entries (Search, Settings), one scope each. */
     private val routes = RouteHost(::newScope)
 
     private val titleCollator by lazy { localeTitleCollator() }
@@ -137,8 +141,10 @@ class MainActivity : ComponentActivity() {
 
                 Route.Settings -> SettingsRoute(navigator, index)
 
-                // Not pushed yet: the Search and Note screens come later in M3.
-                is Route.Search, is Route.Note -> LaunchedEffect(route) { navigator.pop() }
+                is Route.Search -> SearchRoute(navigator, index, route)
+
+                // Not pushed yet: the Note screen comes later in M3.
+                is Route.Note -> LaunchedEffect(route) { navigator.pop() }
             }
         }
     }
@@ -146,7 +152,7 @@ class MainActivity : ComponentActivity() {
     private fun entryKey(
         index: Int,
         route: Route,
-    ): String = "$index:$route"
+    ): String = "$index:${route.entryId}"
 
     @Composable
     private fun LoginRoute() {
@@ -191,8 +197,7 @@ class MainActivity : ComponentActivity() {
                 BrowseActions(
                     // The drawer replaces this once it lands; until then ≡ opens Settings.
                     onOpenMenu = { navigator.push(Route.Settings) },
-                    // The Search screen lands in a later M3 commit.
-                    onOpenSearch = {},
+                    onOpenSearch = { navigator.push(Route.Search()) },
                     onShowList = {
                         val root = listOf(Route.List())
                         if (navigator.stack.value != root) {
@@ -215,6 +220,38 @@ class MainActivity : ComponentActivity() {
                     onBack = { navigator.pop() },
                     onSyncNow = controller::syncNow,
                     onSignInAgain = { signInAgain() },
+                ),
+        )
+    }
+
+    @Composable
+    private fun SearchRoute(
+        navigator: Navigator,
+        index: Int,
+        route: Route.Search,
+    ) {
+        val controller = remember(index) { routes.controller(index, route) { newSearchController(it, route.query) } }
+        val state by controller.state.collectAsState()
+        // The route keeps the query, so it survives process death.
+        val keep: (String) -> Unit = { text -> if (navigator.top is Route.Search) navigator.replaceTop(Route.Search(text)) }
+        SearchScreen(
+            state = state,
+            nowSeconds = { System.currentTimeMillis() / 1000 },
+            dates = rowDates,
+            listState = rememberLazyListState(),
+            actions =
+                SearchActions(
+                    onQuery = {
+                        controller.onQuery(it)
+                        keep(it)
+                    },
+                    onClear = {
+                        controller.clear()
+                        keep("")
+                    },
+                    onVisible = controller::onVisible,
+                    onOpenNote = null,
+                    onBack = { navigator.pop() },
                 ),
         )
     }
@@ -304,6 +341,17 @@ class MainActivity : ComponentActivity() {
                 endSession()
             },
         )
+
+    private fun newSearchController(
+        scope: CoroutineScope,
+        query: String,
+    ) = SearchController(
+        scope = scope,
+        hits = container.noteSearch::hits,
+        snippets = container.noteSearch::snippets,
+        initialQuery = query,
+        log = AndroidSyncLog,
+    )
 
     private fun newBrowseController() =
         BrowseController(

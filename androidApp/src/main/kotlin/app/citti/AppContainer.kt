@@ -16,6 +16,7 @@ import app.citti.core.auth.prepareForSignIn
 import app.citti.core.auth.signOut
 import app.citti.core.db.CittiDatabase
 import app.citti.core.note.ExcerptBackfill
+import app.citti.core.search.NoteSearch
 import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.SyncSettingsRepository
 import app.citti.core.settings.UiSettings
@@ -64,9 +65,12 @@ class AppContainer(
     /** Process-wide scope for work that must outlive an Activity (login polling, syncs). */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    val database: CittiDatabase by lazy {
-        CittiDatabase(AndroidSqliteDriver(CittiDatabase.Schema, appContext, "citti.db"))
-    }
+    private val driver by lazy { AndroidSqliteDriver(CittiDatabase.Schema, appContext, "citti.db") }
+
+    val database: CittiDatabase by lazy { CittiDatabase(driver) }
+
+    /** Full-text search over `note_fts` (ADR 0007). */
+    val noteSearch: NoteSearch by lazy { NoteSearch(driver, Dispatchers.IO) }
 
     val credentialStore: CredentialStore by lazy { CredentialStoreFactory(appContext).create() }
 

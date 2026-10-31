@@ -37,6 +37,11 @@
     <!-- Browse: search bar, ModeSwitch, Tree, drawer -->
     <string name="search_hint">Search notes</string>
     <string name="search_clear">Clear search</string>
+    <plurals name="search_count">
+        <item quantity="one">%1$d note</item>
+        <item quantity="other">%1$d notes</item>
+    </plurals>
+    <string name="search_empty">No notes match “%1$s”</string>
     <string name="action_back">Back</string>
     <string name="action_open_menu">Open menu</string>
     <string name="mode_list">List</string>
