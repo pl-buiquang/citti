@@ -14,16 +14,27 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 import kotlin.time.TimeSource
 
-/** Where the Vault is on the server: `<baseUrl>/remote.php/dav/files/<userId>/<notesPath>/`. */
+/**
+ * Where the Vault is on the server: `<baseUrl>/remote.php/dav/files/<userId>/<notesPath>/`. Both values come from
+ * the server, so a URL never leaves the Notes folder: `.`, `..` and empty segments of [notesPath] are dropped, and
+ * [DavClient] makes no request for a [userId] that is not [valid][isValidUserId].
+ */
 data class DavRoot(
     val baseUrl: String,
     val userId: String,
     val notesPath: String,
 ) {
+    val isValid: Boolean get() = isValidUserId(userId)
+
     internal fun url(path: VaultPath): String {
-        val notes = notesPath.split('/').filter { it.isNotEmpty() }
+        val notes = notesPath.split('/').filter { it.isNotEmpty() && it != "." && it != ".." }
         val segments = listOf("remote.php", "dav", "files", userId) + notes + path.value.split('/')
         return baseUrl.trimEnd('/') + "/" + segments.joinToString("/") { encodeSegment(it) }
+    }
+
+    companion object {
+        /** A user id is one URL segment: not empty, no `/`, and not `.` or `..`. */
+        fun isValidUserId(id: String): Boolean = id.isNotEmpty() && '/' !in id && id != "." && id != ".."
     }
 }
 
@@ -48,12 +59,15 @@ class DavClient(
     private val log: SyncLog = SyncLog.None,
     private val stats: RequestStats? = null,
 ) {
-    /** `GET` of [path]; with [ifNoneMatch] a 304 gives [DavGet.NotModified]. No request while the root is unknown. */
+    /**
+     * `GET` of [path]; with [ifNoneMatch] a 304 gives [DavGet.NotModified]. No request while the root is unknown or
+     * not valid.
+     */
     suspend fun get(
         path: VaultPath,
         ifNoneMatch: String? = null,
     ): ApiResult<DavGet> {
-        val root = root() ?: return ApiResult.Failure(ApiError.DavNotReady)
+        val root = root()?.takeIf { it.isValid } ?: return ApiResult.Failure(ApiError.DavNotReady)
         val start = TimeSource.Monotonic.markNow()
         return try {
             val response: HttpResponse =

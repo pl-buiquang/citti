@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -44,6 +45,31 @@ class DavClientTest {
             DavRoot("https://host", "u", "N").url(path("a#b/c?d/100%.png")),
         )
     }
+
+    @Test
+    fun aNotesPathNeverLeavesTheNotesFolder() {
+        val url = DavRoot("https://host/", "alice", "Notes/../Documents").url(path("a.png"))
+        assertEquals("https://host/remote.php/dav/files/alice/Notes/Documents/a.png", url)
+        assertFalse(url.split('/').any { it == ".." || it == "." })
+        assertEquals(
+            "https://host/remote.php/dav/files/alice/a.png",
+            DavRoot("https://host/", "alice", "./../..//").url(path("a.png")),
+        )
+    }
+
+    @Test
+    fun noRequestForAUserIdThatIsNotOneSegment() =
+        runTest {
+            server.putFile("a.png", byteArrayOf(1))
+            for (id in listOf("..", ".", "", "alice/../bob", "a/b")) {
+                assertFalse(DavRoot.isValidUserId(id), id)
+                root = DavRoot("https://host/", id, "Notes")
+                assertEquals(ApiError.DavNotReady, assertIs<ApiResult.Failure>(client().get(path("a.png"))).error)
+            }
+            assertEquals(0, server.requests.size)
+            assertTrue(DavRoot.isValidUserId("alice@example.com"))
+            assertTrue(DavRoot.isValidUserId("a..b"))
+        }
 
     @Test
     fun getsABodyWithItsEtag() =

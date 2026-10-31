@@ -73,4 +73,25 @@ class DavSetupTest {
             engine.sync(SyncTrigger.AppOpen)
             assertEquals(DavRoot("https://host/", "u-123", "Notes"), setup.root())
         }
+
+    @Test
+    fun aUserIdThatIsNotOneSegmentIsNeverStored() =
+        runTest {
+            server.userId = ".."
+            engine.sync(SyncTrigger.AppOpen)
+            assertNull(setup.root())
+            assertNull(db.settingQueries.selectSetting(KEY_DAV_USER_ID).executeAsOneOrNull())
+            server.userId = "u-123"
+            engine.sync(SyncTrigger.AppOpen)
+            server.userId = "u/../other"
+            engine.sync(SyncTrigger.AppOpen)
+            assertEquals(DavRoot("https://host/", "u-123", "Notes"), setup.root())
+        }
+
+    @Test
+    fun aStoredUserIdThatIsNotValidGivesNoRoot() {
+        db.settingQueries.upsertSetting(KEY_DAV_USER_ID, ".")
+        db.settingQueries.upsertSetting(KEY_DAV_NOTES_PATH, "Notes")
+        assertNull(setup.root())
+    }
 }
