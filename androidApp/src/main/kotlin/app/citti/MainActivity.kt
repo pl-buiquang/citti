@@ -21,23 +21,31 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.MainMode
+import app.citti.ui.browse.AppDrawer
 import app.citti.ui.browse.BrowseActions
 import app.citti.ui.browse.BrowseController
 import app.citti.ui.browse.BrowseScreen
 import app.citti.ui.browse.BrowseView
+import app.citti.ui.browse.DrawerActions
+import app.citti.ui.components.CittiDrawer
 import app.citti.ui.components.breadcrumbPaths
+import app.citti.ui.components.rememberCittiDrawerState
 import app.citti.ui.login.LoginController
 import app.citti.ui.login.LoginFlowBackend
 import app.citti.ui.login.LoginScreen
 import app.citti.ui.nav.Navigator
 import app.citti.ui.nav.Route
 import app.citti.ui.nav.entryId
+import app.citti.ui.note.NoteViewController
+import app.citti.ui.note.NoteViewScreen
+import app.citti.ui.note.NoteViewState
 import app.citti.ui.search.SearchActions
 import app.citti.ui.search.SearchController
 import app.citti.ui.search.SearchScreen
@@ -55,8 +63,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Not signed in shows Login. Signed in shows the back stack of [Navigator] (List, Tree, Search, Settings), saved across
- * process death; Login is not a route.
+ * Not signed in shows Login. Signed in shows the back stack of [Navigator] (List, Tree, Search, Note, Settings),
+ * saved across process death; Login is not a route.
  */
 class MainActivity : ComponentActivity() {
     private val container get() = (application as CittiApp).container
@@ -68,7 +76,7 @@ class MainActivity : ComponentActivity() {
     // One scope per controller, cancelled when the controller is dropped, so no stateIn job outlives it.
     private var browseScope: CoroutineScope? = null
 
-    /** The controllers of the other route entries (Search, Settings), one scope each. */
+    /** The controllers of the other route entries (Search, Note, Settings), one scope each. */
     private val routes = RouteHost(::newScope)
 
     private val titleCollator by lazy { localeTitleCollator() }
@@ -138,13 +146,9 @@ class MainActivity : ComponentActivity() {
         saved.SaveableStateProvider(entryKey(index, route)) {
             when (route) {
                 is Route.List, is Route.Tree -> BrowseRoute(navigator, route)
-
                 Route.Settings -> SettingsRoute(navigator, index)
-
                 is Route.Search -> SearchRoute(navigator, index, route)
-
-                // Not pushed yet: the Note screen comes later in M3.
-                is Route.Note -> LaunchedEffect(route) { navigator.pop() }
+                is Route.Note -> NoteRoute(navigator, index, route, root)
             }
         }
     }
@@ -187,41 +191,71 @@ class MainActivity : ComponentActivity() {
                 is Route.Tree -> BrowseView.Tree(route.folder)
                 else -> BrowseView.List(favoritesOnly = (route as? Route.List)?.favoritesOnly ?: false)
             }
-        BrowseScreen(
-            view = view,
-            state = state,
-            nowSeconds = { System.currentTimeMillis() / 1000 },
-            dates = rowDates,
-            listState = rememberLazyListState(),
-            actions =
-                BrowseActions(
-                    // The drawer replaces this once it lands; until then ≡ opens Settings.
-                    onOpenMenu = { navigator.push(Route.Settings) },
-                    onOpenSearch = { navigator.push(Route.Search()) },
-                    onShowList = {
-                        val root = listOf(Route.List())
-                        if (navigator.stack.value != root) {
-                            navigator.reset(root)
-                            controller.setMode(MainMode.LIST)
-                        }
-                    },
-                    onShowTree = {
-                        val root = listOf(Route.Tree())
-                        if (navigator.stack.value != root) {
-                            navigator.reset(root)
-                            controller.setMode(MainMode.TREE)
-                        }
-                    },
-                    onOpenFolder = { navigator.push(Route.Tree(it)) },
-                    onOpenBreadcrumb = { path ->
-                        if (!navigator.popTo(Route.Tree(path))) navigator.reset(breadcrumbPaths(path).map { Route.Tree(it) })
-                    },
-                    onOpenNote = null,
-                    onBack = { navigator.pop() },
-                    onSyncNow = controller::syncNow,
-                    onSignInAgain = { signInAgain() },
-                ),
-        )
+        val drawer = rememberCittiDrawerState()
+        val scope = rememberCoroutineScope()
+        val account by produceState<AccountInfo?>(null) { value = container.accountInfo() }
+        // CittiDrawer does not handle Back: an open drawer closes before the stack pops.
+        BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
+        val fromDrawer: (() -> Unit) -> Unit = { go ->
+            scope.launch {
+                drawer.close()
+                go()
+            }
+        }
+        CittiDrawer(
+            state = drawer,
+            // Favorites has ← instead of ≡, so it has no drawer.
+            gesturesEnabled = view !is BrowseView.List || !view.favoritesOnly,
+            drawerContent = {
+                AppDrawer(
+                    account = account,
+                    status = state.status,
+                    now = remember(drawer.isOpen) { System.currentTimeMillis() / 1000 },
+                    folders = state.tree?.children.orEmpty(),
+                    actions =
+                        DrawerActions(
+                            onFavorites = { fromDrawer { navigator.reset(listOf(Route.List(), Route.List(favoritesOnly = true))) } },
+                            onFolder = { path -> fromDrawer { navigator.reset(breadcrumbPaths(path).map { Route.Tree(it) }) } },
+                            onSettings = { fromDrawer { navigator.push(Route.Settings) } },
+                        ),
+                )
+            },
+        ) {
+            BrowseScreen(
+                view = view,
+                state = state,
+                nowSeconds = { System.currentTimeMillis() / 1000 },
+                dates = rowDates,
+                listState = rememberLazyListState(),
+                actions =
+                    BrowseActions(
+                        onOpenMenu = { scope.launch { drawer.open() } },
+                        onOpenSearch = { navigator.push(Route.Search()) },
+                        onShowList = {
+                            val root = listOf(Route.List())
+                            if (navigator.stack.value != root) {
+                                navigator.reset(root)
+                                controller.setMode(MainMode.LIST)
+                            }
+                        },
+                        onShowTree = {
+                            val root = listOf(Route.Tree())
+                            if (navigator.stack.value != root) {
+                                navigator.reset(root)
+                                controller.setMode(MainMode.TREE)
+                            }
+                        },
+                        onOpenFolder = { navigator.push(Route.Tree(it)) },
+                        onOpenBreadcrumb = { path ->
+                            if (!navigator.popTo(Route.Tree(path))) navigator.reset(breadcrumbPaths(path).map { Route.Tree(it) })
+                        },
+                        onOpenNote = { navigator.push(Route.Note(it)) },
+                        onBack = { navigator.pop() },
+                        onSyncNow = controller::syncNow,
+                        onSignInAgain = { signInAgain() },
+                    ),
+            )
+        }
     }
 
     @Composable
@@ -250,9 +284,29 @@ class MainActivity : ComponentActivity() {
                         keep("")
                     },
                     onVisible = controller::onVisible,
-                    onOpenNote = null,
+                    onOpenNote = { navigator.push(Route.Note(it)) },
                     onBack = { navigator.pop() },
                 ),
+        )
+    }
+
+    /** A Note that no longer exists (deleted by a sync, or gone after process death) pops its entry. */
+    @Composable
+    private fun NoteRoute(
+        navigator: Navigator,
+        index: Int,
+        route: Route.Note,
+        root: Route,
+    ) {
+        val controller = remember(index) { routes.controller(index, route) { NoteViewController(it, container.noteView(route.localId)) } }
+        val state by controller.state.collectAsState()
+        LaunchedEffect(state) {
+            if (state == NoteViewState.Gone && navigator.top == route && !navigator.pop()) navigator.reset(listOf(root))
+        }
+        NoteViewScreen(
+            note = (state as? NoteViewState.Shown)?.note,
+            listState = rememberLazyListState(),
+            onBack = { navigator.pop() },
         )
     }
 

@@ -21,12 +21,15 @@ import androidx.compose.ui.semantics.semantics
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Outline icons on a 24-unit grid with a 2-unit stroke (design-system README › Iconography), drawn
  * with Canvas so `:ui` needs no icon library.
  */
-enum class CittiIcon { Menu, Back, Close, Search, Folder, Chevron, Star }
+enum class CittiIcon { Menu, Back, Close, Search, Folder, Chevron, Star, Settings }
 
 /** Decorative icon (no semantics): pair it with a label, or use [IconButton]. */
 @Composable
@@ -118,6 +121,16 @@ private fun DrawScope.drawIcon(
 
         CittiIcon.Chevron -> {
             path(9f to 6f, 15f to 12f, 9f to 18f)
+        }
+
+        CittiIcon.Settings -> {
+            // A gear: a hub, a ring, and eight teeth.
+            drawCircle(color, radius = 3f * u, center = p(12f, 12f), style = stroke)
+            drawCircle(color, radius = 6.5f * u, center = p(12f, 12f), style = stroke)
+            for (i in 0 until 8) {
+                val a = i * PI.toFloat() / 4f
+                line(12f + 6.5f * cos(a), 12f + 6.5f * sin(a), 12f + 9.5f * cos(a), 12f + 9.5f * sin(a))
+            }
         }
 
         CittiIcon.Star -> {

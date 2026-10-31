@@ -52,10 +52,14 @@
     <string name="drawer_close">Close menu</string>
     <string name="pull_refresh_action">Sync now</string>
     <string name="drawer_favorites">Favorites</string>
+    <string name="drawer_settings">Settings</string>
     <string name="empty_list">No notes yet</string>
     <string name="empty_list_first_sync">Your notes are on their way</string>
     <string name="empty_favorites">No favorites</string>
     <string name="empty_folder">This folder is empty</string>
+
+    <!-- Note (read-only) -->
+    <string name="note_downloading">Downloading…</string>
 
     <!-- Sync status line and banners -->
     <string name="sync_syncing">Syncing</string>

@@ -103,8 +103,9 @@ fun NoteRow(
 }
 
 /**
- * A Folder row in Tree mode and the drawer: icon, name (UI face), recursive Note count, chevron.
- * Same height and padding as [NoteRow], so the two line up when mixed.
+ * A Folder row in Tree mode and the drawer: icon, name (UI face), recursive Note count, and a chevron when
+ * [chevron] (Tree mode, where the row opens a level). Same height and padding as [NoteRow], so the two line up
+ * when mixed.
  */
 @Composable
 fun FolderRow(
@@ -112,6 +113,7 @@ fun FolderRow(
     count: Int,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    chevron: Boolean = onClick != null,
 ) {
     val colors = CittiTheme.colors
     Row(
@@ -138,6 +140,6 @@ fun FolderRow(
             )
             BasicText(stringResource(Res.string.folder_count, count), style = CittiTheme.typography.meta.colored(muted = true))
         }
-        if (onClick != null) Icon(CittiIcon.Chevron, color = colors.inkMuted)
+        if (chevron) Icon(CittiIcon.Chevron, color = colors.inkMuted)
     }
 }
