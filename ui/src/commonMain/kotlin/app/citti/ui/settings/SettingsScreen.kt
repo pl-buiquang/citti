@@ -39,6 +39,7 @@ import app.citti.ui.components.CittiButton
 import app.citti.ui.components.CittiTextButton
 import app.citti.ui.components.CittiTextField
 import app.citti.ui.components.CittiTopBar
+import app.citti.ui.components.PickerFolders
 import app.citti.ui.components.colored
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.exclusion_journal_refused
@@ -95,6 +96,7 @@ import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -114,13 +116,18 @@ class SettingsActions(
     val onSignInAgain: () -> Unit,
     val onConfirm: () -> Unit,
     val onDismissConfirm: () -> Unit,
+    val daily: DailySettingsActions,
 )
 
-/** Settings: Account, Sync, Exclusions and Images (design brief 12, M4 subset). Appearance comes later. */
+/**
+ * Settings: Account, Sync, Exclusions, Images and Daily notes (design brief 12). Appearance comes later.
+ * [folders] feeds the Journal folder picker, collected only while it is open.
+ */
 @Composable
 fun SettingsScreen(
     state: SettingsUiState,
     nowSeconds: () -> Long,
+    folders: Flow<PickerFolders>,
     actions: SettingsActions,
 ) {
     Box(
@@ -132,8 +139,11 @@ fun SettingsScreen(
         when (val page = state.page) {
             SettingsPage.Home -> SettingsHome(state, nowSeconds, actions)
             is SettingsPage.PickFolder -> FolderPicker(page.kind, state, actions)
+            is SettingsPage.PickJournal -> JournalFolderPage(page, folders, actions.daily)
+            is SettingsPage.PickTemplate -> TemplatePickerPage(page, state.daily.config.template, actions.onBack, actions.daily)
         }
         state.confirm?.let { ConfirmDialog(it, actions) }
+        state.daily.importReport?.let { ImportReportDialog(it, actions.daily.onDismissImportReport) }
     }
 }
 
@@ -194,6 +204,7 @@ private fun SettingsHome(
             )
 
             SectionHeader(Res.string.settings_exclusions)
+            state.daily.conflict?.let { DailyGuardBanner(it) }
             FolderList(ExclusionKind.UNSYNCED, Res.string.settings_unsynced_title, Res.string.settings_unsynced_help, state, actions)
             FolderList(ExclusionKind.HIDDEN, Res.string.settings_hidden_title, Res.string.settings_hidden_help, state, actions)
 
@@ -210,6 +221,8 @@ private fun SettingsHome(
                 style = CittiTheme.typography.meta.colored(muted = true),
             )
             CittiButton(stringResource(Res.string.settings_image_cache_clear), actions.onAskClearImages, kind = ButtonKind.Quiet)
+
+            DailyNotesSection(state.daily, actions.daily)
             Box(Modifier.padding(bottom = NotesSpacing.space8))
         }
     }
@@ -374,7 +387,7 @@ private fun ConfirmDialog(
 }
 
 @Composable
-private fun SectionHeader(title: StringResource) {
+internal fun SectionHeader(title: StringResource) {
     BasicText(
         stringResource(title),
         modifier = Modifier.padding(top = NotesSpacing.space4),
@@ -383,7 +396,7 @@ private fun SectionHeader(title: StringResource) {
 }
 
 @Composable
-private fun Help(text: StringResource) {
+internal fun Help(text: StringResource) {
     BasicText(stringResource(text), style = CittiTheme.typography.meta.colored(muted = true))
 }
 
@@ -400,19 +413,25 @@ private fun LabelValue(
 
 /** A single-choice row; the chosen one is marked by a check and the accent color, not by color alone. */
 @Composable
-private fun OptionRow(
+internal fun OptionRow(
     label: String,
     selected: Boolean,
+    modifier: Modifier = Modifier,
+    /** A second line in `meta` (a live example). */
+    detail: String? = null,
     onClick: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = NotesSize.touchMin).clickable(onClick = onClick),
+        modifier.fillMaxWidth().heightIn(min = NotesSize.touchMin).clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(NotesSpacing.space3),
     ) {
         val style = CittiTheme.typography.body.copy(color = if (selected) CittiTheme.colors.accentInk else CittiTheme.colors.ink)
         BasicText(if (selected) "✓" else " ", style = style)
-        BasicText(label, style = style)
+        Column {
+            BasicText(label, style = style)
+            if (detail != null) BasicText(detail, style = CittiTheme.typography.meta.colored(muted = true))
+        }
     }
 }
 

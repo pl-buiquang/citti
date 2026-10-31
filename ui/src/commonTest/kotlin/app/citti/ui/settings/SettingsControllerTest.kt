@@ -1,15 +1,28 @@
 package app.citti.ui.settings
 
+import app.citti.core.daily.IMPORT_FOLDER
+import app.citti.core.daily.ImportReport
+import app.citti.core.note.InvalidNameException
+import app.citti.core.note.NameError
+import app.citti.core.note.Suggestion
 import app.citti.core.settings.AddResult
+import app.citti.core.settings.DailyConfig
 import app.citti.core.settings.ExclusionKind
+import app.citti.core.settings.FolderResult
+import app.citti.core.settings.FormatResult
 import app.citti.core.settings.SyncNetwork
 import app.citti.core.sync.SyncTrigger
+import app.citti.ui.components.FolderPickerState
 import app.citti.ui.image.ImageCache
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -61,6 +74,62 @@ private class FakeStore(
     override fun pendingUnder(path: String) = local[path]?.second ?: 0
 }
 
+/** Daily notes settings with the core rules that matter here: Unsynced `archive`, formats with `/` or no `DD`. */
+private class FakeDailyStore : DailySettingsStore {
+    val config = MutableStateFlow(DailyConfig())
+    val conflict = MutableStateFlow<String?>(null)
+    val local = mutableSetOf("templates/daily.md")
+    val notes = listOf(Suggestion(1, "daily", "templates"), Suggestion(2, "Weekly", "templates"), Suggestion(3, "Inbox", ""))
+    var report: ImportReport? = ImportReport(read = mapOf(IMPORT_FOLDER to "journal"))
+    var imports = 0
+
+    override fun config(): Flow<DailyConfig> = config
+
+    override fun conflict(): Flow<String?> = conflict
+
+    override suspend fun normaliseFolder(path: String): Result<String> {
+        val p = path.trim().trim('/')
+        return if (p == "archive" ||
+            p.startsWith("archive/")
+        ) {
+            Result.failure(InvalidNameException(NameError.Unsynced))
+        } else {
+            Result.success(p)
+        }
+    }
+
+    override suspend fun setFolder(path: String): FolderResult =
+        normaliseFolder(path).fold(
+            { p ->
+                config.update { it.copy(folder = p, localeDetected = if (p == it.folder) it.localeDetected else null) }
+                FolderResult.Saved(p)
+            },
+            { FolderResult.Refused((it as InvalidNameException).error) },
+        )
+
+    override suspend fun setTemplate(path: String) = config.update { it.copy(template = path) }
+
+    override suspend fun isLocalNote(path: String) = path in local
+
+    override suspend fun suggest(query: String) = notes.filter { it.title.startsWith(query, ignoreCase = true) }
+
+    override suspend fun setFormat(format: String): FormatResult {
+        if ('/' in format || '\\' in format) return FormatResult.Slash
+        if ("D" !in format || "M" !in format || "Y" !in format) return FormatResult.RoundTrip
+        config.update { it.copy(format = format) }
+        return FormatResult.Saved(format)
+    }
+
+    override suspend fun setLocale(code: String?) = config.update { it.copy(locale = code, localeDetected = code) }
+
+    override suspend fun setWeekStart(day: DayOfWeek?) = config.update { it.copy(weekStart = day) }
+
+    override suspend fun importFromObsidian(): ImportReport? {
+        imports++
+        return report
+    }
+}
+
 private class FakeImageCache(
     var bytes: Long = 312L * 1024 * 1024,
 ) : ImageCache {
@@ -82,6 +151,8 @@ class SettingsControllerTest {
     private var signedOut = 0
     private var signInAgain = 0
 
+    private val daily = FakeDailyStore()
+
     private fun TestScope.controller(store: FakeStore) =
         SettingsController(
             scope = backgroundScope,
@@ -98,6 +169,9 @@ class SettingsControllerTest {
             sync = { triggers += it },
             signOut = { signedOut++ },
             signInAgain = { signInAgain++ },
+            daily = daily,
+            phoneLanguage = "de",
+            now = { LocalDateTime(2026, 10, 31, 9, 30) },
         )
 
     @Test
@@ -246,5 +320,149 @@ class SettingsControllerTest {
             assertEquals(1, images.cleared)
             assertNull(c.state.value.confirm)
             assertEquals(0L, c.state.value.imageCacheBytes)
+        }
+
+    // ---- Settings › Daily notes ----
+
+    @Test
+    fun theJournalFolderPickerOpensOnItAndChooseSavesIt() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            c.openJournalPicker()
+            assertEquals(SettingsPage.PickJournal(FolderPickerState("journal")), c.state.value.page)
+            c.journalBack()
+            c.journalOpen("notes")
+            c.journalNewFolder()
+            c.journalNewFolderText("daily")
+            c.journalNewFolderDone()
+            assertEquals(SettingsPage.PickJournal(FolderPickerState("notes/daily")), c.state.value.page)
+            c.journalConfirm()
+            assertEquals("notes/daily", daily.config.value.folder)
+            assertEquals(SettingsPage.Home, c.state.value.page)
+        }
+
+    @Test
+    fun anUnsyncedJournalFolderIsRefusedInThePicker() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            c.openJournalPicker()
+            c.journalOpen("archive")
+            c.journalConfirm()
+            val page = c.state.value.page as SettingsPage.PickJournal
+            assertEquals(NameError.Unsynced, page.error)
+            assertEquals("journal", daily.config.value.folder)
+            // Back walks up the picker, then closes it at the Vault root.
+            assertTrue(c.onBack())
+            assertEquals(SettingsPage.PickJournal(FolderPickerState("")), c.state.value.page)
+            assertTrue(c.onBack())
+            assertEquals(SettingsPage.Home, c.state.value.page)
+        }
+
+    @Test
+    fun theTemplatePickerSearchesTheNotesAndOffersNone() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            assertTrue(c.state.value.daily.templateLocal)
+            c.openTemplatePicker()
+            assertEquals(3, (c.state.value.page as SettingsPage.PickTemplate).suggestions.size)
+            c.onTemplateQuery("we")
+            val page = c.state.value.page as SettingsPage.PickTemplate
+            assertEquals(listOf("Weekly"), page.suggestions.map { it.title })
+            c.chooseTemplate(page.suggestions.single().templatePath())
+            assertEquals("templates/Weekly.md", daily.config.value.template)
+            assertEquals(SettingsPage.Home, c.state.value.page)
+            c.openTemplatePicker()
+            c.chooseTemplate("")
+            assertEquals("", daily.config.value.template)
+            assertTrue(c.state.value.daily.templateLocal)
+            assertEquals("Inbox.md", Suggestion(3, "Inbox", "").templatePath())
+        }
+
+    @Test
+    fun aTemplateThatIsNotLocalIsMarkedNotSynced() =
+        runTest(UnconfinedTestDispatcher()) {
+            daily.config.value = DailyConfig(template = "private/daily.md")
+            val c = controller(FakeStore())
+            assertFalse(c.state.value.daily.templateLocal)
+        }
+
+    @Test
+    fun theDateFormatIsSavedWhenValidWithALiveExampleAndErrors() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            assertEquals("YYYY-MM-DD", c.state.value.daily.format)
+            assertEquals("2026-10-31", c.state.value.daily.formatExample)
+            c.onFormat("DD.MM.YYYY")
+            assertEquals("DD.MM.YYYY", daily.config.value.format)
+            assertEquals("31.10.2026", c.state.value.daily.formatExample)
+            assertNull(c.state.value.daily.formatError)
+            c.onFormat("YYYY/MM/DD")
+            assertEquals(FormatResult.Slash, c.state.value.daily.formatError)
+            assertEquals("YYYY/MM/DD", c.state.value.daily.format)
+            assertEquals("DD.MM.YYYY", daily.config.value.format)
+            c.onFormat("YYYY-MM")
+            assertEquals(FormatResult.RoundTrip, c.state.value.daily.formatError)
+            assertEquals("2026-10", c.state.value.daily.formatExample)
+        }
+
+    @Test
+    fun theDateLocaleFallsBackToThePhoneThenFollowsDetectionAndTheManualChoice() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            // Automatic, nothing detected: the phone's language (de).
+            assertEquals("de", c.state.value.daily.localeInUse)
+            assertEquals("Oktober", c.state.value.daily.monthExamples[null])
+            assertEquals("octobre", c.state.value.daily.monthExamples["fr"])
+            assertEquals(8, c.state.value.daily.monthExamples.size)
+            daily.config.update { it.copy(localeDetected = "fr") }
+            assertEquals("fr", c.state.value.daily.localeInUse)
+            assertEquals("octobre", c.state.value.daily.monthExamples[null])
+            c.setDateLocale("es")
+            assertEquals("es", daily.config.value.locale)
+            assertEquals("es", c.state.value.daily.localeInUse)
+            // Automatic is now the phone's language again: the manual choice also set the detected one.
+            assertEquals("Oktober", c.state.value.daily.monthExamples[null])
+            c.setDateLocale(null)
+            assertNull(daily.config.value.locale)
+            assertEquals("en", phoneDateLocale("ja"))
+            assertEquals("pt", phoneDateLocale("PT"))
+        }
+
+    @Test
+    fun weekStartPassesThrough() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            c.setWeekStart(DayOfWeek.SUNDAY)
+            assertEquals(DayOfWeek.SUNDAY, c.state.value.daily.config.weekStart)
+            c.setWeekStart(null)
+            assertNull(c.state.value.daily.config.weekStart)
+        }
+
+    @Test
+    fun importFromObsidianShowsItsReportUntilDismissed() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            c.onFormat("YYYY-MM")
+            c.importFromObsidian()
+            assertEquals(1, daily.imports)
+            assertEquals(daily.report, c.state.value.daily.importReport)
+            assertFalse(c.state.value.daily.importing)
+            assertNull(c.state.value.daily.formatError)
+            assertEquals("YYYY-MM-DD", c.state.value.daily.format)
+            assertTrue(c.onBack())
+            assertNull(c.state.value.daily.importReport)
+
+            daily.report = null
+            c.importFromObsidian()
+            assertNull(c.state.value.daily.importReport)
+        }
+
+    @Test
+    fun theGuardConflictIsShown() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            assertNull(c.state.value.daily.conflict)
+            daily.conflict.value = "journal"
+            assertEquals("journal", c.state.value.daily.conflict)
         }
 }

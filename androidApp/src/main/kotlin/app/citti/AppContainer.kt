@@ -58,7 +58,9 @@ import app.citti.ui.note.CoreNoteMenu
 import app.citti.ui.note.NoteGateway
 import app.citti.ui.note.NoteMenuGateway
 import app.citti.ui.settings.AccountInfo
+import app.citti.ui.settings.CoreDailySettingsStore
 import app.citti.ui.settings.CoreSettingsStore
+import app.citti.ui.settings.DailySettingsStore
 import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
@@ -129,6 +131,11 @@ class AppContainer(
 
     /** The Journal folder when a state saved before M6 left it under an Unsynced folder. */
     val dailyGuard: DailyGuard by lazy { DailyGuard(dailySettings, exclusions) }
+
+    /** Settings › Daily notes; Import from Obsidian needs the session's WebDAV client. */
+    val dailySettingsStore: DailySettingsStore by lazy {
+        CoreDailySettingsStore(dailySettings, dailyGuard, exclusions, LinkResolver(database), { stack.value?.dailyImport }, Dispatchers.IO)
+    }
 
     val settingsStore: CoreSettingsStore by lazy { CoreSettingsStore(syncSettings, exclusions, imageSettings) }
 

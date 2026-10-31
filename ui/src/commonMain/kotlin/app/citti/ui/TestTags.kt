@@ -63,6 +63,22 @@ object TestTags {
     const val SETTINGS_FOLDER_PATH = "settings.folder.path"
     const val SETTINGS_CONFIRM = "settings.confirm"
 
+    /** Settings › Daily notes: its rows, the Template picker, the Import report dialog and the guard banner. */
+    const val SETTINGS_DAILY_GUARD = "settings.daily.guard"
+    const val SETTINGS_JOURNAL_FOLDER = "settings.daily.folder"
+    const val SETTINGS_TEMPLATE = "settings.daily.template"
+    const val SETTINGS_TEMPLATE_SEARCH = "settings.daily.template.search"
+    const val SETTINGS_TEMPLATE_NONE = "settings.daily.template.none"
+    const val SETTINGS_DATE_FORMAT = "settings.daily.format"
+    const val SETTINGS_IMPORT = "settings.daily.import"
+    const val SETTINGS_IMPORT_REPORT = "settings.daily.import.report"
+
+    /** A Date locale choice; null is Automatic. */
+    fun settingsDateLocale(code: String?): String = "settings.daily.locale.${code ?: "auto"}"
+
+    /** A Week starts on choice ("MONDAY"…); null is Automatic. */
+    fun settingsWeekStart(day: String?): String = "settings.daily.week.${day?.lowercase() ?: "auto"}"
+
     fun settingsAdd(kind: ExclusionKind): String = "settings.${kind.name.lowercase()}.add"
 
     fun settingsRemove(

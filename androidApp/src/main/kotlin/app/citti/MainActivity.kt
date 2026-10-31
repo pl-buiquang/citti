@@ -68,6 +68,7 @@ import app.citti.ui.settings.AccountInfo
 import app.citti.ui.settings.SettingsActions
 import app.citti.ui.settings.SettingsController
 import app.citti.ui.settings.SettingsScreen
+import app.citti.ui.settings.dailyActions
 import app.citti.ui.theme.CittiTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,6 +77,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * Not signed in shows Login. Signed in shows the back stack of [Navigator] (List, Tree, Search, Note, Settings),
@@ -165,6 +168,10 @@ class MainActivity : ComponentActivity() {
             known.addAll(keys)
         }
         BackHandler(enabled = stack.size > 1) { navigator.pop() }
+        // The automatic Import from Obsidian, after the first Sync: a snackbar only when it read something.
+        LaunchedEffect(Unit) {
+            container.dailyImportReports.collect { if (it.readSomething) snackbars.show(Snack.DailyImported) }
+        }
         val index = stack.lastIndex
         val route = stack.last()
         Box(Modifier.fillMaxSize()) {
@@ -464,6 +471,7 @@ class MainActivity : ComponentActivity() {
         SettingsScreen(
             state = state,
             nowSeconds = { container.config.nowSeconds() },
+            folders = pickerFolders,
             actions =
                 SettingsActions(
                     onBack = { if (!controller.onBack()) navigator.pop() },
@@ -480,6 +488,7 @@ class MainActivity : ComponentActivity() {
                     onSignInAgain = controller::signInAgain,
                     onConfirm = controller::confirm,
                     onDismissConfirm = controller::dismissConfirm,
+                    daily = remember(controller) { controller.dailyActions() },
                 ),
         )
     }
@@ -546,6 +555,13 @@ class MainActivity : ComponentActivity() {
             signInAgain = {
                 container.requireSignIn()
                 endSession()
+            },
+            daily = container.dailySettingsStore,
+            phoneLanguage = resources.configuration.locales[0].language,
+            now = {
+                container.config.clock
+                    .now()
+                    .toLocalDateTime(TimeZone.of(container.config.timeZone().id))
             },
         )
 

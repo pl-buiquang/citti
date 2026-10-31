@@ -26,6 +26,7 @@ import app.citti.ui.resources.action_open_exclusions
 import app.citti.ui.resources.conflict_snackbar
 import app.citti.ui.resources.deleted_snackbar
 import app.citti.ui.resources.dropped_snackbar
+import app.citti.ui.resources.import_done
 import app.citti.ui.resources.link_create
 import app.citti.ui.resources.link_missing
 import app.citti.ui.resources.link_unsynced
@@ -68,6 +69,9 @@ sealed interface Snack {
     ) : Snack
 
     data object LinkUnsynced : Snack
+
+    /** The automatic Import from Obsidian read the Daily notes settings (shown only when it read something). */
+    data object DailyImported : Snack
 
     /** The ⋮ menu's Favorite toast. */
     data object FavoriteAdded : Snack
@@ -120,6 +124,7 @@ fun SnackbarHost(
             is Snack.Dropped -> stringResource(Res.string.dropped_snackbar)
             is Snack.LinkMissing -> stringResource(Res.string.link_missing, shown.name)
             Snack.LinkUnsynced -> stringResource(Res.string.link_unsynced)
+            Snack.DailyImported -> stringResource(Res.string.import_done)
             Snack.FavoriteAdded -> stringResource(Res.string.toast_favorite_added)
             Snack.FavoriteRemoved -> stringResource(Res.string.toast_favorite_removed)
             Snack.NoteDeleted -> stringResource(Res.string.toast_deleted)

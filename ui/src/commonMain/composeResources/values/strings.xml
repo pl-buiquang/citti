@@ -287,4 +287,7 @@
     <string name="import_report_format">Format %1$s</string>
     <string name="import_report_format_default">Format: default</string>
     <string name="import_report_refused">Not applied: %1$s (%2$s)</string>
+    <string name="import_failed">Could not read the Obsidian settings. Try again when online.</string>
+    <string name="import_ok">OK</string>
+    <string name="settings_template_search">Search Notes</string>
 </resources>
