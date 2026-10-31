@@ -68,8 +68,13 @@ class NotesApi(
             }
         }
 
+    /**
+     * With [category], the server lists that exact Folder only (no sub-Folders; `""` is the Vault root), and the
+     * answer has its own ETag.
+     */
     suspend fun listNotes(
         excludeContent: Boolean = true,
+        category: String? = null,
         pruneBefore: Long? = null,
         chunkSize: Int? = null,
         chunkCursor: String? = null,
@@ -78,6 +83,7 @@ class NotesApi(
         call("GET /notes", {
             client.get(notesUrl("/notes")) {
                 if (excludeContent) parameter("exclude", "content")
+                category?.let { parameter("category", it) }
                 pruneBefore?.let { parameter("pruneBefore", it) }
                 chunkSize?.let { parameter("chunkSize", it) }
                 chunkCursor?.let { parameter("chunkCursor", it) }

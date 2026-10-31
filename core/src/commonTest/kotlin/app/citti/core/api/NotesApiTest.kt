@@ -132,6 +132,20 @@ class NotesApiTest {
         }
 
     @Test
+    fun categoryIsSentEncodedAndEmptyForTheVaultRoot() =
+        runTest {
+            val api = api { respond("[]", HttpStatusCode.OK, json()) }
+            api.listNotes(category = "a b/c&d")
+            api.listNotes(category = "")
+            api.listNotes()
+            assertEquals("a b/c&d", requests[0].url.parameters["category"])
+            assertTrue("category=a+b%2Fc%26d" in requests[0].url.encodedQuery || "category=a%20b%2Fc%26d" in requests[0].url.encodedQuery)
+            assertEquals("", requests[1].url.parameters["category"])
+            assertTrue("category=" in requests[1].url.encodedQuery)
+            assertNull(requests[2].url.parameters["category"])
+        }
+
+    @Test
     fun listWithContentOmitsExclude() =
         runTest {
             val api = api { respond("[]", HttpStatusCode.OK, json()) }

@@ -120,6 +120,8 @@ class SyncEngine(
     private val sleep: suspend (Long) -> Unit = { delay(it) },
     /** Stores the WebDAV user id and Notes folder; refreshed after an app-open sync, or when nothing is stored yet. */
     private val dav: DavSetup? = null,
+    /** Needed by [refreshFolder] and [fetchContent] only. */
+    private val folderSync: FolderSync? = null,
     private val now: () -> Long,
 ) {
     private val settings = db.settingQueries
@@ -213,6 +215,39 @@ class SyncEngine(
             mutex.unlock()
         }
     }
+
+    /**
+     * Refreshes one Folder's metadata ([FolderSync]). Waits for a running sync or push instead of returning
+     * [SyncOutcome.AlreadyRunning], because the caller (creation, Rename, Move) needs the answer. It is a check, not
+     * a Sync: [state] never shows Running, only the counts are updated.
+     */
+    suspend fun refreshFolder(folder: String): FolderRefresh {
+        val sync = checkNotNull(folderSync) { "SyncEngine built without a FolderSync" }
+        mutex.lock()
+        val result =
+            try {
+                val started = TimeSource.Monotonic.markNow()
+                sync.run(folder).also {
+                    log.info("folder refresh done result=${it::class.simpleName} duration=${started.elapsedNow().inWholeMilliseconds}ms")
+                    refreshCounts()
+                }
+            } finally {
+                mutex.unlock()
+            }
+        // A push after an edit that found the mutex taken by this refresh would otherwise wait for the next Sync.
+        if (pushRequested) {
+            pushRequested = false
+            push(SyncTrigger.AfterEdit)
+        }
+        return result
+    }
+
+    /**
+     * Downloads one SYNCED Note's missing text (e.g. after [refreshFolder]) so it opens without waiting for the
+     * next Sync. Outside the mutex: the write is guarded like the pull's, and never overwrites a local edit.
+     */
+    suspend fun fetchContent(localId: Long): Boolean =
+        checkNotNull(folderSync) { "SyncEngine built without a FolderSync" }.fetchContent(localId)
 
     /** Runs the one more push that a busy [push] asked for, if anything is still pending. Holds the mutex. */
     private suspend fun pushRequestedMeanwhile() {

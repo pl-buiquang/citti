@@ -27,6 +27,7 @@ import app.citti.core.settings.ImageSettings
 import app.citti.core.settings.SyncSettingsRepository
 import app.citti.core.settings.UiSettings
 import app.citti.core.sync.AfterEditPush
+import app.citti.core.sync.FolderSync
 import app.citti.core.sync.PullSync
 import app.citti.core.sync.PushSync
 import app.citti.core.sync.SyncEngine
@@ -317,6 +318,7 @@ class AppContainer(
                         AndroidSyncLog,
                         api.stats,
                         dav = davSetup,
+                        folderSync = FolderSync(database, api, exclusions, AndroidSyncLog),
                         now = now,
                     )
                 }

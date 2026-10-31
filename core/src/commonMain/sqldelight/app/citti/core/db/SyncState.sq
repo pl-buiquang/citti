@@ -16,3 +16,8 @@ DELETE FROM sync_state WHERE query_key = ?;
 
 clearAll:
 DELETE FROM sync_state;
+
+-- The Folder refresh keys (`list:<folder>`, the Vault root is `list:`). Cleared when the exclusions change: an
+-- Unsynced folder removes local rows, and a stored Folder ETag would then answer 304 over the missing rows.
+deleteFolderKeys:
+DELETE FROM sync_state WHERE query_key LIKE 'list:%';

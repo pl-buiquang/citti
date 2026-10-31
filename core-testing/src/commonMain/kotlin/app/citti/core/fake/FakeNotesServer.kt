@@ -645,9 +645,14 @@ class FakeNotesServer(
         val pruneBefore = query["pruneBefore"]?.toLongOrNull()
         val chunkSize = query["chunkSize"]?.toIntOrNull()
         val cursor = query["chunkCursor"]?.let(::parseCursor)
+        // Like the real server: an exact Folder match (no sub-Folders), and an empty value is the Vault root only.
+        val category = query["category"]
 
         // Newest first, ties by id; the cursor is a position in this order.
-        val ordered = noteMap.values.sortedWith(compareByDescending<FakeNote> { it.modified }.thenByDescending { it.id })
+        val ordered =
+            noteMap.values
+                .filter { category == null || it.category == category }
+                .sortedWith(compareByDescending<FakeNote> { it.modified }.thenByDescending { it.id })
         val seen = if (cursor == null) emptyList() else ordered.filter { it.isAtOrBefore(cursor) }
         val unseen = if (cursor == null) ordered else ordered.filterNot { it.isAtOrBefore(cursor) }
         val page = if (chunkSize == null) unseen else unseen.take(chunkSize)

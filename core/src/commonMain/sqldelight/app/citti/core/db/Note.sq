@@ -159,6 +159,10 @@ DELETE FROM note WHERE local_id = ?;
 deleteByCategoryPrefix:
 DELETE FROM note WHERE category = :prefix OR substr(category, 1, length(:prefix) + 1) = :prefix || '/';
 
+-- Folder refresh: SYNCED rows of exactly this Folder (no sub-folders), for the deletion diff.
+selectSyncedRemoteIdsInFolder:
+SELECT local_id, remote_id FROM note WHERE category = ? AND sync_state = 'SYNCED' AND remote_id IS NOT NULL;
+
 -- List mode. No content: the list never loads note text.
 selectListRows:
 SELECT local_id, title, category, excerpt, favorite, modified, sync_state, conflict_of

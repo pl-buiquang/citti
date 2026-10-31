@@ -26,6 +26,7 @@ class ExclusionRepository(
 ) {
     private val settings = db.settingQueries
     private val notes = db.noteQueries
+    private val syncState = db.syncStateQueries
 
     fun list(kind: ExclusionKind): List<String> = settings.selectExclusionsByKind(kind.name).executeAsList()
 
@@ -37,6 +38,7 @@ class ExclusionRepository(
     /**
      * Adds [path] (normalized); returns the stored path, or null when it is blank or already listed.
      * A Hidden folder hides its Notes at once, in the same transaction. An Unsynced one waits for the pull.
+     * Either way the Folder refresh ETags (`list:<folder>`) are dropped, so the next refresh is a full 200.
      */
     fun add(
         kind: ExclusionKind,
@@ -47,17 +49,19 @@ class ExclusionRepository(
             if (p in list(kind)) return@transactionWithResult null
             settings.insertExclusion(p, kind.name)
             if (kind == ExclusionKind.HIDDEN) notes.recomputeHidden()
+            syncState.deleteFolderKeys()
             p
         }
     }
 
-    /** Removes [path]. A Hidden folder shows its Notes again at once, in the same transaction. */
+    /** Removes [path]. A Hidden folder shows its Notes again at once, in the same transaction; the Folder ETags go. */
     fun remove(
         kind: ExclusionKind,
         path: String,
     ) = db.transaction {
         settings.deleteExclusion(path, kind.name)
         if (kind == ExclusionKind.HIDDEN) notes.recomputeHidden()
+        syncState.deleteFolderKeys()
     }
 
     /** Local Notes in [path] or below it. */

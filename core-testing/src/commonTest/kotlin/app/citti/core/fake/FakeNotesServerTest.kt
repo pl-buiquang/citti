@@ -95,6 +95,47 @@ class FakeNotesServerTest {
         }
 
     @Test
+    fun categoryFilterMatchesTheExactFolderOnly() =
+        runTest {
+            val server = FakeNotesServer()
+            val root = server.addNote("Root")
+            val a = server.addNote("A", category = "scratch")
+            server.addNote("Sub", category = "scratch/sub")
+            server.addNote("Other", category = "scratchpad")
+            val http = client(server)
+
+            assertEquals(listOf(a), http.get("$api/notes?exclude=content&category=scratch").array().ids())
+            // An empty value is the Vault root only, not every Note.
+            assertEquals(listOf(root), http.get("$api/notes?exclude=content&category=").array().ids())
+            assertEquals(4, http.get("$api/notes?exclude=content").array().size)
+        }
+
+    @Test
+    fun categoryListHasItsOwnEtagAndAnswers304() =
+        runTest {
+            val server = FakeNotesServer()
+            val a = server.addNote("A", category = "scratch")
+            val other = server.addNote("B", category = "journal")
+            val http = client(server)
+            val full = http.get("$api/notes?exclude=content").headers["ETag"]!!
+            val first = http.get("$api/notes?exclude=content&category=scratch")
+            val etag = first.headers["ETag"]!!
+            assertNotEquals(full, etag)
+
+            val second = http.get("$api/notes?exclude=content&category=scratch") { header("If-None-Match", etag) }
+            assertEquals(HttpStatusCode.NotModified, second.status)
+
+            // A change in another Folder leaves this Folder's ETag alone.
+            server.editOnServer(other, content = "changed")
+            val third = http.get("$api/notes?exclude=content&category=scratch") { header("If-None-Match", etag) }
+            assertEquals(HttpStatusCode.NotModified, third.status)
+
+            server.editOnServer(a, content = "changed")
+            val fourth = http.get("$api/notes?exclude=content&category=scratch") { header("If-None-Match", etag) }
+            assertEquals(HttpStatusCode.OK, fourth.status)
+        }
+
+    @Test
     fun pruneBeforeReturnsStubsForOldNotes() =
         runTest {
             val server = FakeNotesServer()
