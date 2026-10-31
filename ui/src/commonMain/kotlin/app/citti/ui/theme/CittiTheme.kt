@@ -7,7 +7,13 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Density
+import app.citti.core.appearance.AccentSource
+import app.citti.core.appearance.Appearance
+import app.citti.core.appearance.ModeChoice
+import app.citti.core.appearance.ThemeChoice
 
 /** The text roles components use, mapped from each family's own styles in `NotesType.kt`. */
 @Immutable
@@ -69,25 +75,52 @@ object CittiTheme {
         get() = LocalThemeFamily.current
 }
 
+/** Themes [content] from the [appearance]: preset or Custom theme, Mode, Accent source and Text size. */
 @Composable
 fun CittiTheme(
-    family: ThemeFamily = ThemeFamily.Signal,
+    appearance: Appearance = Appearance(),
+    content: @Composable () -> Unit,
+) {
+    val systemDark = isSystemInDarkTheme()
+    val fonts = rememberFontResolver()
+    val dark = appearance.isDark(systemDark)
+    val dynamic = if (appearance.accent == AccentSource.DYNAMIC) rememberDynamicAccent(dark) else null
+    val theme = remember(appearance, systemDark, dynamic, fonts) { resolveTheme(appearance, systemDark, dynamic, fonts) }
+    val density = LocalDensity.current
+    val scaled = remember(density, theme.textScale) { Density(density.density, density.fontScale * theme.textScale) }
+    CompositionLocalProvider(
+        LocalNotesColors provides theme.colors,
+        LocalNotesShape provides theme.shape,
+        LocalCittiTypography provides theme.typography,
+        LocalThemeFamily provides theme.family,
+        LocalDensity provides scaled,
+        content = content,
+    )
+}
+
+/** A preset in a Mode, for the theme sample and tests. */
+@Composable
+fun CittiTheme(
+    family: ThemeFamily,
     mode: ThemeMode = ThemeMode.System,
     content: @Composable () -> Unit,
 ) {
-    val dark =
-        when (mode) {
-            ThemeMode.System -> isSystemInDarkTheme()
-            ThemeMode.Light -> false
-            ThemeMode.Dark -> true
+    val appearance =
+        remember(family, mode) {
+            Appearance(
+                theme =
+                    when (family) {
+                        ThemeFamily.Signal -> ThemeChoice.SIGNAL
+                        ThemeFamily.Paper -> ThemeChoice.PAPER
+                        ThemeFamily.Index -> ThemeChoice.INDEX
+                    },
+                mode =
+                    when (mode) {
+                        ThemeMode.System -> ModeChoice.SYSTEM
+                        ThemeMode.Light -> ModeChoice.LIGHT
+                        ThemeMode.Dark -> ModeChoice.DARK
+                    },
+            )
         }
-    val fonts = rememberFontResolver()
-    val typography = remember(family, fonts) { cittiTypography(family, fonts) }
-    CompositionLocalProvider(
-        LocalNotesColors provides notesColors(family, dark),
-        LocalNotesShape provides notesShape(family),
-        LocalCittiTypography provides typography,
-        LocalThemeFamily provides family,
-        content = content,
-    )
+    CittiTheme(appearance, content)
 }

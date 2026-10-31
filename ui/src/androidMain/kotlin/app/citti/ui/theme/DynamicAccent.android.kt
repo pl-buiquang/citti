@@ -1,0 +1,25 @@
+package app.citti.ui.theme
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+
+@Composable
+actual fun rememberDynamicAccent(dark: Boolean): DynamicAccent? {
+    val context = LocalContext.current
+    // Not keyed on the configuration: a wallpaper change recreates the activity, which recomposes this.
+    return remember(context, dark) {
+        dynamicAccentFrom(dark) { stop ->
+            val res =
+                when (stop) {
+                    AccentStop.S0 -> android.R.color.system_accent1_0
+                    AccentStop.S100 -> android.R.color.system_accent1_100
+                    AccentStop.S200 -> android.R.color.system_accent1_200
+                    AccentStop.S600 -> android.R.color.system_accent1_600
+                    AccentStop.S700 -> android.R.color.system_accent1_700
+                    AccentStop.S800 -> android.R.color.system_accent1_800
+                }
+            context.getColor(res).toLong() and 0xFFFFFFFFL
+        }
+    }
+}
