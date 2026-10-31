@@ -226,3 +226,22 @@ searchSnippets:
 SELECT note.local_id, snippet(note_fts, char(2), char(3), '…', 1, 12) AS snippet
 FROM note_fts JOIN note ON note.local_id = note_fts.docid
 WHERE note_fts MATCH :match AND note.local_id IN :ids;
+
+-- Wikilink resolution (LinkResolver). No `hidden` filter: Hidden folders resolve. The first match is the most recent.
+selectByFolderAndTitle:
+SELECT local_id FROM note
+WHERE category = :category COLLATE NOCASE AND title = :title COLLATE NOCASE AND sync_state != 'DELETED'
+ORDER BY modified DESC LIMIT 1;
+
+selectByTitle:
+SELECT local_id, category FROM note WHERE title = :title COLLATE NOCASE AND sync_state != 'DELETED' ORDER BY modified DESC;
+
+-- Link autocomplete: title matches from note_fts (the caller ranks and keeps the best 8), and the empty prefix.
+suggestTitles:
+SELECT note.local_id, note.title, note.category, note.modified FROM note
+JOIN note_fts ON note.local_id = note_fts.docid
+WHERE note_fts MATCH ? AND note.sync_state != 'DELETED'
+ORDER BY note.modified DESC LIMIT 500;
+
+selectRecentForSuggest:
+SELECT local_id, title, category FROM note WHERE sync_state != 'DELETED' ORDER BY modified DESC LIMIT 8;
