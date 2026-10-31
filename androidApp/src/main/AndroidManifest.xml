@@ -6,7 +6,8 @@
     <application
         android:allowBackup="false"
         android:label="citti"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity
             android:name=".MainActivity"
             android:exported="true">
