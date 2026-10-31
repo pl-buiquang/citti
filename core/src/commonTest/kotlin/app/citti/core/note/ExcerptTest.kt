@@ -35,6 +35,15 @@ class ExcerptTest {
     }
 
     @Test
+    fun setextHeadingEqualToTitleIsSkipped() {
+        assertEquals("ssl", excerpt("Title\n=====\n\n- ssl"))
+        assertEquals("Body", excerpt("title\n---\nBody"))
+    }
+
+    @Test
+    fun setextHeadingWithAnotherTextIsKept() = assertEquals("Groceries", excerpt("Groceries\n=====\nBody"))
+
+    @Test
     fun differentHeadingIsKeptWithoutHashes() = assertEquals("Groceries", excerpt("# Groceries ##\nBody"))
 
     @Test

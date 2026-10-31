@@ -4,6 +4,7 @@ private const val MAX_LINES = 20
 private const val MAX_CHARS = 200
 
 private val HEADING = Regex("""^ {0,3}#{1,6}(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$""")
+private val SETEXT_UNDERLINE = Regex("""^ {0,3}(?:=+|-+)[ \t]*$""")
 private val LEADING_MARKERS =
     listOf(
         Regex("""^(?:>[ \t]?)+"""),
@@ -20,7 +21,7 @@ private val SPACES = Regex("""\s+""")
  * The Excerpt of a Note: its first meaningful line, cleaned of markdown, at most 200 chars.
  *
  * Skips the frontmatter, blank lines, one-line HTML comments and a first heading that repeats [title]
- * (ignoring case). Returns null when [content] is null (not downloaded yet), and "" when no line
+ * (ignoring case), whether it is `# Title` or `Title` underlined with `===` or `---`. Returns null when [content] is null (not downloaded yet), and "" when no line
  * qualifies, so that [ExcerptBackfill] does not try the Note again.
  */
 fun excerptOf(
@@ -32,7 +33,13 @@ fun excerptOf(
     var i = skipFiller(lines, frontmatterEnd(lines))
     if (i < lines.size) {
         val heading = HEADING.matchEntire(lines[i])
-        if (heading != null && heading.groupValues[1].trim().equals(title.trim(), ignoreCase = true)) i++
+        if (heading != null) {
+            if (heading.groupValues[1].trim().equals(title.trim(), ignoreCase = true)) i++
+        } else if (i + 1 < lines.size && SETEXT_UNDERLINE.matches(lines[i + 1]) &&
+            lines[i].trim().equals(title.trim(), ignoreCase = true)
+        ) {
+            i += 2
+        }
     }
     repeat(MAX_LINES) {
         i = skipFiller(lines, i)
