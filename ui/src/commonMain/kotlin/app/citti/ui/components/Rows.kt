@@ -42,6 +42,8 @@ private fun Modifier.rowClick(onClick: (() -> Unit)?): Modifier =
         clickable(role = Role.Button, onClick = onClick)
     }
 
+private const val MAX_FOLDER_WITH_SNIPPET = 24
+
 /**
  * A Note row. Line 1: the title. Line 2: `folder · excerpt` ([snippet] replaces the Excerpt in
  * Search). [folder] null hides the Folder (Tree mode: the Breadcrumb shows it); "" is the Vault
@@ -61,7 +63,11 @@ fun NoteRow(
     onClick: (() -> Unit)? = null,
 ) {
     val colors = CittiTheme.colors
-    val folderText = folder?.ifEmpty { stringResource(Res.string.tree_root) }
+    // With a snippet the hit matters more than the whole path: keep the end of a long Folder so the hit stays on the line.
+    val folderText =
+        folder?.ifEmpty { stringResource(Res.string.tree_root) }?.let {
+            if (snippet != null && it.length > MAX_FOLDER_WITH_SNIPPET) "…" + it.takeLast(MAX_FOLDER_WITH_SNIPPET - 1) else it
+        }
     val detail: AnnotatedString? = snippet ?: excerpt?.takeIf { it.isNotBlank() }?.let(::AnnotatedString)
     val second =
         buildAnnotatedString {

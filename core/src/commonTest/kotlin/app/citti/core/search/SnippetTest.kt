@@ -13,11 +13,15 @@ class SnippetTest {
     @Test
     fun aFarHitIsBroughtToTheStart() {
         val raw = "…the limit.\n- `accentAndCaseInsensitive`: \u0002ete\u0003 and \u0002ÉTÉ\u0003"
-        assertEquals("…`accentAndCaseInsensitive`: \u0002ete\u0003 and \u0002ÉTÉ\u0003", tidySnippet(raw))
+        assertEquals("…itive`: \u0002ete\u0003 and \u0002ÉTÉ\u0003", tidySnippet(raw))
     }
 
     @Test
-    fun noSpaceBeforeTheHitKeepsTheText() = assertEquals("x".repeat(40) + "\u0002a\u0003", tidySnippet("x".repeat(40) + "\u0002a\u0003"))
+    fun aFarHitInALongWordIsCutInTheWord() =
+        assertEquals(
+            "…" + "x".repeat(8) + "\u0002a\u0003",
+            tidySnippet("x".repeat(40) + "\u0002a\u0003"),
+        )
 
     @Test
     fun noHitKeepsTheText() = assertEquals("plain text", tidySnippet("plain\ntext"))
