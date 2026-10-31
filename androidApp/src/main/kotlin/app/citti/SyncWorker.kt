@@ -40,12 +40,12 @@ class SyncWorker(
     override suspend fun doWork(): Result {
         val container = (applicationContext as CittiApp).container
         AndroidSyncLog.info("worker start attempt=$runAttemptCount")
-        // Foreground (same notification as the service) so the sync survives screen-off. Android may refuse
+        // Foreground (its own notification, same channel as the service) so the sync survives screen-off. Android may refuse
         // from the background (ForegroundServiceStartNotAllowedException); then run unprotected.
         try {
             setForeground(
                 ForegroundInfo(
-                    SyncNotification.ID,
+                    SyncNotification.WORKER_ID,
                     SyncNotification.build(applicationContext),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
                 ),

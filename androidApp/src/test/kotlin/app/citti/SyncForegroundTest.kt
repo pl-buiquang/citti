@@ -24,6 +24,16 @@ class SyncForegroundTest {
     }
 
     @Test
+    fun notificationIsPostedOnlyWhileForegroundAndRunning() {
+        val running = SyncStatus.Running(SyncPhase.Pulling, Progress(1, 2), null)
+        assertTrue(shouldPostNotification(running, foreground = true))
+        assertFalse(shouldPostNotification(running, foreground = false))
+        assertFalse(shouldPostNotification(SyncStatus.Idle(null, null), foreground = true))
+        assertFalse(shouldPostNotification(SyncStatus.Offline(null), foreground = true))
+        assertFalse(shouldPostNotification(null, foreground = true))
+    }
+
+    @Test
     fun notificationPermissionIsAskedOnceFromAndroid13() {
         assertTrue(shouldAskNotificationPermission(sdk = 33, granted = false, alreadyAsked = false))
         assertTrue(shouldAskNotificationPermission(sdk = 36, granted = false, alreadyAsked = false))

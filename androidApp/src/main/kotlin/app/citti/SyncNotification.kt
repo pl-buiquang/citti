@@ -25,10 +25,23 @@ fun notificationContent(status: SyncStatus?): SyncNotificationContent {
     }
 }
 
-/** The low-importance ongoing notification shared by [SyncForegroundService] and [SyncWorker]. */
+/**
+ * Whether the service should update its notification: only while it is in the foreground, and only with
+ * progress to show. A post after `stopForeground` would leave an ongoing notification behind.
+ */
+fun shouldPostNotification(
+    status: SyncStatus?,
+    foreground: Boolean,
+): Boolean = foreground && status is SyncStatus.Running
+
+/**
+ * The low-importance ongoing notification of [SyncForegroundService] and [SyncWorker]. Each has its own id:
+ * two foreground services sharing one notification remove it at the wrong time.
+ */
 object SyncNotification {
     const val CHANNEL_ID = "sync"
-    const val ID = 1001
+    const val SERVICE_ID = 1001
+    const val WORKER_ID = 1002
 
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)

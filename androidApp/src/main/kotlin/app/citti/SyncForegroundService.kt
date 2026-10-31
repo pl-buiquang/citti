@@ -8,6 +8,7 @@ import android.content.pm.ServiceInfo
 import android.os.IBinder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
@@ -29,15 +30,12 @@ class SyncForegroundService : Service() {
 
     private val container get() = (application as CittiApp).container
 
-    override fun onCreate() {
-        super.onCreate()
-        val manager = getSystemService(NotificationManager::class.java)
-        scope.launch {
-            container.syncStatus.collect { status ->
-                manager.notify(SyncNotification.ID, SyncNotification.build(this@SyncForegroundService, notificationContent(status)))
-            }
-        }
-    }
+    private val manager get() = getSystemService(NotificationManager::class.java)
+
+    /** True between `startForeground` and `stopForeground`; the collector posts only then. */
+    private var foreground = false
+
+    private var collector: Job? = null
 
     // Not sticky: if the process dies mid-sync, the next trigger starts a fresh sync.
     override fun onStartCommand(
@@ -47,20 +45,38 @@ class SyncForegroundService : Service() {
     ): Int {
         // Every startForegroundService() needs its startForeground(), a running instance included.
         startForeground(
-            SyncNotification.ID,
+            SyncNotification.SERVICE_ID,
             SyncNotification.build(this),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
         )
+        foreground = true
+        if (collector?.isActive != true) collector = scope.launch { postProgress() }
         // stopSelf(startId) is ignored when a later start came in; that start's own wait stops the service.
         scope.launch {
             container.foregroundSync.first { !it }
+            // Stop posting before the notification goes: a post after it is removed leaves an ongoing
+            // notification that no service owns, and nothing clears it.
+            foreground = false
+            collector?.cancel()
+            collector = null
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf(startId)
         }
         return START_NOT_STICKY
     }
 
+    private suspend fun postProgress() {
+        container.syncStatus.collect { status ->
+            if (shouldPostNotification(status, foreground)) {
+                manager.notify(SyncNotification.SERVICE_ID, SyncNotification.build(this, notificationContent(status)))
+            }
+        }
+    }
+
     override fun onDestroy() {
         scope.cancel()
+        // Safety net for an orphan. Android ignores this for a notification a live foreground service holds.
+        manager.cancel(SyncNotification.SERVICE_ID)
         super.onDestroy()
     }
 
