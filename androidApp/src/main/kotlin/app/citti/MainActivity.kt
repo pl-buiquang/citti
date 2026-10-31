@@ -25,6 +25,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.MainMode
@@ -78,6 +79,9 @@ class MainActivity : ComponentActivity() {
 
     /** The controllers of the other route entries (Search, Note, Settings), one scope each. */
     private val routes = RouteHost(::newScope)
+
+    /** [reportFullyDrawn] is called once per Activity, when the first List rows are on screen. */
+    private var fullyDrawn = false
 
     private val titleCollator by lazy { localeTitleCollator() }
     private val rowDates by lazy { JavaTimeRowDateFormatter() }
@@ -186,6 +190,14 @@ class MainActivity : ComponentActivity() {
             askNotificationPermissionOnce()
         }
         LaunchedEffect(controller, route) { controller.show(route) }
+        // Cold start to the first List rows (M3 spec §11): `adb shell am start -W` and logcat "Fully drawn".
+        LaunchedEffect(state.loaded) {
+            if (state.loaded && !fullyDrawn) {
+                fullyDrawn = true
+                withFrameNanos { }
+                reportFullyDrawn()
+            }
+        }
         val view =
             when (route) {
                 is Route.Tree -> BrowseView.Tree(route.folder)
