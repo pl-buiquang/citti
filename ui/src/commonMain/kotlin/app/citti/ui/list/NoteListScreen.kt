@@ -155,7 +155,7 @@ private fun StatusBanner(
 }
 
 @Composable
-private fun statusText(
+internal fun statusText(
     line: SyncLine,
     state: NoteListUiState,
 ): String {
@@ -179,7 +179,7 @@ private fun statusText(
 }
 
 @Composable
-private fun syncingText(progress: Progress?): String =
+internal fun syncingText(progress: Progress?): String =
     if (progress == null || progress.total == 0) {
         stringResource(Res.string.sync_syncing)
     } else {
@@ -187,7 +187,7 @@ private fun syncingText(progress: Progress?): String =
     }
 
 @Composable
-private fun syncedText(line: SyncLine.Synced): String =
+internal fun syncedText(line: SyncLine.Synced): String =
     when (line.age) {
         Age.JustNow -> stringResource(Res.string.sync_synced_now)
         Age.Minutes -> stringResource(Res.string.sync_synced_minutes, line.amount)

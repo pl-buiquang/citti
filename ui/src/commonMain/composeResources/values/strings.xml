@@ -53,4 +53,47 @@
     <string name="banner_error">Sync did not finish. Your Notes stay on this device.</string>
     <string name="banner_retry">Retry</string>
     <string name="banner_sign_in_again">Sign in again</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_back">Back</string>
+    <string name="settings_account">Account</string>
+    <string name="settings_server">Server</string>
+    <string name="settings_user">User</string>
+    <string name="settings_sign_out">Sign out</string>
+    <string name="settings_sign_in_again">Sign in again</string>
+    <string name="settings_sign_in_again_help">Keeps the Notes on this phone and asks the server for a new sign-in.</string>
+    <string name="settings_sign_out_title">Sign out?</string>
+    <string name="settings_sign_out_body">All Notes, settings and pending edits on this phone are deleted. Your Notes on the server are not touched. Pending edits that were not synced are lost.</string>
+    <string name="settings_sync">Sync</string>
+    <string name="settings_interval">Background sync</string>
+    <string name="settings_interval_manual">Manual only</string>
+    <string name="settings_interval_minutes">Every %1$d min</string>
+    <string name="settings_interval_hours">Every %1$d h</string>
+    <string name="settings_network">Network</string>
+    <string name="settings_network_any">Any network</string>
+    <string name="settings_network_unmetered">Unmetered only (Wi-Fi)</string>
+    <string name="settings_sync_now">Sync now</string>
+    <string name="settings_exclusions">Exclusions</string>
+    <string name="settings_unsynced_title">Unsynced folders</string>
+    <string name="settings_unsynced_help">Never downloaded and never searched. Their Notes are removed from this phone, not from the server.</string>
+    <string name="settings_hidden_title">Hidden folders</string>
+    <string name="settings_hidden_help">Synced and searchable, but not shown in the list or the tree.</string>
+    <string name="settings_none">None</string>
+    <string name="settings_add_folder">Add a folder</string>
+    <string name="settings_remove">Remove</string>
+    <string name="settings_pick_unsynced_title">Add an Unsynced folder</string>
+    <string name="settings_pick_hidden_title">Add a Hidden folder</string>
+    <string name="settings_known_folders">Folders on this phone</string>
+    <string name="settings_no_known_folders">No Folders known yet. Type a path below.</string>
+    <string name="settings_folder_path_label">Folder path</string>
+    <string name="settings_folder_path_hint">projects/archive</string>
+    <string name="settings_folder_add">Add</string>
+    <string name="settings_folder_blank">Enter a Folder path.</string>
+    <string name="settings_folder_listed">This Folder is already in the list.</string>
+    <string name="settings_confirm_unsynced_title">Delete local Notes?</string>
+    <string name="settings_confirm_unsynced_body">%1$d Notes in \"%2$s\" will be deleted from this phone, not from the server. Notes with pending edits are kept until they sync.</string>
+    <string name="settings_confirm_unsynced_pending">%1$d of them have pending edits.</string>
+    <string name="settings_confirm_delete">Delete from phone</string>
+    <string name="settings_cancel">Cancel</string>
 </resources>
