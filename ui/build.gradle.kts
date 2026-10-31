@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.android.kmp.library)
 }
@@ -22,6 +23,7 @@ kotlin {
             api(project(":core"))
             api(libs.kotlinx.coroutines.core)
             implementation(libs.compose.resources)
+            implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
