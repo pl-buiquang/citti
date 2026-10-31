@@ -78,8 +78,9 @@ SELECT remote_id FROM note WHERE remote_id IS NOT NULL;
 selectSyncIndex:
 SELECT local_id, remote_id, category, sync_state FROM note WHERE remote_id IS NOT NULL;
 
+-- Pull: download of a SYNCED note's text. Never overwrites a local edit.
 updateContent:
-UPDATE note SET content = :content, excerpt = :excerpt, etag = :etag WHERE local_id = :localId;
+UPDATE note SET content = :content, excerpt = :excerpt, etag = :etag WHERE local_id = :localId AND sync_state = 'SYNCED';
 
 selectNeedingContent:
 SELECT local_id, remote_id, title, category FROM note WHERE content IS NULL AND sync_state != 'DELETED' AND remote_id IS NOT NULL;
@@ -87,13 +88,23 @@ SELECT local_id, remote_id, title, category FROM note WHERE content IS NULL AND 
 selectDirty:
 SELECT * FROM note WHERE sync_state IN ('DIRTY', 'NEW', 'DELETED') ORDER BY local_id;
 
-markDirty:
+-- Editor save (NoteEditor). Refused (0 rows) when the row's etag is no longer the one the text was based on, or the
+-- row's content was cleared by a pull. A NEW row has a NULL etag on both sides.
+saveEdit:
 UPDATE note
 SET content = :content,
     excerpt = :excerpt,
     modified = :modified,
     sync_state = CASE WHEN sync_state = 'NEW' THEN 'NEW' ELSE 'DIRTY' END
-WHERE local_id = :localId AND sync_state != 'DELETED';
+WHERE local_id = :localId AND sync_state != 'DELETED' AND readonly = 0
+  AND etag IS :baseEtag AND content IS NOT NULL;
+
+selectForEditor:
+SELECT local_id, remote_id, etag, title, category, content, favorite, modified, readonly, hidden, sync_state, conflict_of
+FROM note WHERE local_id = ?;
+
+selectConflictCopyOf:
+SELECT local_id, title FROM note WHERE conflict_of = ? AND sync_state != 'DELETED' ORDER BY local_id DESC LIMIT 1;
 
 -- A new Note or Conflict copy in a Hidden folder is hidden at once (same prefix rule as FolderPrefix.kt).
 insertNew:

@@ -58,6 +58,7 @@ class PushSync(
     var verifyBeforeDelete: Boolean = true
 
     private val queries = db.noteQueries
+    private val conflictCopies = ConflictCopies(db, now)
     private val database = db
 
     private var updated = 0
@@ -225,11 +226,7 @@ class PushSync(
                     val current = queries.selectByLocalId(note.local_id).executeAsOneOrNull() ?: return@transaction
                     val sameText = server.content.orEmpty() == current.content.orEmpty() && server.title == current.title
                     if (!sameText && current.sync_state != "DELETED") {
-                        val title = freeConflictTitle(current.category, "${current.title} (conflict ${isoDate(now())})")
-                        val text = current.content.orEmpty()
-                        // The Excerpt skips a heading equal to the original title, which the text still starts with.
-                        queries.insertNew(title, current.category, text, excerptOf(text, current.title), now(), current.local_id)
-                        conflicts += queries.lastInsertedLocalId().executeAsOne()
+                        conflicts += conflictCopies.create(current.title, current.category, current.content.orEmpty(), current.local_id)
                         log.warn("push conflict: server wins, local text kept as copy local=${conflicts.last()}")
                     }
                     storeServerVersion(current, server)
@@ -259,16 +256,6 @@ class PushSync(
             readonly = server.readonly ?: false,
             localId = note.local_id,
         )
-    }
-
-    private fun freeConflictTitle(
-        category: String,
-        base: String,
-    ): String {
-        var title = base
-        var n = 2
-        while (queries.folderHasTitle(category, title).executeAsOne() > 0) title = "$base $n".also { n++ }
-        return title
     }
 
     /** [sentTitle], [sentCategory] and [sentContent] are the values the request carried. */

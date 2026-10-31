@@ -14,12 +14,17 @@ fun NoteQueries.insertNew(
     conflictOf: Long?,
 ) = insertNew(title, category, content, excerptOf(content, title), modified, conflictOf)
 
-/** Reads the current title of [localId] to compute the excerpt; markDirty does not change the title. */
+/** A local edit as the editor makes it: based on the row's current etag, so it is not refused for that. */
 fun NoteQueries.markDirty(
     content: String?,
     modified: Long,
     localId: Long,
-) = markDirty(content, excerptOf(content, titleOf(localId)), modified, localId)
+) {
+    // A Note whose text was never downloaded has no text to edit; give it an empty one first.
+    if (selectByLocalId(localId).executeAsOne().content == null) updateContent("", null, localId)
+    val row = selectByLocalId(localId).executeAsOne()
+    saveEdit(content, excerptOf(content, row.title), modified, localId, row.etag)
+}
 
 fun NoteQueries.updateContent(
     content: String?,

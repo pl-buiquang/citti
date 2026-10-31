@@ -219,6 +219,7 @@ class PullSync(
 
         val failures = mutableListOf<ContentFailure>()
         var fetched = 0
+        var skippedLocal = 0
         val batch = ArrayList<Pair<Long, RemoteNote>>(writeBatchSize)
         val titles = targets.associate { it.local_id to it.title }
 
@@ -228,10 +229,10 @@ class PullSync(
                 batch.forEach { (localId, n) ->
                     val content = n.content ?: ""
                     val title = n.title ?: titles.getValue(localId)
-                    notes.updateContent(content, excerptOf(content, title), n.etag, localId)
+                    // 0 rows: the Note was edited locally while its text downloaded; the edit stays.
+                    if (notes.updateContent(content, excerptOf(content, title), n.etag, localId).value > 0) fetched++ else skippedLocal++
                 }
             }
-            fetched += batch.size
             batch.clear()
         }
 
@@ -296,6 +297,7 @@ class PullSync(
             }
             flush()
         }
+        if (skippedLocal > 0) log.warn("pull content skippedLocal=$skippedLocal (edited locally while downloading)")
         if (abortedBy == null) logProgress(total, total, started.elapsedNow().inWholeMilliseconds)
         // Failures that led to a network stop are not reported: the run fails as a whole and the next one resumes.
         return Downloaded(fetched, if (abortedBy == null) failures else emptyList(), abortedBy)

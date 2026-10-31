@@ -385,8 +385,9 @@ class PushSyncTest {
     @Test
     fun readOnlyNotesAreSkipped() =
         runTest {
-            val (local, remote) = synced("RO", "base", readonly = true)
+            val (local, remote) = synced("RO", "base")
             notes.markDirty("edit", 5, local)
+            driver.execute(null, "UPDATE note SET readonly = 1 WHERE local_id = ?", 1) { bindLong(0, local) }
             val result = done()
             assertEquals(1, result.skippedReadOnly)
             assertEquals("base", server.note(remote)!!.content)

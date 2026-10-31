@@ -282,8 +282,11 @@ class NoteSearchTest {
             notes.recomputeHidden()
             assertEquals(before, segments())
             // whereas a content write does re-index
-            notes.updateContent("other", "e8", id)
-            assertTrue(segments() > before)
+            notes.insertNew("U", "c", "body", 5, null)
+            val live = notes.lastInsertedLocalId().executeAsOne()
+            val withSecond = segments()
+            notes.markDirty("other", 6, live)
+            assertTrue(segments() > withSecond)
         }
 
     /** markSynced and an unchanged upsertFromServer name title and category in their SET, with the same values. */
