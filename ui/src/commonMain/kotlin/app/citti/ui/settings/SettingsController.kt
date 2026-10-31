@@ -104,7 +104,17 @@ sealed interface SettingsConfirm {
     ) : SettingsConfirm
 }
 
-enum class FolderError { Blank, AlreadyListed }
+/** Why a folder typed or picked for an exclusion list was refused. */
+sealed interface FolderError {
+    data object Blank : FolderError
+
+    data object AlreadyListed : FolderError
+
+    /** The Journal folder [journal] is this folder or lies below it. */
+    data class JournalFolder(
+        val journal: String,
+    ) : FolderError
+}
 
 data class SettingsUiState(
     val account: AccountInfo,
@@ -296,7 +306,7 @@ class SettingsController(
         kind: ExclusionKind,
         path: String,
     ) {
-        when (store.addExclusion(kind, path)) {
+        when (val result = store.addExclusion(kind, path)) {
             is AddResult.Added -> {
                 local.value = Local()
                 syncAfterChange()
@@ -308,6 +318,10 @@ class SettingsController(
 
             AddResult.Duplicate -> {
                 local.update { it.copy(confirm = null, folderError = FolderError.AlreadyListed) }
+            }
+
+            is AddResult.JournalFolder -> {
+                local.update { it.copy(confirm = null, folderError = FolderError.JournalFolder(result.journal)) }
             }
         }
     }

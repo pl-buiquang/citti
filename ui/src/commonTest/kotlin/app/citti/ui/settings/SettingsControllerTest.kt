@@ -43,6 +43,7 @@ private class FakeStore(
     ): AddResult {
         val flow = if (kind == ExclusionKind.UNSYNCED) unsynced else hidden
         if (path in flow.value) return AddResult.Duplicate
+        if (kind == ExclusionKind.UNSYNCED && path == "journal") return AddResult.JournalFolder("journal")
         flow.value = flow.value + path
         return AddResult.Added(path)
     }
@@ -162,6 +163,17 @@ class SettingsControllerTest {
             assertEquals(FolderError.AlreadyListed, c.state.value.folderError)
             assertEquals(listOf("x"), c.state.value.unsynced)
             assertEquals(1, triggers.size)
+        }
+
+    @Test
+    fun theJournalFolderIsRefusedAsUnsynced() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            c.openPicker(ExclusionKind.UNSYNCED)
+            c.addFolder(ExclusionKind.UNSYNCED, "journal")
+            assertEquals(FolderError.JournalFolder("journal"), c.state.value.folderError)
+            assertEquals(emptyList(), c.state.value.unsynced)
+            assertEquals(0, triggers.size)
         }
 
     @Test

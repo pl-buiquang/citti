@@ -41,6 +41,7 @@ import app.citti.ui.components.CittiTextField
 import app.citti.ui.components.CittiTopBar
 import app.citti.ui.components.colored
 import app.citti.ui.resources.Res
+import app.citti.ui.resources.exclusion_journal_refused
 import app.citti.ui.resources.settings_account
 import app.citti.ui.resources.settings_add_folder
 import app.citti.ui.resources.settings_back
@@ -262,7 +263,11 @@ private fun FolderPicker(
         CittiTopBar(stringResource(title), actionLabel = stringResource(Res.string.settings_back), onAction = actions.onBack)
         state.folderError?.let {
             Banner(
-                stringResource(if (it == FolderError.Blank) Res.string.settings_folder_blank else Res.string.settings_folder_listed),
+                when (it) {
+                    FolderError.Blank -> stringResource(Res.string.settings_folder_blank)
+                    FolderError.AlreadyListed -> stringResource(Res.string.settings_folder_listed)
+                    is FolderError.JournalFolder -> stringResource(Res.string.exclusion_journal_refused, it.journal)
+                },
                 BannerKind.Error,
             )
         }

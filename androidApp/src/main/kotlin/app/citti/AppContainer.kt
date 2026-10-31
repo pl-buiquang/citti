@@ -14,6 +14,7 @@ import app.citti.core.auth.Credentials
 import app.citti.core.auth.LoginFlow
 import app.citti.core.auth.prepareForSignIn
 import app.citti.core.auth.signOut
+import app.citti.core.daily.DailyGuard
 import app.citti.core.dav.DavClient
 import app.citti.core.dav.DavSetup
 import app.citti.core.dav.ImageResolver
@@ -27,6 +28,7 @@ import app.citti.core.note.NoteActions
 import app.citti.core.note.NoteCreator
 import app.citti.core.note.NoteEditor
 import app.citti.core.search.NoteSearch
+import app.citti.core.settings.DailySettings
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.ImageSettings
@@ -117,6 +119,11 @@ class AppContainer(
     val uiSettings: UiSettings by lazy { UiSettings(database) }
 
     val imageSettings: ImageSettings by lazy { ImageSettings(database) }
+
+    val dailySettings: DailySettings by lazy { DailySettings(database, exclusions) }
+
+    /** The Journal folder when a state saved before M6 left it under an Unsynced folder. */
+    val dailyGuard: DailyGuard by lazy { DailyGuard(dailySettings, exclusions) }
 
     val settingsStore: CoreSettingsStore by lazy { CoreSettingsStore(syncSettings, exclusions, imageSettings) }
 

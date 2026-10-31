@@ -3,6 +3,7 @@ package app.citti.core.settings
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.citti.core.db.CittiDatabase
+import app.citti.core.sync.categoryMatchesPrefix
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -20,6 +21,11 @@ sealed interface AddResult {
 
     /** The folder is already in that list. */
     data object Duplicate : AddResult
+
+    /** Unsynced only: the Journal folder [journal] is this folder or lies below it. */
+    data class JournalFolder(
+        val journal: String,
+    ) : AddResult
 }
 
 /** Trims and strips leading, trailing and doubled slashes; null when nothing is left. */
@@ -49,7 +55,8 @@ class ExclusionRepository(
     fun knownFolders(): Flow<List<String>> = notes.selectDistinctCategories().asFlow().mapToList(dispatcher)
 
     /**
-     * Adds [path] (normalized); returns [AddResult.Added] with the stored path, or the reason it was refused.
+     * Adds [path] (normalized); returns [AddResult.Added] with the stored path, or the reason it was refused. An
+     * Unsynced folder that is the Journal folder or one of its parents is refused (an Unsynced sub-folder of it is fine).
      * A Hidden folder hides its Notes at once, in the same transaction. An Unsynced one waits for the pull.
      * Either way the Folder refresh ETags (`list:<folder>`) are dropped, so the next refresh is a full 200.
      */
@@ -60,6 +67,10 @@ class ExclusionRepository(
         val p = normalizeFolderPath(path) ?: return AddResult.Blank
         return db.transactionWithResult {
             if (p in list(kind)) return@transactionWithResult AddResult.Duplicate
+            if (kind == ExclusionKind.UNSYNCED) {
+                val journal = journalFolder(settings)
+                if (journal.isNotEmpty() && categoryMatchesPrefix(journal, p)) return@transactionWithResult AddResult.JournalFolder(journal)
+            }
             settings.insertExclusion(p, kind.name)
             if (kind == ExclusionKind.HIDDEN) notes.recomputeHidden()
             syncState.deleteFolderKeys()

@@ -18,6 +18,10 @@ INSERT OR REPLACE INTO setting(key, value) VALUES (?, ?);
 deleteSetting:
 DELETE FROM setting WHERE key = ?;
 
+-- The keys starting with :prefix, which must not contain the LIKE wildcards % and _.
+selectSettingsWithPrefix:
+SELECT key, value FROM setting WHERE key LIKE :prefix || '%';
+
 selectExclusionsByKind:
 SELECT prefix FROM folder_exclusion WHERE kind = ? ORDER BY prefix;
 
