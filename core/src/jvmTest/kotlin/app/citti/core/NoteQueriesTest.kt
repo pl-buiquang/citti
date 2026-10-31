@@ -289,6 +289,66 @@ class NoteQueriesTest {
     }
 
     @Test
+    fun listRowsSkipHiddenAndDeletedAndOrderFavoritesFirst() {
+        server(1, modified = 100)
+        server(2, modified = 300)
+        server(3, modified = 50, favorite = true)
+        server(4, modified = 400)
+        server(5, modified = 500, category = "secret", hidden = true)
+        notes.markDeleted(notes.selectByRemoteId(4).executeAsOne().local_id)
+        notes.insertNew("local", "", "# local\n\nbody", 200, null)
+        val rows = notes.selectListRows(favoritesOnly = 0).executeAsList()
+        assertEquals(listOf("t3", "t2", "local", "t1"), rows.map { it.title })
+        val local = rows[2]
+        assertEquals("body", local.excerpt)
+        assertEquals("NEW", local.sync_state)
+    }
+
+    @Test
+    fun listRowsFavoritesOnly() {
+        server(1, favorite = true, modified = 1)
+        server(2)
+        server(3, favorite = true, modified = 3)
+        server(4, favorite = true, category = "secret", hidden = true)
+        assertEquals(listOf("t3", "t1"), notes.selectListRows(favoritesOnly = 1).executeAsList().map { it.title })
+    }
+
+    @Test
+    fun folderNotesUseOnlyTheExactFolder() {
+        server(1, category = "a")
+        server(2, category = "a/b")
+        server(3, category = "a")
+        server(4, category = "a", hidden = true)
+        server(5, category = "a")
+        notes.markDeleted(notes.selectByRemoteId(5).executeAsOne().local_id)
+        assertEquals(
+            setOf("t1", "t3"),
+            notes
+                .selectFolderNotes("a")
+                .executeAsList()
+                .map { it.title }
+                .toSet(),
+        )
+        assertEquals(listOf("t2"), notes.selectFolderNotes("a/b").executeAsList().map { it.title })
+        assertEquals(emptyList(), notes.selectFolderNotes("").executeAsList())
+    }
+
+    @Test
+    fun countVisibleByFolderSkipsHidden() {
+        server(1)
+        server(2, category = "a")
+        server(3, category = "a")
+        server(4, category = "a/b")
+        server(5, category = "secret", hidden = true)
+        server(6, category = "a")
+        notes.markDeleted(notes.selectByRemoteId(6).executeAsOne().local_id)
+        assertEquals(
+            mapOf("" to 1L, "a" to 2L, "a/b" to 1L),
+            notes.countVisibleByFolder().executeAsList().associate { it.category to it.notes },
+        )
+    }
+
+    @Test
     fun syncStateRoundTrip() {
         val q = db.syncStateQueries
         assertNull(q.select("list-plain").executeAsOneOrNull())
