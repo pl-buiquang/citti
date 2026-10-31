@@ -49,7 +49,7 @@ class LoginFlowBackend(
 
 enum class LoginStep { Idle, Starting, WaitingForBrowser, Verifying }
 
-enum class LoginError { InvalidUrl, NotesAppMissing, WrongCredentials, TimedOut, Offline, Server, Unknown }
+enum class LoginError { InvalidUrl, InsecureUrl, NotesAppMissing, WrongCredentials, TimedOut, Offline, Server, Unknown }
 
 data class LoginUiState(
     val serverUrl: String = "",
@@ -170,6 +170,7 @@ class LoginController(
 internal fun ApiError.toLoginError(): LoginError =
     when (this) {
         ApiError.InvalidUrl -> LoginError.InvalidUrl
+        ApiError.InsecureUrl -> LoginError.InsecureUrl
         ApiError.NotesAppMissing -> LoginError.NotesAppMissing
         is ApiError.Auth -> LoginError.WrongCredentials
         is ApiError.Network -> LoginError.Offline

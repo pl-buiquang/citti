@@ -69,7 +69,11 @@ class LoginFlow(
     private val delayFn: suspend (Long) -> Unit = { delay(it) },
 ) {
     suspend fun start(serverUrl: String): ApiResult<LoginSession> {
-        val base = normalizeServerUrl(serverUrl) ?: return ApiResult.Failure(ApiError.InvalidUrl)
+        val base =
+            when (val checked = httpsBase(serverUrl)) {
+                is ApiResult.Failure -> return checked
+                is ApiResult.Success -> checked.value
+            }
         return try {
             val response = client.post("$base/index.php/login/v2") { header(HttpHeaders.UserAgent, USER_AGENT) }
             if (response.status.value !in 200..299) return ApiResult.Failure(errorFor(response.status.value))
@@ -83,6 +87,9 @@ class LoginFlow(
                 )
             if (session.loginUrl.isEmpty() || session.pollToken.isEmpty() || session.pollEndpoint.isEmpty()) {
                 ApiResult.Failure(ApiError.BadResponse("incomplete login/v2 response"))
+            } else if (!isHttps(session.loginUrl) || !isHttps(session.pollEndpoint)) {
+                // The browser opens loginUrl and the poll token goes to pollEndpoint: never over cleartext or another scheme.
+                ApiResult.Failure(ApiError.InsecureUrl)
             } else {
                 ApiResult.Success(session)
             }
@@ -136,7 +143,11 @@ class LoginFlow(
         user: String,
         appPassword: String,
     ): ApiResult<Verified> {
-        val base = normalizeServerUrl(serverUrl) ?: return ApiResult.Failure(ApiError.InvalidUrl)
+        val base =
+            when (val checked = httpsBase(serverUrl)) {
+                is ApiResult.Failure -> return checked
+                is ApiResult.Success -> checked.value
+            }
         val config = NotesApiConfig(base, user, appPassword)
         val apiClient = apiClientFactory(config)
         try {
@@ -204,4 +215,13 @@ fun normalizeServerUrl(input: String): String? {
     val withScheme = if (SCHEME.containsMatchIn(trimmed)) trimmed else "https://$trimmed"
     val authority = withScheme.substringAfter("://").trimEnd('/')
     return if (authority.isEmpty()) null else withScheme.trimEnd('/')
+}
+
+/** True for an `https://` URL (any case). The only scheme citti talks to or opens. */
+fun isHttps(url: String): Boolean = url.startsWith("https://", ignoreCase = true)
+
+/** The normalized server URL, refused when blank ([ApiError.InvalidUrl]) or not https ([ApiError.InsecureUrl]). */
+internal fun httpsBase(input: String): ApiResult<String> {
+    val base = normalizeServerUrl(input) ?: return ApiResult.Failure(ApiError.InvalidUrl)
+    return if (isHttps(base)) ApiResult.Success(base) else ApiResult.Failure(ApiError.InsecureUrl)
 }

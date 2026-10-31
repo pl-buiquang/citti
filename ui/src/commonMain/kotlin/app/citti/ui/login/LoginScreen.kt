@@ -24,6 +24,7 @@ import app.citti.ui.resources.Res
 import app.citti.ui.resources.app_name
 import app.citti.ui.resources.login_app_password_label
 import app.citti.ui.resources.login_cancel
+import app.citti.ui.resources.login_error_insecure_url
 import app.citti.ui.resources.login_error_invalid_url
 import app.citti.ui.resources.login_error_notes_missing
 import app.citti.ui.resources.login_error_offline
@@ -125,6 +126,7 @@ private fun progressText(step: LoginStep): StringResource? =
 private fun LoginError.message(): StringResource =
     when (this) {
         LoginError.InvalidUrl -> Res.string.login_error_invalid_url
+        LoginError.InsecureUrl -> Res.string.login_error_insecure_url
         LoginError.NotesAppMissing -> Res.string.login_error_notes_missing
         LoginError.WrongCredentials -> Res.string.login_error_wrong_credentials
         LoginError.TimedOut -> Res.string.login_error_timed_out

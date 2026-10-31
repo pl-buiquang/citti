@@ -16,6 +16,7 @@
     <string name="login_verifying">Checking the account…</string>
     <string name="login_cancel">Cancel</string>
     <string name="login_error_invalid_url">This is not a usable server address.</string>
+    <string name="login_error_insecure_url">citti only connects over https. Use an https:// address.</string>
     <string name="login_error_notes_missing">The Notes app is not installed or enabled on this server.</string>
     <string name="login_error_wrong_credentials">The server refused these credentials.</string>
     <string name="login_error_timed_out">The sign-in was not approved in time. Try again.</string>

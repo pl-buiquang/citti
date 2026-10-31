@@ -129,6 +129,9 @@ sealed interface ApiError {
 
     /** Login: the entered server address is not usable. */
     data object InvalidUrl : ApiError
+
+    /** Login: the server address, or a URL the server sent back, is not https. */
+    data object InsecureUrl : ApiError
 }
 
 sealed interface ApiResult<out T> {

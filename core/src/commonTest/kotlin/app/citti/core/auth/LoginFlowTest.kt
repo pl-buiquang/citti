@@ -83,6 +83,25 @@ class LoginFlowTest {
     }
 
     @Test
+    fun refusesCleartextServer() =
+        runTest {
+            val flow = flow { respond(startBody, HttpStatusCode.OK, jsonHeaders) }
+            assertEquals(ApiError.InsecureUrl, flow.start("http://10.0.0.2:8080/cloud").error())
+            assertEquals(ApiError.InsecureUrl, flow.verifyManual("HTTP://host", "alice", "s3cret").error())
+            assertEquals(ApiError.InsecureUrl, flow.finish(LoginResult.Approved("http://real.example", "alice", "s3cret")).error())
+            assertTrue(requests.isEmpty(), "no request may leave over http")
+        }
+
+    @Test
+    fun refusesNonHttpsUrlsFromTheServer() =
+        runTest {
+            val cleartextPoll = startBody.replace("https://host/cloud/login/v2/poll", "http://host/cloud/login/v2/poll")
+            assertEquals(ApiError.InsecureUrl, flow { respond(cleartextPoll, HttpStatusCode.OK, jsonHeaders) }.start("host").error())
+            val otherScheme = startBody.replace("https://host/cloud/login/v2/flow/abc", "intent://host/#Intent;end")
+            assertEquals(ApiError.InsecureUrl, flow { respond(otherScheme, HttpStatusCode.OK, jsonHeaders) }.start("host").error())
+        }
+
+    @Test
     fun pollsUntilApproved() =
         runTest {
             var calls = 0

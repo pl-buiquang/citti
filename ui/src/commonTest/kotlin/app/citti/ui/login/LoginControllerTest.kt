@@ -104,6 +104,7 @@ class LoginControllerTest {
             val cases =
                 mapOf(
                     ApiError.InvalidUrl to LoginError.InvalidUrl,
+                    ApiError.InsecureUrl to LoginError.InsecureUrl,
                     ApiError.Network(RuntimeException("x")) to LoginError.Offline,
                     ApiError.Server(502) to LoginError.Server,
                     ApiError.Http(404) to LoginError.Unknown,

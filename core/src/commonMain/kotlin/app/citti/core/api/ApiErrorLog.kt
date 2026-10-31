@@ -10,5 +10,6 @@ fun ApiError.logText(): String =
         is ApiError.BadResponse -> "BadResponse"
         ApiError.NotesAppMissing -> "NotesAppMissing"
         ApiError.InvalidUrl -> "InvalidUrl"
+        ApiError.InsecureUrl -> "InsecureUrl"
         is ApiError.Network -> "Network(${cause::class.simpleName})"
     }
