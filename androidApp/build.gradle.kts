@@ -99,9 +99,11 @@ dependencies {
     implementation(libs.sqldelight.coroutines)
     implementation(libs.sqldelight.android.driver)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.glance.appwidget)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.ktor)
     testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.androidx.glance.appwidget.testing)
 
     // The fake server and the fixture Vault: androidTest only, never in the app.
     androidTestImplementation(project(":core-testing"))
