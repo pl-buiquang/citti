@@ -159,6 +159,29 @@ WHERE local_id = :localId;
 markDeleted:
 UPDATE note SET sync_state = 'DELETED' WHERE local_id = ?;
 
+-- Note menu (NoteActions): Favorite toggle. A NEW row stays NEW; read-only and DELETED rows are refused.
+setFavorite:
+UPDATE note SET favorite = :favorite,
+    sync_state = CASE WHEN sync_state = 'NEW' THEN 'NEW' ELSE 'DIRTY' END
+WHERE local_id = :localId AND sync_state != 'DELETED' AND readonly = 0;
+
+-- Note menu: Rename and Move in one query (either field may be unchanged). Recomputes hidden with the insertNew
+-- rule. Links in other Notes are never rewritten.
+renameMove:
+UPDATE note SET title = :title, category = :category, modified = :modified,
+    hidden = EXISTS (SELECT 1 FROM folder_exclusion e WHERE e.kind = 'HIDDEN'
+        AND (:category = e.prefix OR substr(:category, 1, length(e.prefix) + 1) = e.prefix || '/')),
+    sync_state = CASE WHEN sync_state = 'NEW' THEN 'NEW' ELSE 'DIRTY' END
+WHERE local_id = :localId AND sync_state != 'DELETED' AND readonly = 0;
+
+-- Note menu: Delete of a never-pushed row, which the server has never seen.
+deleteNew:
+DELETE FROM note WHERE local_id = ? AND sync_state = 'NEW' AND remote_id IS NULL;
+
+-- Note menu: Delete of a row the server has; the push sends the DELETE. Read-only rows are refused.
+markDeletedByUser:
+UPDATE note SET sync_state = 'DELETED' WHERE local_id = ? AND sync_state != 'DELETED' AND readonly = 0;
+
 deleteByLocalId:
 DELETE FROM note WHERE local_id = ?;
 
