@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Signal light values (tokens.json) for the static widget picker previews only; the widgets themselves read the tokens. -->
+<resources>
+    <color name="widget_preview_bg">#FFF4F4EF</color>
+    <color name="widget_preview_ink">#FF0A0A0A</color>
+    <color name="widget_preview_ink_muted">#FF5D5D57</color>
+    <color name="widget_preview_favorite">#FF8A5200</color>
+</resources>

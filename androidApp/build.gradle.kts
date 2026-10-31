@@ -53,6 +53,7 @@ android {
     }
 
     testOptions {
+        unitTests.isIncludeAndroidResources = true
         execution = "ANDROIDX_TEST_ORCHESTRATOR"
         animationsDisabled = true
         managedDevices {
@@ -104,6 +105,9 @@ dependencies {
     implementation(libs.coil.network.ktor)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.androidx.glance.appwidget.testing)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.test.ext.junit)
 
     // The fake server and the fixture Vault: androidTest only, never in the app.
     androidTestImplementation(project(":core-testing"))

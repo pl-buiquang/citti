@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_favorites_name">Favorites</string>
+    <string name="widget_favorites_description">Your starred notes. Tap one to open it.</string>
+    <string name="widget_favorites_empty">No favorites yet. Star notes in Nextcloud Notes.</string>
+    <string name="widget_signed_out">Sign in to citti</string>
+    <string name="widget_root_folder">Notes</string>
+</resources>
