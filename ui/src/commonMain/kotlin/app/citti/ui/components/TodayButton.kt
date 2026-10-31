@@ -28,14 +28,11 @@ import app.citti.ui.theme.NotesSpacing
 import app.citti.ui.theme.ThemeFamily
 import org.jetbrains.compose.resources.stringResource
 
-/** Signal's Today disc is 40 dp (design-system `TodayButton.md`); the scale has no size token for it. */
-private val SignalDisc = NotesSpacing.space10
-
 /**
  * The Today button (design-system `TodayButton.md`), the secondary action left of [app.citti.ui.create.NewNoteButton],
- * per theme family: Signal a 40 dp `surfaceRaised` disc with an `ink` calendar-day icon (the caller floats it on the
- * New note button's baseline, `space-3` to its left), Paper an icon button in the bottom bar, Index a labelled "Today"
- * button in the bottom status bar. Never the primary look. Content description "Today's note". [busy] (today's note
+ * per theme family: Signal a 64 dp `surfaceRaised` disc (the size of the New note disc) with an `ink` calendar-day icon
+ * (the caller floats it on the New note button's baseline, `space-3` to its left), Paper an icon button in the bottom
+ * bar, Index a labelled "Today" button in the bottom status bar. Never the primary look. Content description "Today's note". [busy] (today's note
  * is being opened) replaces the icon with an inline progress ring and ignores taps.
  */
 @Composable
@@ -50,23 +47,17 @@ fun TodayButton(
     val base = modifier.semantics(mergeDescendants = true) { contentDescription = description }
     when (CittiTheme.family) {
         ThemeFamily.Signal -> {
-            // The disc is under touchMin: the tap target around it is touchMin, the same shape.
+            // Same size as the New note disc, so the two buttons read as a pair.
             Box(
                 base
-                    .size(NotesSize.touchMin)
+                    .size(NotesSize.fabSignal)
+                    .background(colors.surfaceRaised, shape)
+                    .border(Dp.Hairline, colors.line, shape)
                     .clip(shape)
                     .clickable(role = Role.Button, enabled = !busy, onClick = onClick),
                 contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    Modifier
-                        .size(SignalDisc)
-                        .background(colors.surfaceRaised, shape)
-                        .border(Dp.Hairline, colors.line, shape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (busy) ProgressRing(color = colors.ink) else Icon(CittiIcon.CalendarDay, color = colors.ink)
-                }
+                if (busy) ProgressRing(color = colors.ink) else Icon(CittiIcon.CalendarDay, color = colors.ink)
             }
         }
 
