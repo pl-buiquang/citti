@@ -47,6 +47,25 @@ fun ModeSwitch(
     }
 }
 
+/** A row of segments where [selected] may be null (nothing chosen: the base's own value). Same look as [ModeSwitch]. */
+@Composable
+fun <T> SegmentedControl(
+    options: List<Pair<String, T>>,
+    selected: T?,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(CittiTheme.shape.control)
+    Row(
+        modifier
+            .selectableGroup()
+            .clip(shape)
+            .border(Dp.Hairline, CittiTheme.colors.line, shape),
+    ) {
+        for ((label, value) in options) Segment(label, selected = value == selected) { onSelect(value) }
+    }
+}
+
 @Composable
 private fun Segment(
     label: String,

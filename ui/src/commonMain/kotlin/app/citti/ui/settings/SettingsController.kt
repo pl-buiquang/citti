@@ -21,6 +21,7 @@ import app.citti.core.settings.SyncSettingsRepository
 import app.citti.core.settings.normalizeFolderPath
 import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
+import app.citti.ui.appearance.ThemeEditorController
 import app.citti.ui.components.FolderPickerState
 import app.citti.ui.image.ImageCache
 import app.citti.ui.theme.baseTheme
@@ -246,6 +247,9 @@ class SettingsController(
     private val now: () -> LocalDateTime,
 ) {
     private val local = MutableStateFlow(Local())
+
+    /** The theme editor's state holder; it starts afresh every time the editor opens. */
+    val themeEditor = ThemeEditorController(scope, appearance)
     private val dailyLocal = MutableStateFlow(DailyLocal())
 
     // Each typed Date format is saved in order, so the last one typed is the one kept.
@@ -290,6 +294,10 @@ class SettingsController(
         return when {
             l.confirm != null -> {
                 local.value = l.copy(confirm = null)
+                true
+            }
+
+            page is SettingsPage.ThemeEditor && themeEditor.onBack() -> {
                 true
             }
 
@@ -447,6 +455,7 @@ class SettingsController(
     /** Selects Custom (seeding an empty slot from the current preset) and opens the editor. */
     fun openThemeEditor() {
         appearance.selectCustomOrSeed(appearance.current().baseTheme())
+        themeEditor.reset()
         local.update { it.copy(page = SettingsPage.ThemeEditor, confirm = null) }
     }
 

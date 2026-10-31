@@ -87,7 +87,7 @@ fun resolveTheme(
     )
 }
 
-private fun resolveColors(
+internal fun resolveColors(
     family: ThemeFamily,
     dark: Boolean,
     custom: CustomTheme?,

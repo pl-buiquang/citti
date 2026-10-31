@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.toArgb
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.MainMode
 import app.citti.ui.appearance.AppearanceActions
+import app.citti.ui.appearance.actions
 import app.citti.ui.browse.AppDrawer
 import app.citti.ui.browse.BrowseActions
 import app.citti.ui.browse.BrowseController
@@ -657,8 +658,10 @@ class MainActivity : ComponentActivity() {
         val controller = remember(index) { routes.controller(index, Route.Settings) { newSettingsController(it, info) } }
         val state by controller.state.collectAsState()
         BackHandler { if (!controller.onBack()) navigator.pop() }
+        val editor by controller.themeEditor.state.collectAsState()
         SettingsScreen(
             state = state,
+            editor = editor,
             nowSeconds = { container.config.nowSeconds() },
             folders = pickerFolders,
             actions =
@@ -685,6 +688,10 @@ class MainActivity : ComponentActivity() {
                             onAccent = controller::setAccent,
                             onEditCustom = controller::openThemeEditor,
                         ),
+                    editor =
+                        remember(
+                            controller,
+                        ) { controller.themeEditor.actions(onBack = { if (!controller.onBack()) navigator.pop() }) },
                 ),
         )
     }

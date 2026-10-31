@@ -229,7 +229,7 @@ fun CittiTextField(
     }
 }
 
-enum class BannerKind { Offline, Error }
+enum class BannerKind { Offline, Error, Info }
 
 /**
  * Full-width strip under the top bar. Offline has no action; Error has one (Retry, Sign in again) and

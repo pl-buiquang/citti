@@ -64,6 +64,15 @@ object TestTags {
     const val SETTINGS_HOME = "settings.home"
     const val APPEARANCE_EDIT_CUSTOM = "appearance.edit-custom"
     const val THEME_EDITOR = "appearance.editor"
+    const val THEME_PREVIEW = "appearance.preview"
+    const val THEME_IMPORT_ERROR = "appearance.import-error"
+    const val THEME_DENSITY = "appearance.density"
+    const val THEME_CORNERS = "appearance.corners"
+    const val THEME_CAPITALS = "appearance.capitals"
+
+    fun themeColor(token: app.citti.core.appearance.ColorToken) = "appearance.color.${token.key}"
+
+    fun themeFont(role: app.citti.core.appearance.FontRole) = "appearance.${role.key}"
 
     /** The root of the app: its `stateDescription` is `<family>:<light|dark>:<accent>` (E2E tests cannot read colors). */
     const val THEME_STATE = "theme.state"

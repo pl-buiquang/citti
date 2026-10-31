@@ -32,7 +32,9 @@ import app.citti.core.settings.SyncNetwork
 import app.citti.ui.TestTags
 import app.citti.ui.appearance.AppearanceActions
 import app.citti.ui.appearance.AppearanceSection
+import app.citti.ui.appearance.ThemeEditorActions
 import app.citti.ui.appearance.ThemeEditorPage
+import app.citti.ui.appearance.ThemeEditorState
 import app.citti.ui.browse.statusText
 import app.citti.ui.browse.syncLine
 import app.citti.ui.components.Banner
@@ -121,6 +123,7 @@ class SettingsActions(
     val onDismissConfirm: () -> Unit,
     val daily: DailySettingsActions,
     val appearance: AppearanceActions,
+    val editor: ThemeEditorActions,
 )
 
 /**
@@ -130,6 +133,7 @@ class SettingsActions(
 @Composable
 fun SettingsScreen(
     state: SettingsUiState,
+    editor: ThemeEditorState,
     nowSeconds: () -> Long,
     folders: Flow<PickerFolders>,
     actions: SettingsActions,
@@ -145,7 +149,7 @@ fun SettingsScreen(
             is SettingsPage.PickFolder -> FolderPicker(page.kind, state, actions)
             is SettingsPage.PickJournal -> JournalFolderPage(page, folders, actions.daily)
             is SettingsPage.PickTemplate -> TemplatePickerPage(page, state.daily.config.template, actions.onBack, actions.daily)
-            SettingsPage.ThemeEditor -> ThemeEditorPage(actions.onBack)
+            SettingsPage.ThemeEditor -> ThemeEditorPage(editor, actions.editor)
         }
         state.confirm?.let { ConfirmDialog(it, actions) }
         state.daily.importReport?.let { ImportReportDialog(it, actions.daily.onDismissImportReport) }

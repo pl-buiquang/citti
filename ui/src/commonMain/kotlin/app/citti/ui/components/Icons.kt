@@ -49,6 +49,7 @@ enum class CittiIcon {
     Trash,
     StarFilled,
     CalendarDay,
+    Reset,
 }
 
 /** Decorative icon (no semantics): pair it with a label, or use [IconButton]. */
@@ -178,6 +179,22 @@ private fun DrawScope.drawIcon(
             path(3f to 5f, 21f to 5f, 21f to 19f, 3f to 19f, close = true)
             drawCircle(color, radius = 1.5f * u, center = p(8.5f, 10f), style = stroke)
             path(3f to 17f, 9f to 12f, 13f to 16f, 16f to 13f, 21f to 17f)
+        }
+
+        CittiIcon.Reset -> {
+            // A counter-clockwise arrow around a gap at the top left.
+            drawArc(
+                color,
+                startAngle = -60f,
+                sweepAngle = 300f,
+                useCenter = false,
+                topLeft = p(5f, 5f),
+                size =
+                    androidx.compose.ui.geometry
+                        .Size(14f * u, 14f * u),
+                style = stroke,
+            )
+            path(3f to 4f, 4f to 9f, 9f to 8f)
         }
 
         CittiIcon.Plus -> {

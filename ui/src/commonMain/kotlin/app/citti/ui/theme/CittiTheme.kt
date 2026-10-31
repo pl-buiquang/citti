@@ -56,6 +56,9 @@ val LocalCittiTypography =
         error("CittiTheme is missing")
     }
 
+/** The density before the Text size, set by the outermost [CittiTheme]. */
+private val LocalUnscaledDensity = staticCompositionLocalOf<Density?> { null }
+
 /** The theme family, for the components whose layout differs per family (the New note button). */
 val LocalThemeFamily = staticCompositionLocalOf { ThemeFamily.Signal }
 
@@ -86,7 +89,8 @@ fun CittiTheme(
     val dark = appearance.isDark(systemDark)
     val dynamic = if (appearance.accent == AccentSource.DYNAMIC) rememberDynamicAccent(dark) else null
     val theme = remember(appearance, systemDark, dynamic, fonts) { resolveTheme(appearance, systemDark, dynamic, fonts) }
-    val density = LocalDensity.current
+    // The Text size applies to the phone's own density, also inside a nested theme (the editor's preview card).
+    val density = LocalUnscaledDensity.current ?: LocalDensity.current
     val scaled = remember(density, theme.textScale) { Density(density.density, density.fontScale * theme.textScale) }
     CompositionLocalProvider(
         LocalNotesColors provides theme.colors,
@@ -94,6 +98,7 @@ fun CittiTheme(
         LocalCittiTypography provides theme.typography,
         LocalThemeFamily provides theme.family,
         LocalDensity provides scaled,
+        LocalUnscaledDensity provides density,
         content = content,
     )
 }
