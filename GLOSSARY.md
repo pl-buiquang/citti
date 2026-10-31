@@ -28,6 +28,24 @@ _Avoid_: Attachment, media
 A `[[title]]` reference in a note that leads to another note.
 _Avoid_: Internal link, backlink
 
+## Journal
+
+**Daily note**:
+The note for one calendar date, kept in the Journal folder and named after that date.
+_Avoid_: Journal entry, diary page
+
+**Journal folder**:
+The folder that holds the Daily notes.
+_Avoid_: Diary folder
+
+**Template**:
+A note whose text, with its placeholders filled in, becomes the starting text of a new note.
+_Avoid_: Snippet, boilerplate
+
+**Calendar**:
+The month view that shows which days have a Daily note and opens or creates one.
+_Avoid_: Agenda, date picker
+
 ## Visibility
 
 **Unsynced folder**:
