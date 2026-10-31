@@ -69,6 +69,20 @@ _Avoid_: Read mode, view mode
 A new note holding the user's local text, created when the same note changed elsewhere in the meantime.
 _Avoid_: Backup, duplicate
 
+## Syncing
+
+**Sync**:
+One run that sends the user's pending changes to the server, then fetches what changed there.
+_Avoid_: Refresh, update
+
+**Pending change**:
+An edit, new note or deletion made on the phone that the server does not have yet.
+_Avoid_: Dirty note, unsynced edit, queued edit
+
+**Account**:
+The server address and the user that the app is signed in with.
+_Avoid_: Profile, login
+
 ## Browsing
 
 **List mode**:
