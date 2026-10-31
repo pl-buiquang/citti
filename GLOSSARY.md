@@ -85,6 +85,10 @@ _Avoid_: Sync status (that is the whole app's sync)
 A new note holding the user's local text, created when the same note changed elsewhere in the meantime.
 _Avoid_: Backup, duplicate
 
+**Note info**:
+The sheet that shows a note's folder, dates, size and sync state.
+_Avoid_: Properties (that is the frontmatter), details
+
 ## Syncing
 
 **Sync**:
@@ -94,6 +98,14 @@ _Avoid_: Refresh, update
 **Pending change**:
 An edit, new note or deletion made on the phone that the server does not have yet.
 _Avoid_: Dirty note, unsynced edit, queued edit
+
+**Folder refresh**:
+Asking the server for the notes of one folder only, before creating, renaming or moving a note there.
+_Avoid_: Partial sync, folder sync
+
+**Untouched note**:
+A new note whose text is still exactly the text it was created with, so dropping it loses nothing the user wrote.
+_Avoid_: Empty note, blank note
 
 **Account**:
 The server address and the user that the app is signed in with.
