@@ -40,6 +40,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -48,6 +50,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
@@ -190,7 +193,11 @@ class NoteController(
             )
         }.stateIn(scope, SharingStarted.Eagerly, NoteUiState())
 
+    /** The server's Note this New note was dropped for at push ([NoteGateway.dropped]), once it was. */
+    private val droppedAs = MutableStateFlow<Long?>(null)
+
     init {
+        scope.launch { gateway.dropped().collect { droppedAs.value = it } }
         scope.launch { gateway.observe().collect(::onRow) }
         scope.launch { editor.edits.collect { model.update { if (it.ready) it.copy(unsaved = true) else it } } }
         scope.launch { editor.edits.debounce(saveDelayMs).collect { saveNow() } }
@@ -274,10 +281,31 @@ class NoteController(
 
     private suspend fun onGone() {
         val m = model.value
-        if (m.ready && !m.gone && !m.deleted && editor.text != lastSaved && m.row?.readonly != true) {
-            saveNow()
-        }
+        val unsaved = m.ready && !m.gone && !m.deleted && editor.text != lastSaved && m.row?.readonly != true
+        if (unsaved) saveNow()
+        // A pending New note the push dropped (M5 spec §3): the event can come just after the row went.
+        val server =
+            droppedAs.value
+                ?: if (m.row?.pending == true && !m.deleted) {
+                    withTimeoutOrNull(DROP_WAIT_MS) { droppedAs.filterNotNull().first() }
+                } else {
+                    null
+                }
+        // With unsaved text, the Gone rule's Conflict copy snackbar is the one to show.
+        if (server != null && switchToServerNote(server, snack = !unsaved)) return
         model.update { it.copy(gone = true) }
+    }
+
+    /** Dropped while open: the screen becomes the server's Note. False when this Note is no longer on top. */
+    private fun switchToServerNote(
+        serverLocalId: Long,
+        snack: Boolean,
+    ): Boolean {
+        val top = navigator.top
+        if (top !is Route.Note || top.localId != localId) return false
+        navigator.replaceTop(Route.Note(serverLocalId, preview = top.preview))
+        if (snack) notify(Snack.AlreadyOnServer)
+        return true
     }
 
     // ---- saving ----
@@ -820,6 +848,9 @@ class NoteController(
             }
 
         const val SAVE_DELAY_MS = 500L
+
+        /** How long a gone pending Note waits for its [NoteGateway.dropped] event before it pops. */
+        const val DROP_WAIT_MS = 1_000L
         private const val LINK_BATCH = 40
     }
 }

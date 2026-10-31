@@ -37,6 +37,7 @@ import app.citti.core.sync.FolderSync
 import app.citti.core.sync.PullSync
 import app.citti.core.sync.PushSync
 import app.citti.core.sync.SyncEngine
+import app.citti.core.sync.SyncEvent
 import app.citti.core.sync.SyncOutcome
 import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
@@ -67,8 +68,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -336,6 +341,17 @@ class AppContainer(
             NoteEditor(database, localId, config::nowSeconds, ::scheduleAfterEditPush),
             LinkResolver(database),
             fetchContent = { syncEngine()?.fetchContent(localId) ?: false },
+            dropped = {
+                flow {
+                    val engine = syncEngine() ?: return@flow
+                    emitAll(
+                        engine.events
+                            .filterIsInstance<SyncEvent.Dropped>()
+                            .filter { it.localId == localId }
+                            .map { it.serverLocalId },
+                    )
+                }
+            },
         )
 
     private suspend fun buildStack(credentials: Credentials): SyncStack =

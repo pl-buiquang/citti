@@ -209,6 +209,7 @@
     <string name="delete_title">Delete “%1$s”?</string>
     <string name="delete_body">It moves to the server's trash.</string>
     <string name="toast_deleted">Deleted</string>
+    <string name="dropped_snackbar">This note already existed on the server</string>
     <string name="rename_title">Rename</string>
     <string name="rename_action">Rename</string>
     <string name="move_title">Move to</string>

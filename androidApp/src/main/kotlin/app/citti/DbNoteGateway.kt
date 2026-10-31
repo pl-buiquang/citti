@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -23,6 +24,8 @@ class DbNoteGateway(
     private val links: LinkResolver,
     /** `SyncEngine.fetchContent` of this Note; false while signed out. */
     private val fetchContent: suspend () -> Boolean = { false },
+    /** `SyncEngine.events`' drops of this Note, as the server Note's local id; empty while signed out. */
+    private val dropped: () -> Flow<Long> = { emptyFlow() },
 ) : NoteGateway {
     private val query = db.noteQueries.selectForEditor(localId)
 
@@ -51,6 +54,8 @@ class DbNoteGateway(
     ): NoteEditor.SaveResult = withContext(Dispatchers.IO) { editor.insertAt(offset, block, baseEtag) }
 
     override suspend fun fetchText(): Boolean = withContext(Dispatchers.IO) { fetchContent() }
+
+    override fun dropped(): Flow<Long> = dropped.invoke()
 
     override fun savedText(): String? = editor.savedText
 

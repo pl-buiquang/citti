@@ -25,6 +25,7 @@ import app.citti.ui.resources.Res
 import app.citti.ui.resources.action_open_exclusions
 import app.citti.ui.resources.conflict_snackbar
 import app.citti.ui.resources.deleted_snackbar
+import app.citti.ui.resources.dropped_snackbar
 import app.citti.ui.resources.link_create
 import app.citti.ui.resources.link_missing
 import app.citti.ui.resources.link_unsynced
@@ -69,6 +70,9 @@ sealed interface Snack {
 
     /** The ⋮ menu's Delete: shown after the Note pops. */
     data object NoteDeleted : Snack
+
+    /** The open New note was dropped at push: the screen now shows the server's Note of that title. */
+    data object AlreadyOnServer : Snack
 
     /** Insert image while offline: nothing was inserted. */
     data object UploadOffline : Snack
@@ -115,6 +119,7 @@ fun SnackbarHost(
             Snack.FavoriteAdded -> stringResource(Res.string.toast_favorite_added)
             Snack.FavoriteRemoved -> stringResource(Res.string.toast_favorite_removed)
             Snack.NoteDeleted -> stringResource(Res.string.toast_deleted)
+            Snack.AlreadyOnServer -> stringResource(Res.string.dropped_snackbar)
             Snack.UploadOffline -> stringResource(Res.string.upload_offline)
             is Snack.UploadFailed -> stringResource(Res.string.upload_failed, shown.reason)
         }

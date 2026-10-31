@@ -4,6 +4,7 @@ import app.citti.core.note.EditorDoc
 import app.citti.core.note.LinkTarget
 import app.citti.core.note.NoteEditor
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * What [NoteController] needs from the data layer for one Note: the row as a flow, the editor writes and the link
@@ -38,6 +39,12 @@ interface NoteGateway {
      * for the next Sync. False when it could not.
      */
     suspend fun fetchText(): Boolean = false
+
+    /**
+     * The local id of the server's Note each time the push drops this New note because the server already had its
+     * title (`SyncEvent.Dropped`). Hot: only drops after the subscription are seen.
+     */
+    fun dropped(): Flow<Long> = emptyFlow()
 
     /** The text last written to the row. */
     fun savedText(): String?

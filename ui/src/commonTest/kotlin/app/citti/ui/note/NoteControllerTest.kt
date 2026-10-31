@@ -36,6 +36,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -59,6 +60,10 @@ private class FakeGateway : NoteGateway {
     val targets = mutableMapOf<LinkRef, LinkTarget>()
 
     override fun observe(): Flow<EditorDoc?> = row
+
+    val drops = MutableSharedFlow<Long>(extraBufferCapacity = 4)
+
+    override fun dropped(): Flow<Long> = drops
 
     override suspend fun save(
         text: String,
@@ -775,6 +780,68 @@ class NoteControllerTest {
     // ---- the ⋮ menu ----
 
     /** The state once the controller's flows ran. */
+    @Test
+    fun aDroppedNoteSwitchesToTheServerNote() =
+        runTest {
+            val f = open(doc("", pending = true))
+            f.gateway.drops.tryEmit(7)
+            runCurrent()
+            f.gateway.row.value = null
+            runCurrent()
+            assertEquals(Route.Note(7), f.navigator.top)
+            assertEquals(listOf<Snack>(Snack.AlreadyOnServer), f.snacks)
+            assertFalse(f.controller.state.value.gone)
+        }
+
+    @Test
+    fun aDropEventAfterTheRowWentStillSwitches() =
+        runTest {
+            val f = open(doc("", pending = true))
+            f.gateway.row.value = null
+            runCurrent()
+            advanceTimeBy(NoteController.DROP_WAIT_MS / 2)
+            assertFalse(f.controller.state.value.gone)
+            f.gateway.drops.tryEmit(7)
+            runCurrent()
+            assertEquals(Route.Note(7), f.navigator.top)
+            assertEquals(listOf<Snack>(Snack.AlreadyOnServer), f.snacks)
+        }
+
+    @Test
+    fun aGonePendingNoteWithNoDropPopsAfterTheWait() =
+        runTest {
+            val f = open(doc("", pending = true))
+            f.gateway.row.value = null
+            runCurrent()
+            assertFalse(f.controller.state.value.gone)
+            advanceTimeBy(NoteController.DROP_WAIT_MS + 1)
+            runCurrent()
+            assertTrue(f.controller.state.value.gone)
+            assertEquals(Route.Note(1), f.navigator.top)
+            assertTrue(f.snacks.isEmpty())
+        }
+
+    @Test
+    fun aDroppedNoteWithUnsavedTextSavesItFirstAndKeepsTheCopySnackbar() =
+        runTest {
+            val f = open(doc("", pending = true))
+            f.attach()
+            f.gateway.saveResult = { _, _ -> SaveResult.Gone(8, "Title (conflict 2026-10-31)") }
+            f.host.type("typed")
+            f.gateway.drops.tryEmit(7)
+            runCurrent()
+            f.gateway.row.value = null
+            runCurrent()
+            assertEquals(
+                "typed",
+                f.gateway.saves
+                    .single()
+                    .first,
+            )
+            assertEquals(Route.Note(7), f.navigator.top)
+            assertEquals(listOf<Snack>(Snack.Deleted("Title (conflict 2026-10-31)")), f.snacks)
+        }
+
     private fun TestScope.ui(f: Fixture): NoteUiState {
         runCurrent()
         return f.controller.state.value
