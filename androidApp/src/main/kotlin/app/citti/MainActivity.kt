@@ -3,15 +3,21 @@ package app.citti
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.StrictMode
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -29,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.MainMode
 import app.citti.ui.browse.AppDrawer
@@ -81,6 +88,8 @@ import app.citti.ui.settings.SettingsController
 import app.citti.ui.settings.SettingsScreen
 import app.citti.ui.settings.dailyActions
 import app.citti.ui.theme.CittiTheme
+import app.citti.ui.theme.background
+import app.citti.ui.theme.isDark
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -158,8 +167,23 @@ class MainActivity : ComponentActivity() {
         if (shouldApplyDeepLink(isNewIntent = false, hasSavedState = savedInstanceState != null, flags = intent.flags)) {
             pendingDeepLink.value = intent.dataString?.let(DeepLink::parse)
         }
+        // One indexed row read before the first frame, so the first frame is in the saved theme (no light flash in Dark).
+        val initial = allowingDiskReads { container.appearanceSettings.current() }
+        val systemDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        window.setBackgroundDrawable(ColorDrawable(initial.background(systemDark).toArgb()))
         setContent {
-            CittiTheme {
+            val appearance by container.appearanceSettings.flow().collectAsState(initial)
+            val dark = appearance.isDark(isSystemInDarkTheme())
+            val windowBg = appearance.background(isSystemInDarkTheme()).toArgb()
+            // The bar icons follow the resolved theme, not the phone's.
+            LaunchedEffect(dark, windowBg) {
+                window.setBackgroundDrawable(ColorDrawable(windowBg))
+                enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
+                    navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
+                )
+            }
+            CittiTheme(appearance) {
                 val signedIn by container.signedIn.collectAsState()
                 when (signedIn) {
                     null -> {
@@ -205,6 +229,15 @@ class MainActivity : ComponentActivity() {
                 navigator.reset(listOf(root))
                 today.openToday(resume = target.resume)
             }
+        }
+    }
+
+    private fun <T> allowingDiskReads(block: () -> T): T {
+        val old = StrictMode.allowThreadDiskReads()
+        try {
+            return block()
+        } finally {
+            StrictMode.setThreadPolicy(old)
         }
     }
 

@@ -8,6 +8,7 @@ import app.citti.core.api.ApiError
 import app.citti.core.api.NotesApi
 import app.citti.core.api.NotesApiConfig
 import app.citti.core.api.createNotesHttpClient
+import app.citti.core.appearance.AppearanceSettings
 import app.citti.core.auth.CredentialStore
 import app.citti.core.auth.CredentialStoreFactory
 import app.citti.core.auth.Credentials
@@ -145,6 +146,9 @@ class AppContainer(
     val exclusions: ExclusionRepository by lazy { ExclusionRepository(database, onChanged = { widgets.updateAll() }) }
 
     val uiSettings: UiSettings by lazy { UiSettings(database) }
+
+    /** The Appearance (theme, Mode, Accent source, Custom theme); device-local. */
+    val appearanceSettings: AppearanceSettings by lazy { AppearanceSettings(database) }
 
     val imageSettings: ImageSettings by lazy { ImageSettings(database) }
 

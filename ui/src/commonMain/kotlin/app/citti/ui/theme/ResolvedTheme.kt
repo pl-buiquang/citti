@@ -211,3 +211,10 @@ private fun resolveTypography(
         editor = base.editor.with(FontRole.CODE),
     )
 }
+
+/** The `bg` color of the [Appearance], without composing (the window background before the first frame). */
+fun Appearance.background(systemDark: Boolean): Color {
+    val base = baseTheme()
+    val custom = custom?.takeIf { theme == ThemeChoice.CUSTOM }
+    return resolveColors(base.toFamily(), isDark(systemDark), custom, AccentSource.THEME, null).bg
+}

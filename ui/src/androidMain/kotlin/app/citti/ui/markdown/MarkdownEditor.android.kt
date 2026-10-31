@@ -50,6 +50,7 @@ actual fun MarkdownEditor(
             highlight = colors.highlight.toArgb(),
             mono = markFace,
         )
+    val textSize = editorTextSize(bodyStyle, density)
     val padding = with(density) { NotesSpacing.space4.roundToPx() }
     val currentStyles by rememberUpdatedState(styles)
 
@@ -58,8 +59,6 @@ actual fun MarkdownEditor(
         factory = { context ->
             CittiEditText(context, state, currentStyles).also { view ->
                 view.typeface = face
-                view.setTextSize(TypedValue.COMPLEX_UNIT_SP, bodyStyle.fontSize.value)
-                view.lineHeight = with(density) { bodyStyle.lineHeight.toPx().toInt() }
                 view.setPadding(padding, padding, padding, padding)
                 state.attach(view)
             }
@@ -70,6 +69,9 @@ actual fun MarkdownEditor(
             view.setHintTextColor(colors.inkFaint.toArgb())
             view.highlightColor = colors.accentSoft.toArgb()
             view.typeface = face
+            // Through the Compose density, not COMPLEX_UNIT_SP: that one ignores the Text size of the Appearance.
+            view.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize.textPx)
+            view.lineHeight = textSize.lineHeightPx
             if (view.styles != styles) {
                 view.styles = styles
                 view.restyle(0 until state.document.lineCount)
