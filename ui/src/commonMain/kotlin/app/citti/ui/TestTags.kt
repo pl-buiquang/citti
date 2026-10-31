@@ -65,6 +65,14 @@ object TestTags {
     const val APPEARANCE_EDIT_CUSTOM = "appearance.edit-custom"
     const val THEME_EDITOR = "appearance.editor"
     const val THEME_PREVIEW = "appearance.preview"
+    const val THEME_COLOR_SHEET = "appearance.color-sheet"
+    const val THEME_FONT_SHEET = "appearance.font-sheet"
+    const val THEME_HEX = "appearance.hex"
+    const val THEME_CONTRAST = "appearance.contrast"
+    const val THEME_SHEET_DONE = "appearance.sheet-done"
+
+    fun themeFace(face: app.citti.core.appearance.FontFace) = "appearance.face.${face.id}"
+
     const val THEME_IMPORT_ERROR = "appearance.import-error"
     const val THEME_DENSITY = "appearance.density"
     const val THEME_CORNERS = "appearance.corners"

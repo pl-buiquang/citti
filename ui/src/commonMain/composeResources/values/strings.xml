@@ -391,4 +391,9 @@
     <string name="theme_editor_cancel">Cancel</string>
     <string name="theme_editor_on">On</string>
     <string name="theme_editor_off">Off</string>
+    <string name="theme_sheet_hex">Hex</string>
+    <string name="theme_sheet_base_value">Base %1$s</string>
+    <string name="theme_sheet_reset">Reset</string>
+    <string name="theme_sheet_done">Done</string>
+    <string name="theme_sheet_selected">Selected</string>
 </resources>
