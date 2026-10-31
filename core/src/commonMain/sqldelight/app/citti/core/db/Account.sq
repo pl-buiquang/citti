@@ -1,0 +1,13 @@
+-- Sign out: wipes everything tied to the account. `meta` (schema bookkeeping) is kept.
+
+deleteAllNotes:
+DELETE FROM note;
+
+deleteAllSyncState:
+DELETE FROM sync_state;
+
+deleteAllSettings:
+DELETE FROM setting;
+
+deleteAllFolderExclusions:
+DELETE FROM folder_exclusion;

@@ -118,6 +118,12 @@ sealed interface ApiError {
     data class Network(
         val cause: Throwable,
     ) : ApiError
+
+    /** Login: the credentials work but the Notes app is not installed or enabled on the server. */
+    data object NotesAppMissing : ApiError
+
+    /** Login: the entered server address is not usable. */
+    data object InvalidUrl : ApiError
 }
 
 sealed interface ApiResult<out T> {

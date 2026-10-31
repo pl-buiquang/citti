@@ -29,6 +29,10 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.ktor.client.mock)
         }
+        // javax.crypto code shared by Android and JVM (AesGcmCipher).
+        val jvmCommonMain by creating { dependsOn(commonMain.get()) }
+        androidMain.get().dependsOn(jvmCommonMain)
+        jvmMain.get().dependsOn(jvmCommonMain)
         androidMain.dependencies {
             implementation(libs.ktor.client.okhttp)
             implementation(libs.sqldelight.android.driver)
