@@ -104,6 +104,15 @@ VALUES (:title, :category, :content, :excerpt, 0, :modified, EXISTS (
       AND (:category = e.prefix OR substr(:category, 1, length(e.prefix) + 1) = e.prefix || '/')
 ), 'NEW', :conflictOf);
 
+-- Hidden folders changed: recompute the flag of every row, whatever its sync_state (same prefix rule as insertNew).
+-- Does not touch title, content or category, so it does not re-index.
+recomputeHidden:
+UPDATE note SET hidden = EXISTS (
+    SELECT 1 FROM folder_exclusion e
+    WHERE e.kind = 'HIDDEN'
+      AND (note.category = e.prefix OR substr(note.category, 1, length(e.prefix) + 1) = e.prefix || '/')
+);
+
 lastInsertedLocalId:
 SELECT last_insert_rowid();
 

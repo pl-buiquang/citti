@@ -21,7 +21,7 @@ fun normalizeFolderPath(raw: String): String? =
 
 /** The Unsynced and Hidden folder lists (`folder_exclusion` table) and the Folders known locally. */
 class ExclusionRepository(
-    db: CittiDatabase,
+    private val db: CittiDatabase,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
     private val settings = db.settingQueries
@@ -34,21 +34,31 @@ class ExclusionRepository(
     /** Distinct Folders of the local Notes, sorted. */
     fun knownFolders(): Flow<List<String>> = notes.selectDistinctCategories().asFlow().mapToList(dispatcher)
 
-    /** Adds [path] (normalized); returns the stored path, or null when it is blank or already listed. */
+    /**
+     * Adds [path] (normalized); returns the stored path, or null when it is blank or already listed.
+     * A Hidden folder hides its Notes at once, in the same transaction. An Unsynced one waits for the pull.
+     */
     fun add(
         kind: ExclusionKind,
         path: String,
     ): String? {
         val p = normalizeFolderPath(path) ?: return null
-        if (p in list(kind)) return null
-        settings.insertExclusion(p, kind.name)
-        return p
+        return db.transactionWithResult {
+            if (p in list(kind)) return@transactionWithResult null
+            settings.insertExclusion(p, kind.name)
+            if (kind == ExclusionKind.HIDDEN) notes.recomputeHidden()
+            p
+        }
     }
 
+    /** Removes [path]. A Hidden folder shows its Notes again at once, in the same transaction. */
     fun remove(
         kind: ExclusionKind,
         path: String,
-    ) = settings.deleteExclusion(path, kind.name)
+    ) = db.transaction {
+        settings.deleteExclusion(path, kind.name)
+        if (kind == ExclusionKind.HIDDEN) notes.recomputeHidden()
+    }
 
     /** Local Notes in [path] or below it. */
     fun notesUnder(path: String): Int = notes.countUnderPrefix(path).executeAsOne().toInt()

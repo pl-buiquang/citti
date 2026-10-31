@@ -232,6 +232,28 @@ class NoteQueriesTest {
     }
 
     @Test
+    fun recomputeHiddenCoversDirtyAndNewRows() {
+        server(1, category = "a/b")
+        server(2, category = "a/bc")
+        val dirty = notes.selectByRemoteId(1).executeAsOne().local_id
+        notes.markDirty("edit", 10, dirty)
+        notes.insertNew("new", "a/b/c", "body", 11, null)
+        val new = notes.lastInsertedLocalId().executeAsOne()
+        val bc = notes.selectByRemoteId(2).executeAsOne().local_id
+
+        fun hidden() = listOf(dirty, new, bc).map { notes.selectByLocalId(it).executeAsOne().hidden }
+
+        db.settingQueries.insertExclusion("a/b", "HIDDEN")
+        notes.recomputeHidden()
+        assertEquals(listOf(true, true, false), hidden())
+        assertEquals(listOf("DIRTY", "NEW"), listOf(dirty, new).map { notes.selectByLocalId(it).executeAsOne().sync_state })
+
+        db.settingQueries.deleteExclusion("a/b", "HIDDEN")
+        notes.recomputeHidden()
+        assertEquals(listOf(false, false, false), hidden())
+    }
+
+    @Test
     fun deleteByCategoryPrefixMatchesFolderAndSubfoldersOnly() {
         listOf("a", "a/b", "a/b/c", "a/bc", "ab", "_work", "xwork", "").forEachIndexed { i, c ->
             server(i + 1L, category = c)

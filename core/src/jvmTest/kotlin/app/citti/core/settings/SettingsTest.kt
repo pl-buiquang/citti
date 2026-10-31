@@ -70,6 +70,44 @@ class SettingsTest {
         assertEquals(listOf("a/b"), repo.list(ExclusionKind.HIDDEN))
     }
 
+    private fun hiddenByRemoteId(): Map<Long, Boolean> =
+        db.noteQueries
+            .selectAllRemoteIds()
+            .executeAsList()
+            .filterNotNull()
+            .associateWith {
+                db.noteQueries
+                    .selectByRemoteId(it)
+                    .executeAsOne()
+                    .hidden
+            }
+
+    @Test
+    fun hiddenExclusionFlipsHiddenAtOnceWithoutSync() {
+        db.noteQueries.upsertFromServer(1, "e", "T", "a/b", false, 1, false, false)
+        db.noteQueries.upsertFromServer(2, "e", "T", "a/b/c", false, 1, false, false)
+        db.noteQueries.upsertFromServer(3, "e", "T", "a/bc", false, 1, false, false)
+        val repo = ExclusionRepository(db)
+
+        assertEquals("a/b", repo.add(ExclusionKind.HIDDEN, "a/b"))
+        assertEquals(mapOf(1L to true, 2L to true, 3L to false), hiddenByRemoteId())
+
+        repo.remove(ExclusionKind.HIDDEN, "a/b")
+        assertEquals(mapOf(1L to false, 2L to false, 3L to false), hiddenByRemoteId())
+    }
+
+    @Test
+    fun unsyncedExclusionDoesNotTouchHidden() {
+        db.noteQueries.upsertFromServer(1, "e", "T", "a", false, 1, false, false)
+        db.noteQueries.upsertFromServer(2, "e", "T", "b", false, 1, false, true)
+        val repo = ExclusionRepository(db)
+
+        repo.add(ExclusionKind.UNSYNCED, "a")
+        assertEquals(mapOf(1L to false, 2L to true), hiddenByRemoteId())
+        repo.remove(ExclusionKind.UNSYNCED, "a")
+        assertEquals(mapOf(1L to false, 2L to true), hiddenByRemoteId())
+    }
+
     @Test
     fun accountChangeDecision() {
         val a = AccountId("https://h", "alice")
