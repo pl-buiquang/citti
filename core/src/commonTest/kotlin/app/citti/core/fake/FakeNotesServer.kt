@@ -83,6 +83,12 @@ class FakeNotesServer(
     private val failures = ArrayDeque<Pair<FakeFailure, Endpoint?>>()
     private val log = mutableListOf<RecordedRequest>()
 
+    /**
+     * Called before a request is answered (after auth and injected failures), so a test can change the local DB
+     * while the request is in flight.
+     */
+    var beforeDispatch: ((Endpoint) -> Unit)? = null
+
     var notesPath: String = "Notes"
     var fileSuffix: String = ".md"
 
@@ -204,9 +210,18 @@ class FakeNotesServer(
         }
         val response =
             when {
-                failure == FakeFailure.UNAUTHORIZED || !authorized(request) -> text(HttpStatusCode.Unauthorized, "unauthorized")
-                failure == FakeFailure.SERVER_ERROR -> text(HttpStatusCode.InternalServerError, "boom")
-                else -> dispatch(request, endpoint, path, query)
+                failure == FakeFailure.UNAUTHORIZED || !authorized(request) -> {
+                    text(HttpStatusCode.Unauthorized, "unauthorized")
+                }
+
+                failure == FakeFailure.SERVER_ERROR -> {
+                    text(HttpStatusCode.InternalServerError, "boom")
+                }
+
+                else -> {
+                    beforeDispatch?.invoke(endpoint)
+                    dispatch(request, endpoint, path, query)
+                }
             }
         record(response.statusCode.value)
         return response
