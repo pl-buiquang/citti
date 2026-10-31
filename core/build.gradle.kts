@@ -23,6 +23,7 @@ kotlin {
             implementation(libs.ktor.serialization.json)
             implementation(libs.sqldelight.runtime)
             implementation(libs.sqldelight.coroutines)
+            implementation(libs.jetbrains.markdown)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
