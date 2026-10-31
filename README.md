@@ -28,4 +28,4 @@ The debug APK lands in `androidApp/build/outputs/apk/debug/`. The end-to-end tes
 
 ## License
 
-[Apache-2.0](LICENSE). The bundled fonts are under the SIL Open Font License, see `licenses/fonts/`.
+[Apache-2.0](LICENSE). The bundled fonts are under the SIL Open Font License, see `licenses/fonts/`. The Moment.js locale tables and week rules in `core/.../daily/` are copied from Moment.js (MIT), see `licenses/moment/`.
