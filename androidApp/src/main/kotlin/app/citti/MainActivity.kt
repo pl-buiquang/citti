@@ -43,12 +43,14 @@ import app.citti.ui.components.SnackbarHost
 import app.citti.ui.components.SnackbarState
 import app.citti.ui.components.breadcrumbPaths
 import app.citti.ui.components.rememberCittiDrawerState
+import app.citti.ui.image.ImageEnv
 import app.citti.ui.login.LoginController
 import app.citti.ui.login.LoginFlowBackend
 import app.citti.ui.login.LoginScreen
 import app.citti.ui.nav.Navigator
 import app.citti.ui.nav.Route
 import app.citti.ui.nav.entryId
+import app.citti.ui.note.ImageViewerScreen
 import app.citti.ui.note.NoteActions
 import app.citti.ui.note.NoteController
 import app.citti.ui.note.NoteScreen
@@ -162,6 +164,7 @@ class MainActivity : ComponentActivity() {
                     Route.Settings -> SettingsRoute(navigator, index)
                     is Route.Search -> SearchRoute(navigator, index, route)
                     is Route.Note -> NoteRoute(navigator, index, route, root)
+                    is Route.ImageViewer -> ImageViewerRoute(navigator, route)
                 }
             }
             SnackbarHost(
@@ -343,6 +346,7 @@ class MainActivity : ComponentActivity() {
             Unit
         }
         BackHandler(onBack = leave)
+        val images = remember(state.folder) { imageEnv(state.folder, controller::onImage) }
         NoteScreen(
             state = state,
             editor = controller.editor,
@@ -359,7 +363,24 @@ class MainActivity : ComponentActivity() {
                     onOpenConflict = controller::openConflict,
                     onSignInAgain = { signInAgain() },
                 ),
+            images = images,
         )
+    }
+
+    /** The Images of a Note in [folder]; null while signed out (the Preview then shows the file names). */
+    private fun imageEnv(
+        folder: String,
+        onOpen: (String) -> Unit = {},
+    ): ImageEnv? = container.imageResolver()?.let { ImageEnv(container.imageLoader, it, folder, onOpen) }
+
+    @Composable
+    private fun ImageViewerRoute(
+        navigator: Navigator,
+        route: Route.ImageViewer,
+    ) {
+        val folder by produceState<String?>(null, route.noteLocalId) { value = container.noteFolder(route.noteLocalId) ?: "" }
+        val env = folder?.let { f -> remember(f) { imageEnv(f) } }
+        if (env != null) ImageViewerScreen(route.link, env, onClose = { navigator.pop() })
     }
 
     @Composable
@@ -380,6 +401,8 @@ class MainActivity : ComponentActivity() {
                     onBack = { if (!controller.onBack()) navigator.pop() },
                     onInterval = controller::setInterval,
                     onNetwork = controller::setNetwork,
+                    onImageCacheMb = controller::setImageCacheMb,
+                    onAskClearImages = controller::askClearImages,
                     onSyncNow = controller::syncNow,
                     onOpenPicker = controller::openPicker,
                     onAddFolder = controller::addFolder,
@@ -441,6 +464,8 @@ class MainActivity : ComponentActivity() {
             unsynced = container.exclusions.flow(ExclusionKind.UNSYNCED),
             hidden = container.exclusions.flow(ExclusionKind.HIDDEN),
             knownFolders = container.exclusions.knownFolders(),
+            imageCacheMb = container.imageSettings.cacheMbFlow(),
+            imageCache = container.imageCache,
             sync = container::sync,
             signOut = {
                 container.signOut()

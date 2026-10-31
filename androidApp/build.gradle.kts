@@ -73,5 +73,7 @@ dependencies {
     implementation(libs.sqldelight.coroutines)
     implementation(libs.sqldelight.android.driver)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.ktor)
     testImplementation(libs.kotlin.test.junit)
 }

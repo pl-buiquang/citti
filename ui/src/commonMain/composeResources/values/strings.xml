@@ -153,4 +153,17 @@
     <string name="settings_confirm_unsynced_pending">%1$d of them have pending edits.</string>
     <string name="settings_confirm_delete">Delete from phone</string>
     <string name="settings_cancel">Cancel</string>
+
+    <string name="image_missing">Image not found</string>
+    <string name="image_offline">Image not available offline</string>
+    <string name="image_open">Open image</string>
+    <string name="image_viewer_close">Close</string>
+    <string name="settings_images">Images</string>
+    <string name="settings_image_cache_size">Image cache size</string>
+    <string name="settings_image_cache_used">In use: %1$s</string>
+    <string name="settings_image_cache_clear">Clear image cache</string>
+    <string name="settings_image_cache_clear_confirm">Images are downloaded again when you view them. Notes are not touched.</string>
+    <string name="settings_image_cache_clear_title">Clear image cache?</string>
+    <string name="size_mb">%1$d MB</string>
+    <string name="size_gb">%1$d GB</string>
 </resources>

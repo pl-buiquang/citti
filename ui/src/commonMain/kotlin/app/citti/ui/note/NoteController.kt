@@ -364,6 +364,11 @@ class NoteController(
         }
     }
 
+    /** A tap on an Image in Preview mode opens the Image viewer. */
+    fun onImage(link: String) {
+        navigator.push(Route.ImageViewer(localId, link))
+    }
+
     /** The banner's Open: the Conflict copy, or the original of a copy. */
     fun openConflict() {
         state.value.conflict?.let { navigator.push(Route.Note(it.localId)) }

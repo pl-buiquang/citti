@@ -24,6 +24,8 @@ kotlin {
             api(libs.kotlinx.coroutines.core)
             implementation(libs.compose.resources)
             implementation(libs.kotlinx.serialization.json)
+            api(libs.coil.compose)
+            implementation(libs.coil.network.ktor)
         }
         androidMain.dependencies {
             implementation(libs.compose.ui)
@@ -31,6 +33,11 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.ktor.client.mock)
+        }
+        jvmTest.dependencies {
+            implementation(libs.ktor.client.okhttp)
+            implementation(libs.sqldelight.sqlite.driver)
         }
     }
 }

@@ -69,6 +69,7 @@ class NavigatorTest {
                 Route.Tree("projects/é t"),
                 Route.Search("\"quoted\" text"),
                 Route.Note(42),
+                Route.ImageViewer(42, "supernote/a b.png|900"),
                 Route.Settings,
             )
         val encoded = Navigator(stack).encode()

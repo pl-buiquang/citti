@@ -434,6 +434,15 @@ class NoteControllerTest {
         }
 
     @Test
+    fun aTapOnAnImageOpensTheViewerOnTheNote() =
+        runTest {
+            val f = open(doc("![a|900](supernote/a.png)"), route = Route.Note(1, preview = true))
+            f.controller.onImage("supernote/a.png")
+            assertEquals(Route.ImageViewer(1, "supernote/a.png"), f.navigator.top)
+            assertEquals(3, f.navigator.stack.value.size)
+        }
+
+    @Test
     fun theConflictBannerOpensTheCopy() =
         runTest {
             val f = open(doc("x", copy = 7L to "Title (conflict 2026-10-31)"))

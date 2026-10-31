@@ -34,6 +34,13 @@ sealed interface Route {
         val searchQuery: String? = null,
     ) : Route
 
+    /** The full-screen Image viewer: [link] is the Image link as written in the Note [noteLocalId]. */
+    @Serializable
+    data class ImageViewer(
+        val noteLocalId: Long,
+        val link: String,
+    ) : Route
+
     @Serializable
     data object Settings : Route
 }

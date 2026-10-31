@@ -62,6 +62,8 @@ import app.citti.core.markdown.Task
 import app.citti.core.markdown.plainText
 import app.citti.core.note.LinkTarget
 import app.citti.ui.components.colored
+import app.citti.ui.image.ImageEnv
+import app.citti.ui.image.VaultImage
 import app.citti.ui.note.LinkRef
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.properties
@@ -74,7 +76,7 @@ import org.jetbrains.compose.resources.stringResource
  * Preview mode: one lazy item per block, per list item and per chunk of a long code block or paragraph (the parser
  * already split them), so a note of thousands of lines scrolls without building it all. Text is selectable per block.
  * A task item calls [onTask] (inert when [readonly]); a tap on a Note link calls [onLink]; web links open in the
- * browser. Tokens only: colors, text styles and spacing come from the theme.
+ * browser. [images] loads the Images of the Note. Tokens only: colors, text styles and spacing come from the theme.
  */
 @Composable
 fun MarkdownPreview(
@@ -85,10 +87,11 @@ fun MarkdownPreview(
     onTask: (Task) -> Unit,
     onLink: (LinkRef) -> Unit,
     modifier: Modifier = Modifier,
+    images: ImageEnv? = null,
 ) {
     val colors = CittiTheme.colors
     val styles = remember(colors, links, onLink) { InlineStyles(colors, links, onLink) }
-    val scope = PreviewScope(styles, readonly, onTask)
+    val scope = PreviewScope(styles, readonly, onTask, images)
     LazyColumn(modifier.fillMaxSize(), state = listState) {
         itemsIndexed(doc.blocks, key = { index, block -> "$index:${block.start}" }) { _, block ->
             Box(Modifier.fillMaxWidth().padding(horizontal = CittiTheme.shape.gutter)) { scope.Block(block, muted = false) }
@@ -100,6 +103,7 @@ private class PreviewScope(
     val styles: InlineStyles,
     val readonly: Boolean,
     val onTask: (Task) -> Unit,
+    val images: ImageEnv?,
 )
 
 private val MONO = FontFamily.Monospace
@@ -125,7 +129,11 @@ private fun PreviewScope.Block(
         }
 
         is Block.ImageBlock -> {
-            Indented(block.depth) { block.images.forEach { ImagePlaceholder(it) } }
+            Indented(block.depth) {
+                Column {
+                    block.images.forEach { image -> images?.let { VaultImage(image, it) } ?: ImagePlaceholder(image) }
+                }
+            }
         }
 
         is Block.ListItem -> {
@@ -349,7 +357,7 @@ private fun RuleBlock() {
     )
 }
 
-/** Until Images are loaded (the next commit): the file name in a bordered box. */
+/** The file name in a bordered box, where Images cannot be loaded (no [ImageEnv]: signed out). */
 @Composable
 private fun ImagePlaceholder(image: Inline.Image) {
     val colors = CittiTheme.colors

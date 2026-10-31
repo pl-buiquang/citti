@@ -117,6 +117,27 @@ class ImageResolverTest {
         }
 
     @Test
+    fun offlineCandidatesNeedNoRequestAndRememberedPathsComeFirst() {
+        val names = { resolver.offlineCandidates("journal", "supernote/a.png").map { it.value } }
+        assertEquals(listOf("journal/supernote/a.png", "supernote/a.png", "media/supernote/a.png"), names())
+        resolver.remember("journal", "supernote/a.png", VaultPath.parse("media/supernote/a.png")!!)
+        assertEquals(listOf("media/supernote/a.png", "journal/supernote/a.png", "supernote/a.png"), names())
+        // Web and unsupported links have no Vault path.
+        assertEquals(emptyList(), resolver.offlineCandidates("a", "https://x.example/a.png"))
+        assertTrue(server.requests.isEmpty())
+    }
+
+    @Test
+    fun aRememberedPathGetsItsEtagSentInANewSession() =
+        runTest {
+            server.putFile("a/x.png", byteArrayOf(1))
+            val loaded = assertIs<ImageResult.Loaded>(resolver.open("a", "x.png"))
+            val fresh = ImageResolver(dav, config)
+            fresh.remember("a", "x.png", loaded.path)
+            assertEquals(ImageResult.NotModified(loaded.path), fresh.open("a", "x.png", ifNoneMatch = loaded.etag))
+        }
+
+    @Test
     fun offlineRecordsNoMiss() =
         runTest {
             server.putFile("a/x.png", byteArrayOf(1))

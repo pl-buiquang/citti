@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import app.citti.core.settings.ExclusionKind
+import app.citti.core.settings.IMAGE_CACHE_CHOICES_MB
 import app.citti.core.settings.SYNC_INTERVAL_CHOICES
 import app.citti.core.settings.SyncNetwork
 import app.citti.ui.browse.statusText
@@ -54,6 +55,12 @@ import app.citti.ui.resources.settings_folder_path_hint
 import app.citti.ui.resources.settings_folder_path_label
 import app.citti.ui.resources.settings_hidden_help
 import app.citti.ui.resources.settings_hidden_title
+import app.citti.ui.resources.settings_image_cache_clear
+import app.citti.ui.resources.settings_image_cache_clear_confirm
+import app.citti.ui.resources.settings_image_cache_clear_title
+import app.citti.ui.resources.settings_image_cache_size
+import app.citti.ui.resources.settings_image_cache_used
+import app.citti.ui.resources.settings_images
 import app.citti.ui.resources.settings_interval
 import app.citti.ui.resources.settings_interval_hours
 import app.citti.ui.resources.settings_interval_manual
@@ -79,6 +86,8 @@ import app.citti.ui.resources.settings_title
 import app.citti.ui.resources.settings_unsynced_help
 import app.citti.ui.resources.settings_unsynced_title
 import app.citti.ui.resources.settings_user
+import app.citti.ui.resources.size_gb
+import app.citti.ui.resources.size_mb
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
@@ -91,6 +100,8 @@ class SettingsActions(
     val onBack: () -> Unit,
     val onInterval: (Int) -> Unit,
     val onNetwork: (SyncNetwork) -> Unit,
+    val onImageCacheMb: (Int) -> Unit,
+    val onAskClearImages: () -> Unit,
     val onSyncNow: () -> Unit,
     val onOpenPicker: (ExclusionKind) -> Unit,
     val onAddFolder: (ExclusionKind, String) -> Unit,
@@ -102,7 +113,7 @@ class SettingsActions(
     val onDismissConfirm: () -> Unit,
 )
 
-/** Settings: Account, Sync, Exclusions (design brief 12, M2 subset). Appearance and Images come later. */
+/** Settings: Account, Sync, Exclusions and Images (design brief 12, M4 subset). Appearance comes later. */
 @Composable
 fun SettingsScreen(
     state: SettingsUiState,
@@ -181,6 +192,20 @@ private fun SettingsHome(
             SectionHeader(Res.string.settings_exclusions)
             FolderList(ExclusionKind.UNSYNCED, Res.string.settings_unsynced_title, Res.string.settings_unsynced_help, state, actions)
             FolderList(ExclusionKind.HIDDEN, Res.string.settings_hidden_title, Res.string.settings_hidden_help, state, actions)
+
+            SectionHeader(Res.string.settings_images)
+            BasicText(stringResource(Res.string.settings_image_cache_size), style = CittiTheme.typography.meta.colored(muted = true))
+            for (mb in IMAGE_CACHE_CHOICES_MB) {
+                OptionRow(cacheSizeLabel(mb), selected = state.imageCacheMb == mb) { actions.onImageCacheMb(mb) }
+            }
+            BasicText(
+                stringResource(
+                    Res.string.settings_image_cache_used,
+                    cacheSizeLabel(((state.imageCacheBytes + MB / 2) / MB).toInt(), exact = true),
+                ),
+                style = CittiTheme.typography.meta.colored(muted = true),
+            )
+            CittiButton(stringResource(Res.string.settings_image_cache_clear), actions.onAskClearImages, kind = ButtonKind.Quiet)
             Box(Modifier.padding(bottom = NotesSpacing.space8))
         }
     }
@@ -282,6 +307,14 @@ private fun ConfirmDialog(
                 )
             }
 
+            SettingsConfirm.ClearImages -> {
+                Triple(
+                    stringResource(Res.string.settings_image_cache_clear_title),
+                    stringResource(Res.string.settings_image_cache_clear_confirm),
+                    stringResource(Res.string.settings_image_cache_clear),
+                )
+            }
+
             is SettingsConfirm.AddUnsynced -> {
                 val base = stringResource(Res.string.settings_confirm_unsynced_body, confirm.notes, confirm.path)
                 val text =
@@ -363,6 +396,20 @@ private fun OptionRow(
         BasicText(label, style = style)
     }
 }
+
+@Composable
+private fun cacheSizeLabel(
+    mb: Int,
+    exact: Boolean = false,
+): String =
+    if (!exact && mb % GB_IN_MB == 0) {
+        stringResource(Res.string.size_gb, mb / GB_IN_MB)
+    } else {
+        stringResource(Res.string.size_mb, mb)
+    }
+
+private const val MB = 1024L * 1024L
+private const val GB_IN_MB = 1000
 
 @Composable
 private fun intervalLabel(minutes: Int): String =

@@ -95,6 +95,30 @@ class ImageResolver(
         link: String,
     ): VaultPath? = winners[noteFolder to link]
 
+    /**
+     * The Vault paths this link can be at, with no request: the remembered one first, then the candidates with the
+     * attachment folder kept from an earlier read. A cached Image is looked up under these keys, so it shows offline.
+     */
+    fun offlineCandidates(
+        noteFolder: String,
+        link: String,
+    ): List<VaultPath> =
+        (
+            listOfNotNull(known(noteFolder, link)) +
+                candidates(noteFolder, link, config.storedAttachmentFolder()).filterIsInstance<ImageSource.Vault>().map { it.path }
+        ).distinct()
+            .filter { it !in misses }
+
+    /** Remembers [path] as the one this link resolved to (a cached copy was found there), so a revalidation can send its ETag. */
+    fun remember(
+        noteFolder: String,
+        link: String,
+        path: VaultPath,
+    ) {
+        val key = noteFolder to link
+        if (path !in misses && key !in winners) winners[key] = path
+    }
+
     suspend fun open(
         noteFolder: String,
         link: String,

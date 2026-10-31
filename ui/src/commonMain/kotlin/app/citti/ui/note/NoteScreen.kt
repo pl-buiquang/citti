@@ -35,6 +35,7 @@ import app.citti.ui.components.Gutter
 import app.citti.ui.components.IconButton
 import app.citti.ui.components.StateLabel
 import app.citti.ui.components.colored
+import app.citti.ui.image.ImageEnv
 import app.citti.ui.markdown.EditorState
 import app.citti.ui.markdown.FormatToolbar
 import app.citti.ui.markdown.MarkdownEditor
@@ -80,7 +81,7 @@ class NoteActions(
  * the Edit/Preview toggle), at most one banner (Conflict, then auth failure), the body (the editor in Edit mode, the
  * Preview in Preview mode, "Downloading…" while the text is not on the device) and the format toolbar above the
  * keyboard while the editor has focus. [previewListState] is owned by the caller so the reading position survives
- * the toggle.
+ * the toggle. [images] loads the Images of the Preview (null: a box with the file name).
  */
 @Composable
 fun NoteScreen(
@@ -88,6 +89,7 @@ fun NoteScreen(
     editor: EditorState,
     previewListState: LazyListState,
     actions: NoteActions,
+    images: ImageEnv? = null,
 ) {
     val focused by editor.focused.collectAsState()
     val pressed by editor.pressed.collectAsState()
@@ -140,6 +142,7 @@ fun NoteScreen(
                             readonly = state.readonly,
                             onTask = actions.onTask,
                             onLink = actions.onLink,
+                            images = images,
                         )
                     }
                 }

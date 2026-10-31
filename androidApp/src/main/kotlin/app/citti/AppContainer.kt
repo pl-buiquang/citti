@@ -24,6 +24,7 @@ import app.citti.core.note.LinkResolver
 import app.citti.core.note.NoteEditor
 import app.citti.core.search.NoteSearch
 import app.citti.core.settings.ExclusionRepository
+import app.citti.core.settings.ImageSettings
 import app.citti.core.settings.SyncSettingsRepository
 import app.citti.core.settings.UiSettings
 import app.citti.core.sync.AfterEditPush
@@ -35,9 +36,15 @@ import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
 import app.citti.ui.browse.NoteRowItem
 import app.citti.ui.browse.toRowItem
+import app.citti.ui.image.ImageCache
+import app.citti.ui.image.VaultImageFetcherFactory
+import app.citti.ui.image.VaultImageKeyer
 import app.citti.ui.note.NoteGateway
 import app.citti.ui.settings.AccountInfo
 import app.citti.ui.settings.CoreSettingsStore
+import coil3.ImageLoader
+import coil3.disk.DiskCache
+import coil3.network.ktor3.KtorNetworkFetcherFactory
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +61,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okio.Path.Companion.toOkioPath
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -88,7 +96,53 @@ class AppContainer(
 
     val uiSettings: UiSettings by lazy { UiSettings(database) }
 
-    val settingsStore: CoreSettingsStore by lazy { CoreSettingsStore(syncSettings, exclusions) }
+    val imageSettings: ImageSettings by lazy { ImageSettings(database) }
+
+    val settingsStore: CoreSettingsStore by lazy { CoreSettingsStore(syncSettings, exclusions, imageSettings) }
+
+    // The Image cache lives in the cache dir (the system may empty it). Its limit is read when the app starts.
+    private val imageDiskCache: DiskCache by lazy {
+        DiskCache
+            .Builder()
+            .directory(appContext.cacheDir.resolve("images").toOkioPath())
+            .maxSizeBytes(imageSettings.cacheMb() * BYTES_PER_MB)
+            .build()
+    }
+
+    /** Loads the Images of Notes: Vault files through the WebDAV client and the disk cache, https ones directly. */
+    val imageLoader: ImageLoader by lazy {
+        ImageLoader
+            .Builder(appContext)
+            .diskCache(imageDiskCache)
+            .components {
+                add(VaultImageKeyer())
+                add(VaultImageFetcherFactory(::imageResolver, System::currentTimeMillis))
+                add(KtorNetworkFetcherFactory())
+            }.build()
+    }
+
+    /** Settings › Images: the size on disk and "Clear image cache". */
+    val imageCache: ImageCache =
+        object : ImageCache {
+            override suspend fun size() = withContext(Dispatchers.IO) { imageDiskCache.size }
+
+            override suspend fun clear() = clearImages()
+        }
+
+    private suspend fun clearImages() =
+        withContext(Dispatchers.IO) {
+            imageLoader.memoryCache?.clear()
+            imageDiskCache.clear()
+        }
+
+    /** The Folder of a Note, for resolving its Image links; null when the Note is gone. */
+    suspend fun noteFolder(localId: Long): String? =
+        withContext(Dispatchers.IO) {
+            database.noteQueries
+                .selectForEditor(localId)
+                .executeAsOneOrNull()
+                ?.category
+        }
 
     /** Login Flow v2 / manual check. Its client carries no credentials. */
     val loginFlow: LoginFlow by lazy { LoginFlow(HttpClient(defaultHttpEngine())) }
@@ -189,6 +243,7 @@ class AppContainer(
     suspend fun signOut() {
         dropStack()
         withContext(Dispatchers.IO) { signOut(credentialStore, database) }
+        clearImages()
         _signedIn.value = false
     }
 
@@ -281,5 +336,9 @@ class AppContainer(
             stack.value?.client?.close()
             stack.value = null
         }
+    }
+
+    private companion object {
+        const val BYTES_PER_MB = 1024L * 1024L
     }
 }

@@ -2,11 +2,13 @@ package app.citti.ui.settings
 
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.ExclusionRepository
+import app.citti.core.settings.ImageSettings
 import app.citti.core.settings.SyncNetwork
 import app.citti.core.settings.SyncSettingsRepository
 import app.citti.core.settings.normalizeFolderPath
 import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
+import app.citti.ui.image.ImageCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +31,8 @@ interface SettingsStore {
 
     fun setNetwork(network: SyncNetwork)
 
+    fun setImageCacheMb(mb: Int)
+
     /** Returns the stored path, or null when blank or already listed. */
     fun addExclusion(
         kind: ExclusionKind,
@@ -48,12 +52,15 @@ interface SettingsStore {
 class CoreSettingsStore(
     private val sync: SyncSettingsRepository,
     private val exclusions: ExclusionRepository,
+    private val images: ImageSettings,
 ) : SettingsStore {
     override fun setIntervalMinutes(minutes: Int) = sync.setIntervalMinutes(minutes)
 
     override fun setNetwork(network: SyncNetwork) {
         sync.setNetwork(network)
     }
+
+    override fun setImageCacheMb(mb: Int) = images.setCacheMb(mb)
 
     override fun addExclusion(
         kind: ExclusionKind,
@@ -85,6 +92,9 @@ sealed interface SettingsPage {
 sealed interface SettingsConfirm {
     data object SignOut : SettingsConfirm
 
+    /** Empties the Image cache; nothing but the cached files is touched. */
+    data object ClearImages : SettingsConfirm
+
     /** [notes] local Notes are deleted from the phone; [pending] of them have edits and are kept. */
     data class AddUnsynced(
         val path: String,
@@ -106,16 +116,27 @@ data class SettingsUiState(
     val knownFolders: List<String> = emptyList(),
     val confirm: SettingsConfirm? = null,
     val folderError: FolderError? = null,
+    /** The Image cache limit in megabytes, and the bytes in use now. */
+    val imageCacheMb: Int = 500,
+    val imageCacheBytes: Long = 0,
 ) {
     val syncing: Boolean get() = status is SyncStatus.Running
 
     fun listOf(kind: ExclusionKind): List<String> = if (kind == ExclusionKind.UNSYNCED) unsynced else hidden
 }
 
+private data class Lists(
+    val unsynced: List<String>,
+    val hidden: List<String>,
+    val known: List<String>,
+    val imageMb: Int,
+)
+
 private data class Local(
     val page: SettingsPage = SettingsPage.Home,
     val confirm: SettingsConfirm? = null,
     val folderError: FolderError? = null,
+    val imageBytes: Long = 0,
 )
 
 /**
@@ -134,6 +155,8 @@ class SettingsController(
     unsynced: Flow<List<String>>,
     hidden: Flow<List<String>>,
     knownFolders: Flow<List<String>>,
+    imageCacheMb: Flow<Int>,
+    private val imageCache: ImageCache,
     private val sync: suspend (SyncTrigger) -> Unit,
     private val signOut: suspend () -> Unit,
     private val signInAgain: suspend () -> Unit,
@@ -143,10 +166,23 @@ class SettingsController(
     val state: StateFlow<SettingsUiState> =
         combine(
             combine(interval, network, status) { i, n, s -> Triple(i, n, s) },
-            combine(unsynced, hidden, knownFolders) { u, h, k -> Triple(u, h, k) },
+            combine(unsynced, hidden, knownFolders, imageCacheMb) { u, h, k, m -> Lists(u, h, k, m) },
             local,
-        ) { (i, n, s), (u, h, k), l ->
-            SettingsUiState(account, l.page, i, n, s, u, h, k, l.confirm, l.folderError)
+        ) { (i, n, s), lists, l ->
+            SettingsUiState(
+                account,
+                l.page,
+                i,
+                n,
+                s,
+                lists.unsynced,
+                lists.hidden,
+                lists.known,
+                l.confirm,
+                l.folderError,
+                lists.imageMb,
+                l.imageBytes,
+            )
         }.stateIn(scope, SharingStarted.Eagerly, SettingsUiState(account))
 
     /** Handles the system Back: returns true when it was consumed (closes a dialog or the picker). */
@@ -172,6 +208,15 @@ class SettingsController(
     fun setInterval(minutes: Int) = store.setIntervalMinutes(minutes)
 
     fun setNetwork(network: SyncNetwork) = store.setNetwork(network)
+
+    init {
+        scope.launch { local.update { it.copy(imageBytes = imageCache.size()) } }
+    }
+
+    /** A choice of Settings › Images: stored, and applied to the cache the next time the app starts. */
+    fun setImageCacheMb(mb: Int) = store.setImageCacheMb(mb)
+
+    fun askClearImages() = local.update { it.copy(confirm = SettingsConfirm.ClearImages) }
 
     fun syncNow() {
         scope.launch { sync(SyncTrigger.Manual) }
@@ -222,6 +267,14 @@ class SettingsController(
             SettingsConfirm.SignOut -> {
                 local.update { it.copy(confirm = null) }
                 scope.launch { signOut() }
+            }
+
+            SettingsConfirm.ClearImages -> {
+                local.update { it.copy(confirm = null) }
+                scope.launch {
+                    imageCache.clear()
+                    local.update { it.copy(imageBytes = imageCache.size()) }
+                }
             }
 
             null -> {

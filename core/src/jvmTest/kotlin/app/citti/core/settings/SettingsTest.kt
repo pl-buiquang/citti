@@ -72,6 +72,20 @@ class SettingsTest {
         }
 
     @Test
+    fun imageCacheSizeDefaultsTo500AndRoundTrips() =
+        runTest {
+            val repo = ImageSettings(db, Dispatchers.Unconfined)
+            assertEquals(500, repo.cacheMb())
+            repo.setCacheMb(2000)
+            assertEquals(2000, repo.cacheMb())
+            assertEquals(2000, repo.cacheMbFlow().first())
+            assertEquals("2000", db.settingQueries.selectSetting("images.cache-mb").executeAsOne())
+            assertFailsWith<IllegalArgumentException> { repo.setCacheMb(300) }
+            db.settingQueries.upsertSetting(KEY_IMAGES_CACHE_MB, "300")
+            assertEquals(500, repo.cacheMb())
+        }
+
+    @Test
     fun exclusionsAddNormalizeRemove() {
         val repo = ExclusionRepository(db)
         assertEquals("a/b", repo.add(ExclusionKind.UNSYNCED, " /a//b/ "))

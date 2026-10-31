@@ -3,6 +3,7 @@ package app.citti.ui.settings
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.SyncNetwork
 import app.citti.core.sync.SyncTrigger
+import app.citti.ui.image.ImageCache
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -21,6 +22,11 @@ private class FakeStore(
     val network = MutableStateFlow(SyncNetwork.ANY)
     val unsynced = MutableStateFlow(emptyList<String>())
     val hidden = MutableStateFlow(emptyList<String>())
+    val imageMb = MutableStateFlow(500)
+
+    override fun setImageCacheMb(mb: Int) {
+        imageMb.value = mb
+    }
 
     override fun setIntervalMinutes(minutes: Int) {
         interval.value = minutes
@@ -53,8 +59,23 @@ private class FakeStore(
     override fun pendingUnder(path: String) = local[path]?.second ?: 0
 }
 
+private class FakeImageCache(
+    var bytes: Long = 312L * 1024 * 1024,
+) : ImageCache {
+    var cleared = 0
+
+    override suspend fun size() = bytes
+
+    override suspend fun clear() {
+        cleared++
+        bytes = 0
+    }
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsControllerTest {
+    private val images = FakeImageCache()
+
     private val triggers = mutableListOf<SyncTrigger>()
     private var signedOut = 0
     private var signInAgain = 0
@@ -70,6 +91,8 @@ class SettingsControllerTest {
             unsynced = store.unsynced,
             hidden = store.hidden,
             knownFolders = MutableStateFlow(listOf("a", "a/b")),
+            imageCacheMb = store.imageMb,
+            imageCache = images,
             sync = { triggers += it },
             signOut = { signedOut++ },
             signInAgain = { signInAgain++ },
@@ -183,5 +206,32 @@ class SettingsControllerTest {
             c.confirm()
             assertEquals(1, signedOut)
             assertNull(c.state.value.confirm)
+        }
+
+    @Test
+    fun imageCacheSizeChoiceIsStoredAndShown() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val c = controller(store)
+            assertEquals(500, c.state.value.imageCacheMb)
+            assertEquals(312L * 1024 * 1024, c.state.value.imageCacheBytes)
+            c.setImageCacheMb(2000)
+            assertEquals(2000, store.imageMb.value)
+            assertEquals(2000, c.state.value.imageCacheMb)
+        }
+
+    @Test
+    fun clearingTheImageCacheAsksFirstThenEmptiesIt() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            c.askClearImages()
+            assertEquals(SettingsConfirm.ClearImages, c.state.value.confirm)
+            c.dismissConfirm()
+            assertEquals(0, images.cleared)
+            c.askClearImages()
+            c.confirm()
+            assertEquals(1, images.cleared)
+            assertNull(c.state.value.confirm)
+            assertEquals(0L, c.state.value.imageCacheBytes)
         }
 }

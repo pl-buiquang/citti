@@ -23,6 +23,9 @@ class ObsidianConfig(
     private var loaded = false
     private var folder: String? = settings.selectSetting(KEY_OBSIDIAN_ATTACHMENTS).executeAsOneOrNull() ?: DEFAULT_ATTACHMENTS
 
+    /** The attachment folder kept from an earlier read, with no request (the default before the first read). */
+    fun storedAttachmentFolder(): String? = folder?.takeIf { it.isNotEmpty() && it != "./" && it != "." }
+
     suspend fun attachmentFolder(): String? {
         if (!loaded) {
             when (val result = dav.get(VaultPath.parse(".obsidian/app.json")!!)) {
@@ -41,7 +44,7 @@ class ObsidianConfig(
                 }
             }
         }
-        return folder?.takeIf { it.isNotEmpty() && it != "./" && it != "." }
+        return storedAttachmentFolder()
     }
 
     private fun store(value: String) {
