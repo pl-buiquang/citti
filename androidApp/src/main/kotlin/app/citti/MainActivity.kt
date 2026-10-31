@@ -37,9 +37,13 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import app.citti.core.appearance.MAX_THEME_FILE_BYTES
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.MainMode
+import app.citti.ui.TestTags
 import app.citti.ui.appearance.AppearanceActions
 import app.citti.ui.appearance.ThemeEditorController
 import app.citti.ui.appearance.actions
@@ -94,6 +98,7 @@ import app.citti.ui.settings.SettingsScreen
 import app.citti.ui.settings.dailyActions
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.background
+import app.citti.ui.theme.baseTheme
 import app.citti.ui.theme.isDark
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -217,19 +222,29 @@ class MainActivity : ComponentActivity() {
             }
             CittiTheme(appearance) {
                 val signedIn by container.signedIn.collectAsState()
-                when (signedIn) {
-                    null -> {
-                        Blank()
-                    }
+                // E2E tests cannot read colors: the resolved theme is written out as "<family>:<light|dark>:<accent>".
+                val themeState =
+                    listOf(appearance.baseTheme().name, if (dark) "dark" else "light", appearance.accent.name).joinToString(":").lowercase()
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .testTag(TestTags.THEME_STATE)
+                        .semantics { stateDescription = themeState },
+                ) {
+                    when (signedIn) {
+                        null -> {
+                            Blank()
+                        }
 
-                    // A link opened while signed out is dropped.
-                    false -> {
-                        LaunchedEffect(Unit) { pendingDeepLink.value = null }
-                        LoginRoute()
-                    }
+                        // A link opened while signed out is dropped.
+                        false -> {
+                            LaunchedEffect(Unit) { pendingDeepLink.value = null }
+                            LoginRoute()
+                        }
 
-                    true -> {
-                        SignedIn()
+                        true -> {
+                            SignedIn()
+                        }
                     }
                 }
             }
