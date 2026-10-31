@@ -69,8 +69,24 @@ VALUES (:title, :category, :content, 0, :modified, 'NEW', :conflictOf);
 lastInsertedLocalId:
 SELECT last_insert_rowid();
 
+-- Push: the server accepted the sent version. Compares the row with what was sent and writes in one statement
+-- (every SET reads the old row), so an edit made during the request is kept: title and category follow the server
+-- (which may rename a duplicate to "Title (2)") only where they still equal what was sent, a changed row stays
+-- DIRTY with its modified time, and a DELETED row stays DELETED, now with the remote id.
 markSynced:
-UPDATE note SET remote_id = :remoteId, etag = :etag, modified = :modified, sync_state = 'SYNCED' WHERE local_id = :localId;
+UPDATE note
+SET remote_id = :remoteId,
+    etag = :etag,
+    title = CASE WHEN title = :sentTitle THEN :title ELSE title END,
+    category = CASE WHEN category = :sentCategory THEN :category ELSE category END,
+    modified = CASE
+        WHEN sync_state != 'DELETED' AND title = :sentTitle AND category = :sentCategory AND coalesce(content, '') = :sentContent
+        THEN :modified ELSE modified END,
+    sync_state = CASE
+        WHEN sync_state = 'DELETED' THEN 'DELETED'
+        WHEN title = :sentTitle AND category = :sentCategory AND coalesce(content, '') = :sentContent THEN 'SYNCED'
+        ELSE 'DIRTY' END
+WHERE local_id = :localId;
 
 markDeleted:
 UPDATE note SET sync_state = 'DELETED' WHERE local_id = ?;

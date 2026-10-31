@@ -123,9 +123,79 @@ class NoteQueriesTest {
         assertEquals("NEW", notes.selectByLocalId(newId).executeAsOne().sync_state)
         notes.markDirty("ignored", 13, id2)
         assertEquals("DELETED", notes.selectByLocalId(id2).executeAsOne().sync_state)
-        notes.markSynced(77, "e77", 14, newId)
+        synced(77, "new", "a", "more", newId)
         assertEquals(77L, notes.selectByLocalId(newId).executeAsOne().remote_id)
         assertEquals(2, notes.selectDirty().executeAsList().size)
+    }
+
+    /** markSynced after a push of the sent values, answered with "<title> (2)" in "server/<category>". */
+    private fun synced(
+        remoteId: Long,
+        sentTitle: String,
+        sentCategory: String,
+        sentContent: String,
+        localId: Long,
+    ) = notes.markSynced(
+        remoteId = remoteId,
+        etag = "e$remoteId",
+        sentTitle = sentTitle,
+        title = "$sentTitle (2)",
+        sentCategory = sentCategory,
+        category = "server/$sentCategory",
+        sentContent = sentContent,
+        modified = 100,
+        localId = localId,
+    )
+
+    private fun newNote(): Long {
+        notes.insertNew("T", "c", "body", 5, null)
+        return notes.lastInsertedLocalId().executeAsOne()
+    }
+
+    @Test
+    fun markSyncedTakesServerTitleAndCategoryWhenUnchanged() {
+        val id = newNote()
+        synced(7, "T", "c", "body", id)
+        val row = notes.selectByLocalId(id).executeAsOne()
+        assertEquals("SYNCED", row.sync_state)
+        assertEquals("T (2)", row.title)
+        assertEquals("server/c", row.category)
+        assertEquals("e7", row.etag)
+        assertEquals(100, row.modified)
+    }
+
+    @Test
+    fun markSyncedKeepsEditMadeDuringPush() {
+        val id = newNote()
+        notes.markDirty("typed meanwhile", 6, id)
+        synced(7, "T", "c", "body", id)
+        val row = notes.selectByLocalId(id).executeAsOne()
+        assertEquals("DIRTY", row.sync_state)
+        assertEquals(7L, row.remote_id)
+        assertEquals("e7", row.etag)
+        assertEquals("typed meanwhile", row.content)
+        assertEquals("T (2)", row.title)
+        assertEquals(6, row.modified)
+    }
+
+    @Test
+    fun markSyncedKeepsLocalTitleAndDelete() {
+        // renamed to "Mine" while "T" was in flight
+        notes.insertNew("Mine", "c", "body", 5, null)
+        val renamed = notes.lastInsertedLocalId().executeAsOne()
+        synced(7, "T", "c", "body", renamed)
+        val row = notes.selectByLocalId(renamed).executeAsOne()
+        assertEquals("Mine", row.title)
+        assertEquals("server/c", row.category)
+        assertEquals("DIRTY", row.sync_state)
+
+        val deleted = newNote()
+        notes.markDeleted(deleted)
+        synced(8, "T", "c", "body", deleted)
+        val gone = notes.selectByLocalId(deleted).executeAsOne()
+        assertEquals("DELETED", gone.sync_state)
+        assertEquals(8L, gone.remote_id)
+        assertEquals("e8", gone.etag)
     }
 
     @Test

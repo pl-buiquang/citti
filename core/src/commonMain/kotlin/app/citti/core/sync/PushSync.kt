@@ -105,10 +105,11 @@ class PushSync(
         }
     }
 
-    private suspend fun pushCreate(note: Note): ApiError? =
-        when (val result = api.createNote(NewNote(note.title, note.content.orEmpty(), note.category, note.favorite))) {
+    private suspend fun pushCreate(note: Note): ApiError? {
+        val body = NewNote(note.title, note.content.orEmpty(), note.category, note.favorite)
+        return when (val result = api.createNote(body)) {
             is ApiResult.Success -> {
-                markSynced(note.local_id, result.value)
+                markSynced(note.local_id, result.value, body.title, body.category, body.content)
                 created++
                 null
             }
@@ -117,6 +118,7 @@ class PushSync(
                 handle(note, result.error)
             }
         }
+    }
 
     private suspend fun pushDelete(note: Note): ApiError? {
         val remoteId = note.remote_id
@@ -183,7 +185,7 @@ class PushSync(
             is ApiResult.Success -> {
                 when (val update = result.value) {
                     is UpdateResult.Updated -> {
-                        markSynced(note.local_id, update.note)
+                        markSynced(note.local_id, update.note, note.title, note.category, note.content.orEmpty())
                         updated++
                         null
                     }
@@ -257,10 +259,24 @@ class PushSync(
         return title
     }
 
+    /** [sentTitle], [sentCategory] and [sentContent] are the values the request carried. */
     private fun markSynced(
         localId: Long,
         remote: RemoteNote,
-    ) = queries.markSynced(remote.id, remote.etag, remote.modified ?: now(), localId)
+        sentTitle: String,
+        sentCategory: String,
+        sentContent: String,
+    ) = queries.markSynced(
+        remoteId = remote.id,
+        etag = remote.etag,
+        sentTitle = sentTitle,
+        title = remote.title ?: sentTitle,
+        sentCategory = sentCategory,
+        category = remote.category ?: sentCategory,
+        sentContent = sentContent,
+        modified = remote.modified ?: now(),
+        localId = localId,
+    )
 
     /** Fatal errors stop the run, anything else is recorded and the next Note goes on. */
     private fun handle(

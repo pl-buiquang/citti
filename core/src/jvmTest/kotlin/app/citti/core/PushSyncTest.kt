@@ -22,11 +22,8 @@ import kotlin.test.assertTrue
 
 class PushSyncTest {
     private val server = FakeNotesServer()
-    private val db: CittiDatabase =
-        JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).let {
-            CittiDatabase.Schema.create(it)
-            CittiDatabase(it)
-        }
+    private val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { CittiDatabase.Schema.create(it) }
+    private val db = CittiDatabase(driver)
     private val notes = db.noteQueries
     private val config = NotesApiConfig("https://host", "alice", "pw")
     private val api = NotesApi(createNotesHttpClient(server.engine, config), config)
@@ -155,6 +152,113 @@ class PushSyncTest {
             val row = notes.selectByLocalId(local).executeAsOne()
             assertEquals("SYNCED", row.sync_state)
             assertEquals("server text", row.content)
+        }
+
+    /** Runs [edit] once, while the first request to [endpoint] is in flight. */
+    private fun duringRequest(
+        endpoint: Endpoint,
+        edit: () -> Unit,
+    ) {
+        server.beforeDispatch = {
+            if (it == endpoint) {
+                server.beforeDispatch = null
+                edit()
+            }
+        }
+    }
+
+    /** No query renames a Note yet (M3), so the test writes the title directly. */
+    private fun rename(
+        local: Long,
+        title: String,
+    ) = driver.execute(null, "UPDATE note SET title = ? WHERE local_id = ?", 2) {
+        bindString(0, title)
+        bindLong(1, local)
+    }
+
+    @Test
+    fun newNoteWithTakenTitleFollowsServerRename() =
+        runTest {
+            server.addNote("Plan", "older", "work")
+            val local = newLocal("Plan", "text", "work")
+            assertEquals(1, done().created)
+            val row = notes.selectByLocalId(local).executeAsOne()
+            val remote = server.note(assertNotNull(row.remote_id))!!
+            assertEquals("Plan (2)", remote.title)
+            assertEquals("Plan (2)", row.title)
+            assertEquals(remote.category, row.category)
+            assertEquals("SYNCED", row.sync_state)
+            assertEquals(remote.modified, row.modified)
+        }
+
+    @Test
+    fun editDuringCreateIsPushedNextRun() =
+        runTest {
+            val local = newLocal("Fresh", "first")
+            duringRequest(Endpoint.CREATE) { notes.markDirty("typed meanwhile", 6, local) }
+            assertEquals(1, done().created)
+
+            val row = notes.selectByLocalId(local).executeAsOne()
+            val remote = assertNotNull(row.remote_id)
+            assertEquals("DIRTY", row.sync_state)
+            assertEquals("typed meanwhile", row.content)
+            assertEquals(server.note(remote)!!.etag, row.etag)
+            assertEquals("first", server.note(remote)!!.content)
+
+            assertEquals(1, done().updated)
+            assertEquals("typed meanwhile", server.note(remote)!!.content)
+            assertEquals("\"${row.etag}\"", server.requests.last { it.endpoint == Endpoint.UPDATE }.header("If-Match"))
+            assertEquals("SYNCED", notes.selectByLocalId(local).executeAsOne().sync_state)
+        }
+
+    @Test
+    fun editDuringUpdateIsPushedNextRun() =
+        runTest {
+            val (local, remote) = synced()
+            notes.markDirty("first", 5, local)
+            duringRequest(Endpoint.UPDATE) { notes.markDirty("second", 6, local) }
+            assertEquals(1, done().updated)
+
+            val row = notes.selectByLocalId(local).executeAsOne()
+            assertEquals("DIRTY", row.sync_state)
+            assertEquals("second", row.content)
+            assertEquals(6, row.modified)
+            assertEquals(server.note(remote)!!.etag, row.etag)
+
+            assertEquals(1, done().updated)
+            assertEquals("second", server.note(remote)!!.content)
+            assertEquals("SYNCED", notes.selectByLocalId(local).executeAsOne().sync_state)
+        }
+
+    @Test
+    fun deleteDuringCreateIsPushedNextRun() =
+        runTest {
+            val local = newLocal("Fresh", "text")
+            duringRequest(Endpoint.CREATE) { notes.markDeleted(local) }
+            done()
+
+            val row = notes.selectByLocalId(local).executeAsOne()
+            val remote = assertNotNull(row.remote_id)
+            assertEquals("DELETED", row.sync_state)
+            assertNotNull(server.note(remote))
+
+            assertEquals(1, done().deleted)
+            assertNull(server.note(remote))
+            assertNull(notes.selectByLocalId(local).executeAsOneOrNull())
+        }
+
+    @Test
+    fun titleEditedDuringCreateIsKeptOverServerRename() =
+        runTest {
+            server.addNote("Plan", "older")
+            val local = newLocal("Plan", "text")
+            duringRequest(Endpoint.CREATE) { rename(local, "Plan B") }
+            done()
+
+            val row = notes.selectByLocalId(local).executeAsOne()
+            assertEquals("Plan (2)", server.note(assertNotNull(row.remote_id))!!.title)
+            assertEquals("Plan B", row.title)
+            assertEquals("DIRTY", row.sync_state)
         }
 
     @Test
