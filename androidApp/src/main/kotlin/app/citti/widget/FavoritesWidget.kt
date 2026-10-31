@@ -28,17 +28,22 @@ import app.citti.AppContainer
 import app.citti.CittiApp
 import app.citti.R
 import app.citti.ui.theme.NotesSpacing
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** What the Favorites widget draws. */
 sealed interface FavoritesState {
     data object SignedOut : FavoritesState
 
-    /** [rows] are the favorites, most recently modified first. */
+    /** [rows] are the favorites, most recently modified first; [today] is the date under the pinned Today row. */
     data class Loaded(
         val rows: List<FavoriteRow>,
+        val today: String,
     ) : FavoritesState
 }
 
@@ -47,6 +52,7 @@ class FavoritesWidget : GlanceAppWidget() {
         context: Context,
         id: GlanceId,
     ) {
+        DayScheduler.schedule(context)
         val state = loadFavoritesState(context)
         provideContent { FavoritesContent(state) }
     }
@@ -54,12 +60,24 @@ class FavoritesWidget : GlanceAppWidget() {
 
 class FavoritesWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = FavoritesWidget()
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        val pending = goAsync()
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            try {
+                DayScheduler.cancelIfUnused(context)
+            } finally {
+                pending.finish()
+            }
+        }
+    }
 }
 
 /** Reads the local DB only; never the network. */
 internal suspend fun loadFavoritesState(context: Context): FavoritesState {
     if (!isSignedIn(context)) return FavoritesState.SignedOut
-    return FavoritesState.Loaded(context.container().favoriteWidgetRows())
+    return FavoritesState.Loaded(context.container().favoriteWidgetRows(), context.todayLabel())
 }
 
 internal fun Context.container(): AppContainer = (applicationContext as CittiApp).container
@@ -98,8 +116,11 @@ fun FavoritesContent(state: FavoritesState) {
             Spacer(GlanceModifier.width(NotesSpacing.space2))
             Text(context.getString(R.string.widget_favorites_name), style = WidgetText.header)
         }
-        val rows = (state as FavoritesState.Loaded).rows
+        val loaded = state as FavoritesState.Loaded
+        val rows = loaded.rows
         LazyColumn(GlanceModifier.fillMaxSize()) {
+            // Always first, whether or not today's note exists: the app opens or creates it.
+            item(itemId = TODAY_ITEM_ID) { TodayRowContent(loaded.today) }
             if (rows.isEmpty()) {
                 item(itemId = EMPTY_ITEM_ID) {
                     Text(
@@ -114,7 +135,27 @@ fun FavoritesContent(state: FavoritesState) {
     }
 }
 
+private const val TODAY_ITEM_ID = -1L
 private const val EMPTY_ITEM_ID = -2L
+
+@Composable
+private fun TodayRowContent(date: String) {
+    val context = LocalContext.current
+    Row(
+        GlanceModifier
+            .fillMaxWidth()
+            .clickable(actionStartActivity(WidgetIntents.daily(context, resume = false)))
+            .padding(horizontal = NotesSpacing.space4, vertical = NotesSpacing.space2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TodayIcon()
+        Spacer(GlanceModifier.width(NotesSpacing.space3))
+        Column {
+            Text(context.getString(R.string.widget_today_row), style = WidgetText.title, maxLines = 1)
+            Text(date, style = WidgetText.folder, maxLines = 1)
+        }
+    }
+}
 
 @Composable
 private fun FavoriteRowContent(row: FavoriteRow) {

@@ -16,12 +16,16 @@ import org.robolectric.annotation.Config
 class FavoritesWidgetTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
+    private companion object {
+        const val TODAY = "Saturday 31 October"
+    }
+
     @Test
     fun rowsShowTheTitleAndTheFolderAndOpenTheirNote() =
         runGlanceAppWidgetUnitTest {
             setContext(context)
             val rows = listOf(FavoriteRow(7, "Groceries", ""), FavoriteRow(9, "Trip plan", "personal/trips"))
-            provideComposable { FavoritesContent(FavoritesState.Loaded(rows)) }
+            provideComposable { FavoritesContent(FavoritesState.Loaded(rows, TODAY)) }
 
             onNode(hasText("Groceries")).assertExists()
             onNode(hasText(context.getString(R.string.widget_root_folder))).assertExists()
@@ -35,7 +39,7 @@ class FavoritesWidgetTest {
     fun theHeaderOpensTheApp() =
         runGlanceAppWidgetUnitTest {
             setContext(context)
-            provideComposable { FavoritesContent(FavoritesState.Loaded(emptyList())) }
+            provideComposable { FavoritesContent(FavoritesState.Loaded(emptyList(), TODAY)) }
 
             onNode(hasText(context.getString(R.string.widget_favorites_name))).assertExists()
             onNode(hasStartActivityClickAction(WidgetIntents.app(context))).assertExists()
@@ -45,7 +49,7 @@ class FavoritesWidgetTest {
     fun noFavoritesShowsTheEmptyState() =
         runGlanceAppWidgetUnitTest {
             setContext(context)
-            provideComposable { FavoritesContent(FavoritesState.Loaded(emptyList())) }
+            provideComposable { FavoritesContent(FavoritesState.Loaded(emptyList(), TODAY)) }
 
             onNode(hasText(context.getString(R.string.widget_favorites_empty))).assertExists()
         }
@@ -59,5 +63,36 @@ class FavoritesWidgetTest {
             onNode(hasText(context.getString(R.string.widget_signed_out))).assertExists()
             onNode(hasStartActivityClickAction(WidgetIntents.app(context))).assertExists()
             onNode(hasText(context.getString(R.string.widget_favorites_name))).assertDoesNotExist()
+        }
+
+    @Test
+    fun theTodayRowIsThereWithTheDateAndOpensTheDailyLink() =
+        runGlanceAppWidgetUnitTest {
+            setContext(context)
+            provideComposable { FavoritesContent(FavoritesState.Loaded(listOf(FavoriteRow(7, "Groceries", "")), TODAY)) }
+
+            onNode(hasText(context.getString(R.string.widget_today_row))).assertExists()
+            onNode(hasText(TODAY)).assertExists()
+            onAllNodes(hasStartActivityClickAction(WidgetIntents.daily(context, resume = false))).assertCountEquals(1)
+        }
+
+    @Test
+    fun theTodayRowStaysWhenThereAreNoFavorites() =
+        runGlanceAppWidgetUnitTest {
+            setContext(context)
+            provideComposable { FavoritesContent(FavoritesState.Loaded(emptyList(), TODAY)) }
+
+            onNode(hasText(context.getString(R.string.widget_today_row))).assertExists()
+            onNode(hasText(context.getString(R.string.widget_favorites_empty))).assertExists()
+        }
+
+    @Test
+    fun signedOutHasNoTodayRow() =
+        runGlanceAppWidgetUnitTest {
+            setContext(context)
+            provideComposable { FavoritesContent(FavoritesState.SignedOut) }
+
+            onNode(hasText(context.getString(R.string.widget_today_row))).assertDoesNotExist()
+            onNode(hasStartActivityClickAction(WidgetIntents.daily(context, resume = false))).assertDoesNotExist()
         }
 }

@@ -53,6 +53,30 @@
                 android:resource="@xml/note_widget_info" />
         </receiver>
 
+        <receiver
+            android:name=".widget.DailyNoteWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_daily_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/daily_note_widget_info" />
+        </receiver>
+
+        <!-- Midnight alarm and clock, zone and locale changes: redraws the date of the Today row and the Daily note widget.
+             The three system broadcasts are protected (only the system sends them), so the receiver needs no export. -->
+        <receiver
+            android:name=".widget.DayChangeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
         <!-- The launcher starts it when a Note widget is placed or reconfigured. -->
         <activity
             android:name=".widget.NotePickerActivity"

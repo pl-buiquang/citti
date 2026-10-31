@@ -13,4 +13,10 @@
     <string name="picker_title">Pick a note</string>
     <string name="picker_signed_out">Sign in to citti first.</string>
     <string name="picker_open_app">Open citti</string>
+    <string name="widget_today_row">Today</string>
+    <string name="widget_today_description">Today\'s daily note</string>
+    <string name="widget_daily_name">Daily note</string>
+    <string name="widget_daily_description">Today\'s daily note, where you left it.</string>
+    <string name="widget_daily_missing">No note for today yet. Tap to create.</string>
+    <string name="widget_daily_guard">The Journal folder is an Unsynced folder</string>
 </resources>
