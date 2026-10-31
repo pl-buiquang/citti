@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -28,17 +29,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import app.citti.core.note.NoteBadge
-import app.citti.ui.resources.Res
-import app.citti.ui.resources.badge_conflict
-import app.citti.ui.resources.badge_favorite
-import app.citti.ui.resources.badge_pending
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
-import org.jetbrains.compose.resources.stringResource
 
 /** Text roles resolved against the current theme colors. Components use these instead of raw colors. */
 @Composable
@@ -219,46 +216,49 @@ fun NoteBadge.toRowBadge(): RowBadge =
         NoteBadge.Conflict -> RowBadge.Conflict
     }
 
-/** State is words, not only color. */
+/** State is words, not only color. [outline] draws a hairline box around it (the Hidden badge). */
 @Composable
 fun StateLabel(
     text: String,
     color: Color,
+    modifier: Modifier = Modifier,
+    outline: Boolean = false,
 ) {
+    val shape = RoundedCornerShape(CittiTheme.shape.control)
     BasicText(
         if (CittiTheme.shape.labelsUppercase) text.uppercase() else text,
+        modifier =
+            if (outline) {
+                modifier.border(Dp.Hairline, color, shape).padding(horizontal = NotesSpacing.space1)
+            } else {
+                modifier
+            },
         style = CittiTheme.typography.label.copy(color = color),
     )
 }
 
-/** A Note row: title, Folder path, Favorite and sync-state badges, optional date. */
+/** A centered message for an empty screen, with an optional action. */
 @Composable
-fun NoteRow(
-    title: String,
-    folder: String,
+fun EmptyState(
+    message: String,
     modifier: Modifier = Modifier,
-    date: String? = null,
-    favorite: Boolean = false,
-    badge: RowBadge? = null,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
 ) {
-    Row(
+    Column(
         modifier
-            .fillMaxWidth()
-            .heightIn(min = CittiTheme.shape.rowMin)
-            .padding(horizontal = CittiTheme.shape.gutter),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(NotesSpacing.space3),
+            .fillMaxSize()
+            .padding(horizontal = CittiTheme.shape.gutter, vertical = NotesSpacing.space8),
+        verticalArrangement = Arrangement.spacedBy(NotesSpacing.space3, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(Modifier.weight(1f)) {
-            BasicText(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = CittiTheme.typography.rowTitle.colored())
-            BasicText(folder, maxLines = 1, overflow = TextOverflow.Ellipsis, style = CittiTheme.typography.meta.colored(muted = true))
-        }
-        if (favorite) StateLabel(stringResource(Res.string.badge_favorite), CittiTheme.colors.favorite)
-        when (badge) {
-            RowBadge.Conflict -> StateLabel(stringResource(Res.string.badge_conflict), CittiTheme.colors.conflict)
-            RowBadge.Pending -> StateLabel(stringResource(Res.string.badge_pending), CittiTheme.colors.inkMuted)
-            null -> Unit
-        }
-        if (date != null) BasicText(date, style = CittiTheme.typography.meta.colored(muted = true))
+        BasicText(
+            message,
+            style =
+                CittiTheme.typography.body
+                    .colored(muted = true)
+                    .copy(textAlign = TextAlign.Center),
+        )
+        if (actionLabel != null && onAction != null) CittiTextButton(actionLabel, onAction)
     }
 }

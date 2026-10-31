@@ -1,0 +1,139 @@
+package app.citti.ui.components
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import app.citti.ui.theme.CittiTheme
+import app.citti.ui.theme.NotesSize
+import app.citti.ui.theme.NotesSpacing
+
+/**
+ * Outline icons on a 24-unit grid with a 2-unit stroke (design-system README › Iconography), drawn
+ * with Canvas so `:ui` needs no icon library.
+ */
+enum class CittiIcon { Menu, Back, Close, Search, Folder, Chevron, Star }
+
+/** Decorative icon (no semantics): pair it with a label, or use [IconButton]. */
+@Composable
+fun Icon(
+    icon: CittiIcon,
+    modifier: Modifier = Modifier,
+    color: Color = CittiTheme.colors.ink,
+) {
+    Canvas(modifier.size(NotesSpacing.space6)) { drawIcon(icon, color) }
+}
+
+/** An icon-only action: [NotesSize.iconButton] square, with [label] read by TalkBack. */
+@Composable
+fun IconButton(
+    icon: CittiIcon,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    color: Color = CittiTheme.colors.ink,
+) {
+    Box(
+        modifier
+            .sizeIn(minWidth = NotesSize.iconButton, minHeight = NotesSize.iconButton)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, color = color)
+    }
+}
+
+private fun DrawScope.drawIcon(
+    icon: CittiIcon,
+    color: Color,
+) {
+    // One grid unit: the canvas is 24 units wide.
+    val u = size.minDimension / 24f
+    val stroke = Stroke(width = 2f * u, cap = StrokeCap.Square, join = StrokeJoin.Miter)
+
+    fun p(
+        x: Float,
+        y: Float,
+    ) = Offset(x * u, y * u)
+
+    fun line(
+        x1: Float,
+        y1: Float,
+        x2: Float,
+        y2: Float,
+    ) = drawLine(color, p(x1, y1), p(x2, y2), strokeWidth = stroke.width, cap = stroke.cap)
+
+    fun path(
+        vararg points: Pair<Float, Float>,
+        close: Boolean = false,
+    ) {
+        val path =
+            Path().apply {
+                points.forEachIndexed { i, (x, y) -> if (i == 0) moveTo(x * u, y * u) else lineTo(x * u, y * u) }
+                if (close) close()
+            }
+        drawPath(path, color, style = stroke)
+    }
+
+    when (icon) {
+        CittiIcon.Menu -> {
+            line(4f, 7f, 20f, 7f)
+            line(4f, 12f, 20f, 12f)
+            line(4f, 17f, 20f, 17f)
+        }
+
+        CittiIcon.Back -> {
+            line(5f, 12f, 19f, 12f)
+            path(11f to 6f, 5f to 12f, 11f to 18f)
+        }
+
+        CittiIcon.Close -> {
+            line(6f, 6f, 18f, 18f)
+            line(18f, 6f, 6f, 18f)
+        }
+
+        CittiIcon.Search -> {
+            drawCircle(color, radius = 6f * u, center = p(10.5f, 10.5f), style = stroke)
+            line(15f, 15f, 20f, 20f)
+        }
+
+        CittiIcon.Folder -> {
+            path(3f to 6f, 9f to 6f, 11f to 8f, 21f to 8f, 21f to 19f, 3f to 19f, close = true)
+        }
+
+        CittiIcon.Chevron -> {
+            path(9f to 6f, 15f to 12f, 9f to 18f)
+        }
+
+        CittiIcon.Star -> {
+            path(
+                12f to 3.5f,
+                14.6f to 9f,
+                20.5f to 9.6f,
+                16f to 13.5f,
+                17.3f to 19.5f,
+                12f to 16.4f,
+                6.7f to 19.5f,
+                8f to 13.5f,
+                3.5f to 9.6f,
+                9.4f to 9f,
+                close = true,
+            )
+        }
+    }
+}
