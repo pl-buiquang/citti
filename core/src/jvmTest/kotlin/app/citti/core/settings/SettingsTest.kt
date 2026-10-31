@@ -67,6 +67,9 @@ class SettingsTest {
             assertEquals(MainMode.TREE, repo.mainMode())
             assertEquals(MainMode.TREE, repo.mainModeFlow().first())
             assertEquals("TREE", db.settingQueries.selectSetting(KEY_UI_MAIN_MODE).executeAsOne())
+            repo.setMainMode(MainMode.CALENDAR)
+            assertEquals(MainMode.CALENDAR, repo.mainMode())
+            assertEquals("CALENDAR", db.settingQueries.selectSetting(KEY_UI_MAIN_MODE).executeAsOne())
             db.settingQueries.upsertSetting(KEY_UI_MAIN_MODE, "GRID")
             assertEquals(MainMode.LIST, repo.mainMode())
         }

@@ -14,6 +14,7 @@ import app.citti.core.auth.Credentials
 import app.citti.core.auth.LoginFlow
 import app.citti.core.auth.prepareForSignIn
 import app.citti.core.auth.signOut
+import app.citti.core.daily.DailyEntry
 import app.citti.core.daily.DailyGuard
 import app.citti.core.daily.DailyIndex
 import app.citti.core.daily.DailyNotes
@@ -92,6 +93,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import okio.Path.Companion.toOkioPath
 import java.util.Locale
@@ -148,6 +150,10 @@ class AppContainer(
 
     /** The Daily notes of the Journal folder by date, for the Calendar; works offline from the local DB. */
     val dailyIndex: DailyIndex by lazy { DailyIndex(database, localeDetector) }
+
+    /** The Calendar's Daily notes by date, following the Journal folder, Date format and Date locale settings. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun dailyEntries(): Flow<Map<LocalDate, DailyEntry>> = dailySettings.configFlow().flatMapLatest(dailyIndex::flow)
 
     val settingsStore: CoreSettingsStore by lazy { CoreSettingsStore(syncSettings, exclusions, imageSettings) }
 

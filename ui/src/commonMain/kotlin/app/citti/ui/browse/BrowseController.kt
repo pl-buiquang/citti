@@ -80,7 +80,8 @@ private data class View(
 )
 
 /**
- * State holder of List and Tree mode, one per signed-in session and shared by every List and Tree route entry.
+ * State holder of the main view, one per signed-in session and shared by every List, Tree and Calendar route entry
+ * (the Calendar takes its banner and sync state from here, its month and days from its own controller).
  * The current route drives it through [show]. [listRows], [folderCounts] and [folderNotes] come from the local DB,
  * [status] from the SyncEngine, [mainMode] and [setMainMode] from the `ui.main-mode` setting. [folderNotes] are
  * sorted with [collator], then by local id so that the order is stable. [sync] runs a sync with the given trigger.
@@ -152,7 +153,10 @@ class BrowseController(
         val notes: List<NoteRowItem>,
     )
 
-    /** The route on top of the stack: List sets the favorites filter, Tree the Folder. Other routes change nothing. */
+    /**
+     * The route on top of the stack: List sets the favorites filter, Tree the Folder. Other routes (the Calendar
+     * included) change nothing.
+     */
     fun show(route: Route) {
         when (route) {
             is Route.List -> view.value = view.value.copy(favoritesOnly = route.favoritesOnly)
@@ -161,7 +165,7 @@ class BrowseController(
         }
     }
 
-    /** Persists the Mode the main view opens in next time (the ModeSwitch also resets the back stack). */
+    /** Persists the Mode the main view opens in next time, Calendar included ([switchMode] also resets the back stack). */
     fun setMode(mode: MainMode) {
         scope.launch { setMainMode(mode) }
     }

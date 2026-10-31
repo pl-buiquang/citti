@@ -11,8 +11,8 @@ import kotlinx.coroutines.flow.map
 /** `setting` key of the main view's Mode. */
 const val KEY_UI_MAIN_MODE = "ui.main-mode"
 
-/** The Mode the main view opens in: List mode or Tree mode. Stored by [name]. */
-enum class MainMode { LIST, TREE }
+/** The Mode the main view opens in: List mode, Tree mode or the Calendar. Stored by [name]. */
+enum class MainMode { LIST, TREE, CALENDAR }
 
 /** Reads and writes the UI settings in the `setting` table. An unknown stored value falls back to [MainMode.LIST]. */
 class UiSettings(

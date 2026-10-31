@@ -51,9 +51,11 @@ object TestTags {
     const val UPLOAD_CHIP = "upload.chip"
 
     /**
-     * The Calendar: the month pager (swiped by the Robots), the Today chip (Index's Today button reads "Today" too)
-     * and the Daily note rows under the grid. Day cells are found by their content description.
+     * The Calendar: its scrolling body (pulled down to refresh), the month pager (swiped by the Robots), the Today
+     * chip (Index's Today button reads "Today" too) and the Daily note rows under the grid. Day cells are found by
+     * their content description.
      */
+    const val CALENDAR_BODY = "calendar.body"
     const val CALENDAR_GRID = "calendar.grid"
     const val CALENDAR_TODAY = "calendar.today"
     const val CALENDAR_ENTRIES = "calendar.entries"

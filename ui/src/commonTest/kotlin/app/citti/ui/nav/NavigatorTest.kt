@@ -129,4 +129,23 @@ class NavigatorTest {
         assertEquals(nav.stack.value, Navigator.decode(nav.encode()))
         assertEquals(Route.Note(3).entryId, note.entryId)
     }
+
+    @Test
+    fun aCalendarRoundTripsAndKeepsItsEntryWhenTheMonthChanges() {
+        val stack = listOf(Route.Calendar(), Route.Calendar("2026-09"), Route.Note(3, notice = NoteNotice.TemplateMissing("t.md")))
+        assertEquals(stack, Navigator.decode(Navigator(stack).encode()))
+        assertEquals(Route.Calendar(), Route.Calendar("2026-09").entryId)
+        assertEquals(Route.Calendar().entryId, Route.Calendar("2026-10").entryId)
+    }
+
+    @Test
+    fun anM5StackWithoutCalendarDecodes() {
+        val m5 =
+            "[{\"type\":\"app.citti.ui.nav.Route.List\"}," +
+                "{\"type\":\"app.citti.ui.nav.Route.Search\",\"query\":\"q\"}," +
+                "{\"type\":\"app.citti.ui.nav.Route.Note\",\"localId\":3,\"focus\":true}]"
+        assertEquals(listOf(Route.List(), Route.Search("q"), Route.Note(3, focus = true)), Navigator.decode(m5))
+        val calendar = """[{"type":"app.citti.ui.nav.Route.Calendar"}]"""
+        assertEquals(listOf<Route>(Route.Calendar()), Navigator.decode(calendar))
+    }
 }

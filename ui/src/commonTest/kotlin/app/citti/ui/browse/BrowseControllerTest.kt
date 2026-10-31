@@ -7,6 +7,7 @@ import app.citti.core.sync.SyncResultKind
 import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
 import app.citti.ui.components.RowBadge
+import app.citti.ui.nav.Navigator
 import app.citti.ui.nav.Route
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -80,6 +81,63 @@ class BrowseControllerTest {
             c.setMode(MainMode.LIST)
             assertEquals(MainMode.LIST, f.mode.value)
             assertEquals(MainMode.LIST, c.state.value.mode)
+        }
+
+    @Test
+    fun calendarIsTheThirdModeAndIsRemembered() =
+        runTest(UnconfinedTestDispatcher()) {
+            val f = Fakes()
+            f.mode.value = MainMode.CALENDAR
+            val c = f.controller(backgroundScope)
+            assertEquals(MainMode.CALENDAR, c.state.value.mode)
+            c.setMode(MainMode.TREE)
+            assertEquals(MainMode.TREE, c.state.value.mode)
+            c.setMode(MainMode.CALENDAR)
+            assertEquals(MainMode.CALENDAR, f.mode.value)
+            assertEquals(MainMode.CALENDAR, c.state.value.mode)
+        }
+
+    @Test
+    fun theLaunchRouteFollowsTheMode() {
+        assertEquals(Route.List(), MainMode.LIST.rootRoute())
+        assertEquals(Route.Tree(), MainMode.TREE.rootRoute())
+        assertEquals(Route.Calendar(), MainMode.CALENDAR.rootRoute())
+    }
+
+    @Test
+    fun theModeSwitchSwapsTheRootInPlaceAndRemembersIt() =
+        runTest(UnconfinedTestDispatcher()) {
+            val f = Fakes()
+            val c = f.controller(backgroundScope)
+            val nav = Navigator(listOf(Route.Tree(), Route.Tree("x"), Route.Note(2)))
+            c.switchMode(nav, MainMode.CALENDAR)
+            assertEquals(listOf<Route>(Route.Calendar()), nav.stack.value)
+            assertEquals(MainMode.CALENDAR, f.mode.value)
+
+            // The Calendar segment again keeps the month shown.
+            nav.replaceTop(Route.Calendar("2026-09"))
+            c.switchMode(nav, MainMode.CALENDAR)
+            assertEquals(listOf<Route>(Route.Calendar("2026-09")), nav.stack.value)
+
+            c.switchMode(nav, MainMode.LIST)
+            assertEquals(listOf<Route>(Route.List()), nav.stack.value)
+            assertEquals(MainMode.LIST, f.mode.value)
+
+            // From Favorites, List goes back to the whole List.
+            nav.reset(listOf(Route.List(), Route.List(favoritesOnly = true)))
+            c.switchMode(nav, MainMode.LIST)
+            assertEquals(listOf<Route>(Route.List()), nav.stack.value)
+        }
+
+    @Test
+    fun aCalendarRouteChangesNoQuery() =
+        runTest(UnconfinedTestDispatcher()) {
+            val f = Fakes()
+            val c = f.controller(backgroundScope)
+            c.show(Route.Calendar("2026-09"))
+            assertEquals("", c.state.value.folder)
+            assertFalse(c.state.value.favoritesOnly)
+            assertEquals(listOf(""), f.folderQueries)
         }
 
     @Test

@@ -35,8 +35,11 @@ import app.citti.ui.browse.AppDrawer
 import app.citti.ui.browse.BrowseActions
 import app.citti.ui.browse.BrowseController
 import app.citti.ui.browse.BrowseScreen
+import app.citti.ui.browse.BrowseUiState
 import app.citti.ui.browse.BrowseView
 import app.citti.ui.browse.DrawerActions
+import app.citti.ui.browse.rootRoute
+import app.citti.ui.browse.switchMode
 import app.citti.ui.components.CittiDrawer
 import app.citti.ui.components.Snack
 import app.citti.ui.components.SnackbarHost
@@ -48,6 +51,9 @@ import app.citti.ui.create.NewNoteController
 import app.citti.ui.create.NewNoteHost
 import app.citti.ui.create.actions
 import app.citti.ui.create.newNoteFolder
+import app.citti.ui.daily.CalendarActions
+import app.citti.ui.daily.CalendarController
+import app.citti.ui.daily.CalendarScreen
 import app.citti.ui.daily.CoreDailyGateway
 import app.citti.ui.daily.TodayAction
 import app.citti.ui.daily.droppedDaily
@@ -78,8 +84,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
@@ -117,12 +125,7 @@ class MainActivity : ComponentActivity() {
     private val dailyGateway by lazy {
         CoreDailyGateway(
             notes = container::dailyNotes,
-            today = {
-                container.config.clock
-                    .now()
-                    .toLocalDateTime(TimeZone.of(container.config.timeZone().id))
-                    .date
-            },
+            today = { localNow().date },
             io = Dispatchers.IO,
         )
     }
@@ -165,11 +168,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun SignedIn() {
         val mode by produceState<MainMode?>(null) { value = withContext(Dispatchers.IO) { container.uiSettings.mainMode() } }
-        val root =
-            when (mode ?: return Blank()) {
-                MainMode.LIST -> Route.List()
-                MainMode.TREE -> Route.Tree()
-            }
+        val root = (mode ?: return Blank()).rootRoute()
         val navigator =
             rememberSaveable(saver = Saver({ it.encode() }, { Navigator(Navigator.decode(it) ?: listOf(root)) })) {
                 Navigator(listOf(root))
@@ -186,7 +185,7 @@ class MainActivity : ComponentActivity() {
             known.addAll(keys)
         }
         BackHandler(enabled = stack.size > 1) { navigator.pop() }
-        // With the back stack, not a screen: the Today button now, the Calendar and a citti://daily link later.
+        // With the back stack, not a screen: the Today button, the Calendar, and a citti://daily link later.
         val today = remember(navigator) { TodayAction(container.appScope, dailyGateway, navigator::push, snackbars::show) }
         // The automatic Import from Obsidian, after the first Sync: a snackbar only when it read something.
         LaunchedEffect(Unit) {
@@ -197,7 +196,7 @@ class MainActivity : ComponentActivity() {
         Box(Modifier.fillMaxSize()) {
             saved.SaveableStateProvider(entryKey(index, route)) {
                 when (route) {
-                    is Route.List, is Route.Tree -> BrowseRoute(navigator, index, route, today)
+                    is Route.List, is Route.Tree, is Route.Calendar -> BrowseRoute(navigator, index, route, today)
                     Route.Settings -> SettingsRoute(navigator, index)
                     is Route.Search -> SearchRoute(navigator, index, route)
                     is Route.Note -> NoteRoute(navigator, index, route, root)
@@ -209,7 +208,7 @@ class MainActivity : ComponentActivity() {
                 onAction = { snack ->
                     when (snack) {
                         Snack.LinkUnsynced, Snack.JournalUnsynced -> navigator.push(Route.Settings)
-                        is Snack.LinkMissing -> createFromLink(navigator, snack)
+                        is Snack.LinkMissing -> createFromLink(navigator, snack, today)
                         else -> Unit
                     }
                 },
@@ -220,26 +219,70 @@ class MainActivity : ComponentActivity() {
 
     /**
      * The Create note action of an unresolved link: the New note dialog of the shown entry, the Note's own, or the
-     * List or Tree one if the Note has been left since the snackbar came up.
+     * List, Tree or Calendar one if the Note has been left since the snackbar came up.
      */
     private fun createFromLink(
         navigator: Navigator,
         snack: Snack.LinkMissing,
+        today: TodayAction,
     ) {
         val stack = navigator.stack.value
         val index = stack.lastIndex
         when (val top = stack.last()) {
             is Route.Note -> routes.controller(index, top) { newNoteController(it, top, navigator) }.createFromLink(snack)
-            is Route.List, is Route.Tree -> newNoteFlow(navigator, index, top).open(snack.folder, snack.title)
+            is Route.List, is Route.Tree, is Route.Calendar -> newNoteFlow(navigator, index, top, today).open(snack.folder, snack.title)
             else -> Unit
         }
     }
 
+    /** The New note flow of a List, Tree or Calendar entry (a Calendar entry keeps it with its [CalendarController]). */
     private fun newNoteFlow(
         navigator: Navigator,
         index: Int,
         route: Route,
-    ): NewNoteController = routes.controller(index, route) { NewNoteController(it, noteCreation, navigator) }
+        today: TodayAction,
+    ): NewNoteController =
+        if (route is Route.Calendar) {
+            calendarEntry(navigator, index, route, today).newNote
+        } else {
+            routes.controller(index, route) { NewNoteController(it, noteCreation, navigator) }
+        }
+
+    private fun calendarEntry(
+        navigator: Navigator,
+        index: Int,
+        route: Route.Calendar,
+        today: TodayAction,
+    ): CalendarEntry =
+        routes.controller(index, route) { scope ->
+            CalendarEntry(
+                CalendarController(
+                    scope = scope,
+                    notes = container.dailyEntries(),
+                    weekStartSetting = container.dailySettings.configFlow().map { it.weekStart },
+                    defaultWeekStart = calendarLabels::defaultWeekStart,
+                    journalConflict = container.dailyGuard.conflict(),
+                    status = container.syncStatus,
+                    today = today,
+                    navigator = navigator,
+                    route = route,
+                    now = ::localNow,
+                ),
+                NewNoteController(scope, noteCreation, navigator),
+            )
+        }
+
+    /** The device's local date and time, through the clock and zone seams of [AppConfig]. */
+    private fun localNow(): LocalDateTime =
+        container.config.clock
+            .now()
+            .toLocalDateTime(TimeZone.of(container.config.timeZone().id))
+
+    // Today may have changed while the app was in the background: the Calendar outlines the right day.
+    override fun onStart() {
+        super.onStart()
+        routes.controllers<CalendarEntry>().forEach { it.calendar.refreshToday() }
+    }
 
     // The text of an open Note is written when the app leaves the foreground, not only when the screen closes.
     override fun onStop() {
@@ -277,8 +320,8 @@ class MainActivity : ComponentActivity() {
     ) {
         val controller = remember { browseController ?: newBrowseController().also { browseController = it } }
         val state by controller.state.collectAsState()
-        // One New note flow per List or Tree entry, so its dialog survives recomposition.
-        val newNote = remember(index, route) { newNoteFlow(navigator, index, route) }
+        // One New note flow per List, Tree or Calendar entry, so its dialog survives recomposition.
+        val newNote = remember(index, route) { newNoteFlow(navigator, index, route, today) }
         val newNoteState by newNote.state.collectAsState()
         val todayBusy by today.busy.collectAsState()
         LaunchedEffect(controller) {
@@ -297,6 +340,7 @@ class MainActivity : ComponentActivity() {
         val view =
             when (route) {
                 is Route.Tree -> BrowseView.Tree(route.folder)
+                is Route.Calendar -> null
                 else -> BrowseView.List(favoritesOnly = (route as? Route.List)?.favoritesOnly ?: false)
             }
         val drawer = rememberCittiDrawerState()
@@ -330,46 +374,73 @@ class MainActivity : ComponentActivity() {
                 )
             },
         ) {
-            BrowseScreen(
-                view = view,
-                state = state,
-                nowSeconds = { container.config.nowSeconds() },
-                dates = rowDates,
-                listState = rememberLazyListState(),
-                actions =
-                    BrowseActions(
-                        onOpenMenu = { scope.launch { drawer.open() } },
-                        onOpenSearch = { navigator.push(Route.Search()) },
-                        onShowList = {
-                            val root = listOf(Route.List())
-                            if (navigator.stack.value != root) {
-                                navigator.reset(root)
-                                controller.setMode(MainMode.LIST)
-                            }
-                        },
-                        onShowTree = {
-                            val root = listOf(Route.Tree())
-                            if (navigator.stack.value != root) {
-                                navigator.reset(root)
-                                controller.setMode(MainMode.TREE)
-                            }
-                        },
-                        onOpenFolder = { navigator.push(Route.Tree(it)) },
-                        onOpenBreadcrumb = { path ->
-                            if (!navigator.popTo(Route.Tree(path))) navigator.reset(breadcrumbPaths(path).map { Route.Tree(it) })
-                        },
-                        onOpenNote = { navigator.push(Route.Note(it)) },
-                        onBack = { navigator.pop() },
-                        onSyncNow = controller::syncNow,
-                        onSignInAgain = { signInAgain() },
-                        onNewNote = { newNote.open(newNoteFolder(route)) },
-                        onToday = today::openToday,
-                    ),
-                newNoteBusy = newNoteState?.checking == true,
-                todayBusy = todayBusy != null,
-            )
+            val actions =
+                BrowseActions(
+                    onOpenMenu = { scope.launch { drawer.open() } },
+                    onOpenSearch = { navigator.push(Route.Search()) },
+                    onMode = { controller.switchMode(navigator, it) },
+                    onOpenFolder = { navigator.push(Route.Tree(it)) },
+                    onOpenBreadcrumb = { path ->
+                        if (!navigator.popTo(Route.Tree(path))) navigator.reset(breadcrumbPaths(path).map { Route.Tree(it) })
+                    },
+                    onOpenNote = { navigator.push(Route.Note(it)) },
+                    onBack = { navigator.pop() },
+                    onSyncNow = controller::syncNow,
+                    onSignInAgain = { signInAgain() },
+                    onNewNote = { newNote.open(newNoteFolder(route)) },
+                    onToday = today::openToday,
+                )
+            if (route is Route.Calendar) {
+                CalendarRoute(navigator, index, route, today, state, actions, newNoteBusy = newNoteState?.checking == true)
+            } else if (view != null) {
+                BrowseScreen(
+                    view = view,
+                    state = state,
+                    nowSeconds = { container.config.nowSeconds() },
+                    dates = rowDates,
+                    listState = rememberLazyListState(),
+                    actions = actions,
+                    newNoteBusy = newNoteState?.checking == true,
+                    todayBusy = todayBusy != null,
+                )
+            }
         }
         NewNoteHost(newNoteState, pickerFolders, remember(newNote) { newNote.actions() })
+    }
+
+    /** The Calendar mode: its controller lives with the entry, the scaffold's actions come from [BrowseRoute]. */
+    @Composable
+    private fun CalendarRoute(
+        navigator: Navigator,
+        index: Int,
+        route: Route.Calendar,
+        today: TodayAction,
+        browse: BrowseUiState,
+        actions: BrowseActions,
+        newNoteBusy: Boolean,
+    ) {
+        val controller = remember(index) { calendarEntry(navigator, index, route, today).calendar }
+        val state by controller.state.collectAsState()
+        BackHandler(enabled = state.confirm != null, onBack = controller::cancelCreate)
+        CalendarScreen(
+            state = state,
+            browse = browse,
+            labels = calendarLabels,
+            nowSeconds = { container.config.nowSeconds() },
+            actions = actions,
+            calendar =
+                remember(controller) {
+                    CalendarActions(
+                        onMonthChange = controller::showMonth,
+                        onDay = controller::onDay,
+                        onRow = controller::onRow,
+                        onConfirmCreate = controller::confirmCreate,
+                        onCancelCreate = controller::cancelCreate,
+                    )
+                },
+            newNoteBusy = newNoteBusy,
+            todayBusy = state.busy != null && state.busy == state.today,
+        )
     }
 
     @Composable
@@ -630,6 +701,12 @@ class MainActivity : ComponentActivity() {
     private fun openInBrowser(url: String) {
         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
+
+    /** A Calendar entry's controllers: the Calendar's own and its New note flow, in the entry's scope. */
+    private class CalendarEntry(
+        val calendar: CalendarController,
+        val newNote: NewNoteController,
+    )
 
     private companion object {
         const val KEY_ASKED_NOTIFICATIONS = "asked-notifications"

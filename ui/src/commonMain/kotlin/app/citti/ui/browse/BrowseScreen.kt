@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -33,6 +34,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import app.citti.core.note.find
+import app.citti.core.settings.MainMode
 import app.citti.core.sync.SyncStatus
 import app.citti.ui.TestTags
 import app.citti.ui.components.Banner
@@ -89,13 +91,12 @@ sealed interface BrowseView {
 
 /**
  * The user's actions on the main view. [onOpenFolder] opens a child Folder, [onOpenBreadcrumb] an ancestor.
- * [onOpenNote] null leaves the rows without a tap action.
+ * [onOpenNote] null leaves the rows without a tap action. [onMode] is the ModeSwitch.
  */
 class BrowseActions(
     val onOpenMenu: () -> Unit,
     val onOpenSearch: () -> Unit,
-    val onShowList: () -> Unit,
-    val onShowTree: () -> Unit,
+    val onMode: (MainMode) -> Unit,
     val onOpenFolder: (path: String) -> Unit,
     val onOpenBreadcrumb: (path: String) -> Unit,
     val onOpenNote: ((localId: Long) -> Unit)?,
@@ -107,6 +108,18 @@ class BrowseActions(
     /** The Today button, left of New note; null hides it. */
     val onToday: (() -> Unit)? = null,
 )
+
+/** The clock of the row dates and the banner: [nowSeconds], read again every 30 s. */
+@Composable
+fun rememberNow(nowSeconds: () -> Long): Long {
+    val now by produceState(nowSeconds()) {
+        while (true) {
+            delay(30_000)
+            value = nowSeconds()
+        }
+    }
+    return now
+}
 
 /**
  * The main view (List and Tree mode). [view] comes from the route on top of the back stack; rows that
@@ -126,82 +139,17 @@ fun BrowseScreen(
     /** Today's note is being opened: the Today button shows a progress ring. */
     todayBusy: Boolean = false,
 ) {
-    val now by produceState(nowSeconds()) {
-        while (true) {
-            delay(30_000)
-            value = nowSeconds()
-        }
-    }
+    val now = rememberNow(nowSeconds)
     val favoritesOnly = view is BrowseView.List && view.favoritesOnly
-    val onNewNote = actions.onNewNote
-    // Signal floats the button over the rows; Paper and Index put it at the end of a bottom bar.
-    val floating = CittiTheme.family == ThemeFamily.Signal
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(CittiTheme.colors.bg)
-            .safeDrawingPadding(),
-    ) {
-        BrowseColumn(
-            view,
-            state,
-            now,
-            dates,
-            listState,
-            actions,
-            favoritesOnly,
-            bottomBar = onNewNote != null && !floating,
-            newNoteBusy,
-            todayBusy,
-            fabRoom =
-                onNewNote != null && floating,
-        )
-        if (onNewNote != null && floating) {
-            // The Today disc sits on the New note disc's baseline, `space-3` to its left.
-            Row(
-                Modifier.align(Alignment.BottomEnd).padding(end = NotesSpacing.space5, bottom = NotesSpacing.space8),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(NotesSpacing.space3),
-            ) {
-                actions.onToday?.let { TodayButton(it, busy = todayBusy) }
-                NewNoteButton(onNewNote, busy = newNoteBusy)
-            }
-        }
-    }
-}
-
-@Composable
-private fun BrowseColumn(
-    view: BrowseView,
-    state: BrowseUiState,
-    now: Long,
-    dates: RowDateFormatter,
-    listState: LazyListState,
-    actions: BrowseActions,
-    favoritesOnly: Boolean,
-    bottomBar: Boolean,
-    newNoteBusy: Boolean,
-    todayBusy: Boolean,
-    // The floating button covers the end of the last rows: let the list scroll them clear of it.
-    fabRoom: Boolean,
-) {
-    Column(Modifier.fillMaxSize()) {
-        if (favoritesOnly) {
-            CittiTopBar(stringResource(Res.string.drawer_favorites), onBack = actions.onBack)
-        } else {
-            SearchBar(
-                query = "",
-                onQueryChange = {},
-                leading = SearchLeading.Menu,
-                onLeading = actions.onOpenMenu,
-                onOpen = actions.onOpenSearch,
-                modifier = Modifier.padding(vertical = NotesSpacing.space2),
-            )
-        }
-        Row(Modifier.fillMaxWidth().padding(horizontal = CittiTheme.shape.gutter, vertical = NotesSpacing.space1)) {
-            ModeSwitch(tree = view is BrowseView.Tree, onSelectList = actions.onShowList, onSelectTree = actions.onShowTree)
-        }
-        BannerSlot(state.banner, now, actions)
+    MainScaffold(
+        mode = if (view is BrowseView.Tree) MainMode.TREE else MainMode.LIST,
+        banner = state.banner,
+        now = now,
+        actions = actions,
+        newNoteBusy = newNoteBusy,
+        todayBusy = todayBusy,
+        title = if (favoritesOnly) stringResource(Res.string.drawer_favorites) else null,
+    ) { fabRoom ->
         if (view is BrowseView.Tree) {
             Breadcrumb(view.folder, onOpen = actions.onOpenBreadcrumb, modifier = Modifier.padding(vertical = NotesSpacing.space1))
         }
@@ -209,7 +157,7 @@ private fun BrowseColumn(
             LazyColumn(
                 Modifier.fillMaxSize().testTag(TestTags.BROWSE_ROWS),
                 state = listState,
-                contentPadding = if (fabRoom) PaddingValues(bottom = NotesSize.fabSignal + NotesSpacing.space8) else PaddingValues(),
+                contentPadding = fabRoom,
             ) {
                 when (view) {
                     is BrowseView.List -> listRows(view, state, now, dates, actions)
@@ -217,9 +165,75 @@ private fun BrowseColumn(
                 }
             }
         }
-        val onNewNote = actions.onNewNote
-        if (bottomBar && onNewNote != null) {
-            BottomBar {
+    }
+}
+
+/**
+ * The scaffold of the main view, shared by List, Tree and the Calendar: the search bar (or, with a [title], a top
+ * bar with ←), the ModeSwitch on [mode], the [banner], the [content], and the Today and New note buttons. Signal
+ * floats the buttons over the content, whose scrolling part pads its end by the `fabRoom` it is given; Paper and
+ * Index put them at the end of a bottom bar.
+ */
+@Composable
+fun MainScaffold(
+    mode: MainMode,
+    banner: BrowseBanner?,
+    now: Long,
+    actions: BrowseActions,
+    newNoteBusy: Boolean,
+    todayBusy: Boolean,
+    title: String? = null,
+    content: @Composable ColumnScope.(fabRoom: PaddingValues) -> Unit,
+) {
+    val onNewNote = actions.onNewNote
+    val floating = CittiTheme.family == ThemeFamily.Signal
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(CittiTheme.colors.bg)
+            .safeDrawingPadding(),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            if (title != null) {
+                CittiTopBar(title, onBack = actions.onBack)
+            } else {
+                SearchBar(
+                    query = "",
+                    onQueryChange = {},
+                    leading = SearchLeading.Menu,
+                    onLeading = actions.onOpenMenu,
+                    onOpen = actions.onOpenSearch,
+                    modifier = Modifier.padding(vertical = NotesSpacing.space2),
+                )
+            }
+            Row(Modifier.fillMaxWidth().padding(horizontal = CittiTheme.shape.gutter, vertical = NotesSpacing.space1)) {
+                ModeSwitch(mode, onSelect = actions.onMode)
+            }
+            BannerSlot(banner, now, actions)
+            // The floating buttons cover the end of the content: let it scroll clear of them.
+            content(
+                if (onNewNote != null &&
+                    floating
+                ) {
+                    PaddingValues(bottom = NotesSize.fabSignal + NotesSpacing.space8)
+                } else {
+                    PaddingValues()
+                },
+            )
+            if (onNewNote != null && !floating) {
+                BottomBar {
+                    actions.onToday?.let { TodayButton(it, busy = todayBusy) }
+                    NewNoteButton(onNewNote, busy = newNoteBusy)
+                }
+            }
+        }
+        if (onNewNote != null && floating) {
+            // The Today disc sits on the New note disc's baseline, `space-3` to its left.
+            Row(
+                Modifier.align(Alignment.BottomEnd).padding(end = NotesSpacing.space5, bottom = NotesSpacing.space8),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(NotesSpacing.space3),
+            ) {
                 actions.onToday?.let { TodayButton(it, busy = todayBusy) }
                 NewNoteButton(onNewNote, busy = newNoteBusy)
             }

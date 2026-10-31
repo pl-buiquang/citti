@@ -17,6 +17,15 @@ sealed interface Route {
         val folder: String = "",
     ) : Route
 
+    /**
+     * The Calendar mode at [month] ("2026-10"; null is the current month). A month change replaces the route
+     * (`replaceTop`), so the month lasts for the entry and survives process death.
+     */
+    @Serializable
+    data class Calendar(
+        val month: String? = null,
+    ) : Route
+
     /** Search; [query] follows what is typed (`replaceTop`), so it survives process death. */
     @Serializable
     data class Search(
@@ -52,12 +61,14 @@ sealed interface Route {
 
 /**
  * What identifies a back stack entry for its controller and saved UI state: the route itself, except that a
- * Search entry stays the same entry while its query changes and a Note entry while its mode or prefill changes.
+ * Search entry stays the same entry while its query changes, a Calendar entry while its month changes, and a Note
+ * entry while its mode or prefill changes.
  */
 val Route.entryId: Route
     get() =
         when (this) {
             is Route.Search -> Route.Search()
+            is Route.Calendar -> Route.Calendar()
             is Route.Note -> Route.Note(localId)
             else -> this
         }

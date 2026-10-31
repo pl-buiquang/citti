@@ -17,7 +17,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
+import app.citti.core.settings.MainMode
 import app.citti.ui.resources.Res
+import app.citti.ui.resources.mode_calendar
 import app.citti.ui.resources.mode_list
 import app.citti.ui.resources.mode_tree
 import app.citti.ui.theme.CittiTheme
@@ -25,12 +27,11 @@ import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
 import org.jetbrains.compose.resources.stringResource
 
-/** The List / Tree switch. The selected segment is filled with `accentSoft`. */
+/** The List / Tree / Calendar switch of the main view. The selected segment is filled with `accentSoft`. */
 @Composable
 fun ModeSwitch(
-    tree: Boolean,
-    onSelectList: () -> Unit,
-    onSelectTree: () -> Unit,
+    mode: MainMode,
+    onSelect: (MainMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(CittiTheme.shape.control)
@@ -40,8 +41,9 @@ fun ModeSwitch(
             .clip(shape)
             .border(Dp.Hairline, CittiTheme.colors.line, shape),
     ) {
-        Segment(stringResource(Res.string.mode_list), selected = !tree, onSelectList)
-        Segment(stringResource(Res.string.mode_tree), selected = tree, onSelectTree)
+        Segment(stringResource(Res.string.mode_list), selected = mode == MainMode.LIST) { onSelect(MainMode.LIST) }
+        Segment(stringResource(Res.string.mode_tree), selected = mode == MainMode.TREE) { onSelect(MainMode.TREE) }
+        Segment(stringResource(Res.string.mode_calendar), selected = mode == MainMode.CALENDAR) { onSelect(MainMode.CALENDAR) }
     }
 }
 
