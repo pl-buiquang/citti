@@ -62,6 +62,16 @@ object TestTags {
     const val CALENDAR_ENTRIES = "calendar.entries"
 
     const val SETTINGS_HOME = "settings.home"
+    const val APPEARANCE_EDIT_CUSTOM = "appearance.edit-custom"
+    const val THEME_EDITOR = "appearance.editor"
+
+    /** The root of the app: its `stateDescription` is `<family>:<light|dark>:<accent>` (E2E tests cannot read colors). */
+    const val THEME_STATE = "theme.state"
+
+    fun appearanceTheme(theme: app.citti.core.appearance.ThemeChoice) = "appearance.theme.${theme.name.lowercase()}"
+
+    fun appearanceMode(mode: app.citti.core.appearance.ModeChoice) = "appearance.mode.${mode.name.lowercase()}"
+
     const val SETTINGS_PICKER = "settings.picker"
     const val SETTINGS_FOLDER_PATH = "settings.folder.path"
     const val SETTINGS_CONFIRM = "settings.confirm"

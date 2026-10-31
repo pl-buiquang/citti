@@ -293,4 +293,20 @@
     <string name="import_failed">Could not read the Obsidian settings. Try again when online.</string>
     <string name="import_ok">OK</string>
     <string name="settings_template_search">Search Notes</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="appearance_theme">Theme</string>
+    <string name="appearance_theme_signal">Signal</string>
+    <string name="appearance_theme_paper">Paper</string>
+    <string name="appearance_theme_index">Index</string>
+    <string name="appearance_theme_custom">Custom</string>
+    <string name="appearance_mode">Mode</string>
+    <string name="appearance_mode_system">System</string>
+    <string name="appearance_mode_light">Light</string>
+    <string name="appearance_mode_dark">Dark</string>
+    <string name="appearance_accent">Accent source</string>
+    <string name="appearance_accent_theme">Theme</string>
+    <string name="appearance_accent_dynamic">Dynamic (wallpaper)</string>
+    <string name="appearance_accent_help">Dynamic takes the accent colors from your wallpaper and wins over the theme's own accent.</string>
+    <string name="appearance_edit_custom">Edit custom theme</string>
+    <string name="theme_editor_title">Custom theme</string>
 </resources>

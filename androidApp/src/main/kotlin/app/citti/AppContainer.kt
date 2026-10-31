@@ -65,6 +65,8 @@ import app.citti.ui.note.CoreNoteMenu
 import app.citti.ui.note.NoteGateway
 import app.citti.ui.note.NoteMenuGateway
 import app.citti.ui.settings.AccountInfo
+import app.citti.ui.settings.AppearanceStore
+import app.citti.ui.settings.CoreAppearanceStore
 import app.citti.ui.settings.CoreDailySettingsStore
 import app.citti.ui.settings.CoreSettingsStore
 import app.citti.ui.settings.DailySettingsStore
@@ -149,6 +151,8 @@ class AppContainer(
 
     /** The Appearance (theme, Mode, Accent source, Custom theme); device-local. */
     val appearanceSettings: AppearanceSettings by lazy { AppearanceSettings(database) }
+
+    val appearanceStore: AppearanceStore by lazy { CoreAppearanceStore(appearanceSettings) }
 
     val imageSettings: ImageSettings by lazy { ImageSettings(database) }
 

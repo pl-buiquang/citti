@@ -1,5 +1,9 @@
 package app.citti.ui.settings
 
+import app.citti.core.appearance.AccentSource
+import app.citti.core.appearance.Appearance
+import app.citti.core.appearance.ModeChoice
+import app.citti.core.appearance.ThemeChoice
 import app.citti.core.daily.DateLocales
 import app.citti.core.daily.ImportReport
 import app.citti.core.daily.MomentFormat
@@ -19,6 +23,7 @@ import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
 import app.citti.ui.components.FolderPickerState
 import app.citti.ui.image.ImageCache
+import app.citti.ui.theme.baseTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -113,6 +118,9 @@ sealed interface SettingsPage {
         val query: String = "",
         val suggestions: List<Suggestion> = emptyList(),
     ) : SettingsPage
+
+    /** The theme editor (Settings › Appearance › Edit custom theme). */
+    data object ThemeEditor : SettingsPage
 }
 
 /** A dialog waiting for the user's answer. */
@@ -180,6 +188,7 @@ data class SettingsUiState(
     val imageCacheMb: Int = 500,
     val imageCacheBytes: Long = 0,
     val daily: DailyUiState = DailyUiState(),
+    val appearance: Appearance = Appearance(),
 ) {
     val syncing: Boolean get() = status is SyncStatus.Running
 
@@ -232,6 +241,7 @@ class SettingsController(
     private val signOut: suspend () -> Unit,
     private val signInAgain: suspend () -> Unit,
     private val daily: DailySettingsStore,
+    private val appearance: AppearanceStore,
     private val phoneLanguage: String,
     private val now: () -> LocalDateTime,
 ) {
@@ -253,8 +263,8 @@ class SettingsController(
             combine(interval, network, status) { i, n, s -> Triple(i, n, s) },
             combine(unsynced, hidden, knownFolders, imageCacheMb) { u, h, k, m -> Lists(u, h, k, m) },
             local,
-            dailyState,
-        ) { (i, n, s), lists, l, d ->
+            combine(dailyState, appearance.appearance()) { d, a -> d to a },
+        ) { (i, n, s), lists, l, (d, a) ->
             SettingsUiState(
                 account,
                 l.page,
@@ -269,6 +279,7 @@ class SettingsController(
                 lists.imageMb,
                 l.imageBytes,
                 d,
+                a,
             )
         }.stateIn(scope, SharingStarted.Eagerly, SettingsUiState(account))
 
@@ -415,6 +426,28 @@ class SettingsController(
 
     private fun syncAfterChange() {
         scope.launch { sync(SyncTrigger.Manual) }
+    }
+
+    // ---- Settings › Appearance ----
+
+    /** Custom with an empty slot seeds it from the current preset and opens the editor. */
+    fun setTheme(theme: ThemeChoice) {
+        val current = appearance.current()
+        if (theme == ThemeChoice.CUSTOM && current.custom == null) {
+            openThemeEditor()
+        } else {
+            appearance.setTheme(theme)
+        }
+    }
+
+    fun setMode(mode: ModeChoice) = appearance.setMode(mode)
+
+    fun setAccent(accent: AccentSource) = appearance.setAccent(accent)
+
+    /** Selects Custom (seeding an empty slot from the current preset) and opens the editor. */
+    fun openThemeEditor() {
+        appearance.selectCustomOrSeed(appearance.current().baseTheme())
+        local.update { it.copy(page = SettingsPage.ThemeEditor, confirm = null) }
     }
 
     // ---- Settings › Daily notes ----

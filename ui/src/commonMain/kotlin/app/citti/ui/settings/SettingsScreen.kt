@@ -30,6 +30,9 @@ import app.citti.core.settings.IMAGE_CACHE_CHOICES_MB
 import app.citti.core.settings.SYNC_INTERVAL_CHOICES
 import app.citti.core.settings.SyncNetwork
 import app.citti.ui.TestTags
+import app.citti.ui.appearance.AppearanceActions
+import app.citti.ui.appearance.AppearanceSection
+import app.citti.ui.appearance.ThemeEditorPage
 import app.citti.ui.browse.statusText
 import app.citti.ui.browse.syncLine
 import app.citti.ui.components.Banner
@@ -117,10 +120,11 @@ class SettingsActions(
     val onConfirm: () -> Unit,
     val onDismissConfirm: () -> Unit,
     val daily: DailySettingsActions,
+    val appearance: AppearanceActions,
 )
 
 /**
- * Settings: Account, Sync, Exclusions, Images and Daily notes (design brief 12). Appearance comes later.
+ * Settings: Account, Sync, Exclusions, Images, Appearance and Daily notes (design brief 12).
  * [folders] feeds the Journal folder picker, collected only while it is open.
  */
 @Composable
@@ -141,6 +145,7 @@ fun SettingsScreen(
             is SettingsPage.PickFolder -> FolderPicker(page.kind, state, actions)
             is SettingsPage.PickJournal -> JournalFolderPage(page, folders, actions.daily)
             is SettingsPage.PickTemplate -> TemplatePickerPage(page, state.daily.config.template, actions.onBack, actions.daily)
+            SettingsPage.ThemeEditor -> ThemeEditorPage(actions.onBack)
         }
         state.confirm?.let { ConfirmDialog(it, actions) }
         state.daily.importReport?.let { ImportReportDialog(it, actions.daily.onDismissImportReport) }
@@ -221,6 +226,8 @@ private fun SettingsHome(
                 style = CittiTheme.typography.meta.colored(muted = true),
             )
             CittiButton(stringResource(Res.string.settings_image_cache_clear), actions.onAskClearImages, kind = ButtonKind.Quiet)
+
+            AppearanceSection(state.appearance, actions.appearance)
 
             DailyNotesSection(state.daily, actions.daily)
             Box(Modifier.padding(bottom = NotesSpacing.space8))

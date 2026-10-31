@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.MainMode
+import app.citti.ui.appearance.AppearanceActions
 import app.citti.ui.browse.AppDrawer
 import app.citti.ui.browse.BrowseActions
 import app.citti.ui.browse.BrowseController
@@ -677,6 +678,13 @@ class MainActivity : ComponentActivity() {
                     onConfirm = controller::confirm,
                     onDismissConfirm = controller::dismissConfirm,
                     daily = remember(controller) { controller.dailyActions() },
+                    appearance =
+                        AppearanceActions(
+                            onTheme = controller::setTheme,
+                            onMode = controller::setMode,
+                            onAccent = controller::setAccent,
+                            onEditCustom = controller::openThemeEditor,
+                        ),
                 ),
         )
     }
@@ -746,6 +754,7 @@ class MainActivity : ComponentActivity() {
                 endSession()
             },
             daily = container.dailySettingsStore,
+            appearance = container.appearanceStore,
             phoneLanguage = resources.configuration.locales[0].language,
             now = {
                 container.config.clock

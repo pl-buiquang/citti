@@ -1,5 +1,11 @@
 package app.citti.ui.settings
 
+import app.citti.core.appearance.AccentSource
+import app.citti.core.appearance.Appearance
+import app.citti.core.appearance.BaseTheme
+import app.citti.core.appearance.CustomTheme
+import app.citti.core.appearance.ModeChoice
+import app.citti.core.appearance.ThemeChoice
 import app.citti.core.daily.IMPORT_FOLDER
 import app.citti.core.daily.ImportReport
 import app.citti.core.note.InvalidNameException
@@ -131,6 +137,35 @@ private class FakeDailyStore : DailySettingsStore {
     }
 }
 
+class FakeAppearanceStore(
+    initial: Appearance = Appearance(),
+) : AppearanceStore {
+    val state = MutableStateFlow(initial)
+
+    override fun appearance(): Flow<Appearance> = state
+
+    override fun current() = state.value
+
+    override fun setTheme(theme: ThemeChoice) = state.update { it.copy(theme = theme) }
+
+    override fun setMode(mode: ModeChoice) = state.update { it.copy(mode = mode) }
+
+    override fun setAccent(accent: AccentSource) = state.update { it.copy(accent = accent) }
+
+    override fun setCustom(custom: CustomTheme?) = state.update { it.copy(custom = custom) }
+
+    override fun updateCustom(
+        seedBase: BaseTheme,
+        change: (CustomTheme) -> CustomTheme,
+    ) = state.update { it.copy(custom = change(it.custom ?: CustomTheme(seedBase))) }
+
+    override fun selectCustomOrSeed(base: BaseTheme): CustomTheme {
+        val custom = state.value.custom ?: CustomTheme(base)
+        state.update { it.copy(theme = ThemeChoice.CUSTOM, custom = custom) }
+        return custom
+    }
+}
+
 private class FakeImageCache(
     var bytes: Long = 312L * 1024 * 1024,
 ) : ImageCache {
@@ -153,6 +188,7 @@ class SettingsControllerTest {
     private var signInAgain = 0
 
     private val daily = FakeDailyStore()
+    private val appearance = FakeAppearanceStore()
 
     private fun TestScope.controller(store: FakeStore) =
         SettingsController(
@@ -171,6 +207,7 @@ class SettingsControllerTest {
             signOut = { signedOut++ },
             signInAgain = { signInAgain++ },
             daily = daily,
+            appearance = appearance,
             phoneLanguage = "de",
             now = { LocalDateTime(2026, 10, 31, 9, 30) },
         )
@@ -468,5 +505,49 @@ class SettingsControllerTest {
             assertNull(c.state.value.daily.conflict)
             daily.conflict.value = "journal"
             assertEquals("journal", c.state.value.daily.conflict)
+        }
+
+    @Test
+    fun appearanceChoicesAreWrittenAndShown() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            c.setTheme(ThemeChoice.PAPER)
+            c.setMode(ModeChoice.DARK)
+            c.setAccent(AccentSource.DYNAMIC)
+            assertEquals(Appearance(ThemeChoice.PAPER, ModeChoice.DARK, AccentSource.DYNAMIC), c.state.value.appearance)
+            assertEquals(SettingsPage.Home, c.state.value.page)
+        }
+
+    @Test
+    fun choosingCustomWithAnEmptySlotSeedsItFromThePresetAndOpensTheEditor() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            c.setTheme(ThemeChoice.INDEX)
+            c.setTheme(ThemeChoice.CUSTOM)
+            assertEquals(ThemeChoice.CUSTOM, c.state.value.appearance.theme)
+            assertEquals(CustomTheme(BaseTheme.INDEX), c.state.value.appearance.custom)
+            assertEquals(SettingsPage.ThemeEditor, c.state.value.page)
+            assertTrue(c.onBack())
+            assertEquals(SettingsPage.Home, c.state.value.page)
+        }
+
+    @Test
+    fun choosingCustomWithAFilledSlotJustSelectsIt() =
+        runTest(UnconfinedTestDispatcher()) {
+            appearance.state.value = Appearance(ThemeChoice.PAPER, custom = CustomTheme(BaseTheme.SIGNAL))
+            val c = controller(FakeStore())
+            c.setTheme(ThemeChoice.CUSTOM)
+            assertEquals(ThemeChoice.CUSTOM, c.state.value.appearance.theme)
+            assertEquals(SettingsPage.Home, c.state.value.page)
+        }
+
+    @Test
+    fun editCustomThemeSeedsAnEmptySlotAndOpensTheEditor() =
+        runTest(UnconfinedTestDispatcher()) {
+            appearance.state.value = Appearance(ThemeChoice.PAPER)
+            val c = controller(FakeStore())
+            c.openThemeEditor()
+            assertEquals(Appearance(ThemeChoice.CUSTOM, custom = CustomTheme(BaseTheme.PAPER)), c.state.value.appearance)
+            assertEquals(SettingsPage.ThemeEditor, c.state.value.page)
         }
 }
