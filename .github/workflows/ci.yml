@@ -24,7 +24,7 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@v6
       - name: Lint, test and build
-        run: ./gradlew spotlessCheck check assembleDebug
+        run: ./gradlew spotlessCheck check assembleDebug assembleRelease
       - uses: actions/upload-artifact@v7
         with:
           name: citti-debug-apk
