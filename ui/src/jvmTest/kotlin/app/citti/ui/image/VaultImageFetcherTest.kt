@@ -7,6 +7,7 @@ import app.citti.core.dav.DavClient
 import app.citti.core.dav.DavRoot
 import app.citti.core.dav.ImageResolver
 import app.citti.core.dav.ObsidianConfig
+import app.citti.core.dav.VaultPath
 import app.citti.core.db.CittiDatabase
 import coil3.disk.DiskCache
 import coil3.fetch.SourceFetchResult
@@ -201,5 +202,19 @@ class VaultImageFetcherTest {
             val snapshot = assertNotNull(cache.openSnapshot("a/x.png"))
             val meta = snapshot.use { FileSystem.SYSTEM.read(it.metadata) { readUtf8() } }
             assertEquals(CachedImageMeta(now, "\"v1\"", "image/png"), CachedImageMeta.decode(meta))
+        }
+
+    @Test
+    fun aSeededUploadShowsFromAnyFolderWithNoRequest() =
+        runTest {
+            val path = assertNotNull(VaultPath.parse("media/IMG_1.jpg"))
+            seedImageCache(cache, path, byteArrayOf(7, 8), "\"up\"", "image/jpeg", now)
+            val resolver = ImageResolver(dav, ObsidianConfig(dav, db))
+            resolver.rememberUpload("IMG_1.jpg", path)
+            for (folder in listOf("", "journal", "projects/citti")) {
+                val fetcher = VaultImageFetcher(VaultImageKey(folder, "IMG_1.jpg"), { resolver }, cache) { now }
+                assertContentEquals(byteArrayOf(7, 8), fetcher.bytes())
+            }
+            assertEquals(emptyList(), seen)
         }
 }

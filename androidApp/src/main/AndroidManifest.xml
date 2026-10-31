@@ -29,6 +29,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Insert image: the camera app writes its shot into cacheDir/camera/ through this provider. No CAMERA
+             permission: with it declared but not granted, ACTION_IMAGE_CAPTURE throws. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <service
             android:name=".SyncForegroundService"
             android:exported="false"

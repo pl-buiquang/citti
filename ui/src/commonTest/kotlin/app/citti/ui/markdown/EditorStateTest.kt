@@ -1,5 +1,6 @@
 package app.citti.ui.markdown
 
+import app.citti.core.markdown.Edit
 import app.citti.core.markdown.Selection
 import app.citti.core.markdown.ToolbarAction
 import kotlinx.coroutines.cancel
@@ -175,5 +176,55 @@ class EditorStateTest {
         assertEquals(1, edits)
         assertEquals(2, changes)
         scope.cancel()
+    }
+
+    // ---- markers ----
+
+    @Test
+    fun aMarkerMovesWithTextInsertedBeforeOrAtItAndNotAfter() {
+        open("one two")
+        host.sel = Selection(3)
+        val marker = state.markCaret()
+        host.sel = Selection(0)
+        host.type("> ")
+        assertEquals(5, marker.offset)
+        host.sel = Selection(5)
+        host.type("!")
+        assertEquals(6, marker.offset)
+        host.sel = Selection(9)
+        host.type("?")
+        assertEquals(6, marker.offset)
+    }
+
+    @Test
+    fun aMarkerInsideADeletedRangeGoesToItsStart() {
+        open("one two three")
+        host.sel = Selection(5)
+        val marker = state.markCaret()
+        state.apply(Edit(4, 8, "", Selection(4)))
+        assertEquals(4, marker.offset)
+    }
+
+    @Test
+    fun aMarkerOutlivesTheViewAndIsClampedByAReplace() {
+        open("one two")
+        host.sel = Selection(7)
+        val marker = state.markCaret()
+        state.detach(host)
+        // Edits without a view still apply, as one undo step, and move the marker.
+        state.apply(Edit(0, 0, "ab", Selection(2)))
+        assertEquals("abone two", state.text)
+        assertEquals(9, marker.offset)
+        state.replaceAll("x")
+        assertEquals(1, marker.offset)
+        marker.release()
+    }
+
+    @Test
+    fun theImageToolbarActionChangesNothing() {
+        open("word")
+        assertFalse(state.toolbar(ToolbarAction.Image))
+        assertEquals("word", host.text)
+        assertFalse(state.canUndo.value)
     }
 }

@@ -26,6 +26,13 @@ interface NoteGateway {
         baseEtag: String?,
     ): NoteEditor.SaveResult
 
+    /** `NoteEditor.insertAt`: [block] on its own line at [offset] of the stored text; on `Saved`, [savedText] is the new text. */
+    suspend fun insertAt(
+        offset: Int,
+        block: String,
+        baseEtag: String?,
+    ): NoteEditor.SaveResult
+
     /** The text last written to the row. */
     fun savedText(): String?
 

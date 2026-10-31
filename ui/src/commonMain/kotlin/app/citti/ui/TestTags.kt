@@ -35,6 +35,13 @@ object TestTags {
     const val FOLDER_PICKER_NEW_FOLDER = "folderPicker.newFolder"
     const val FOLDER_PICKER_CONFIRM = "folderPicker.confirm"
 
+    /** Insert image: the toolbar button, the source sheet and its rows, the upload chip. */
+    const val TOOLBAR_IMAGE = "toolbar.image"
+    const val IMAGE_SHEET = "image.sheet"
+    const val IMAGE_CAMERA = "image.camera"
+    const val IMAGE_GALLERY = "image.gallery"
+    const val UPLOAD_CHIP = "upload.chip"
+
     const val SETTINGS_HOME = "settings.home"
     const val SETTINGS_PICKER = "settings.picker"
     const val SETTINGS_FOLDER_PATH = "settings.folder.path"

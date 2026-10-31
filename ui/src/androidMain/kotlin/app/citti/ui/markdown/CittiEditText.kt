@@ -247,6 +247,22 @@ internal class CittiEditText(
 
     private var lineCountAtLastStyle = 0
 
+    /** A zero-length `SPAN_POINT_POINT` span at the caret: the Editable moves it with every change around it. */
+    override fun markCaret(): Marker {
+        val span = CaretMark()
+        val at = selectionStart.coerceIn(0, text.length)
+        text.setSpan(span, at, at, Spanned.SPAN_POINT_POINT)
+        return object : Marker {
+            // -1 once the span is gone (the text was replaced): the state then uses its own offset.
+            override val offset: Int get() = text.getSpanStart(span)
+
+            override fun release() = text.removeSpan(span)
+        }
+    }
+
+    /** The span object of [markCaret]; only its identity matters. */
+    private class CaretMark
+
     override fun selection(): Selection = Selection(selectionStart.coerceAtLeast(0), selectionEnd.coerceAtLeast(0))
 
     override fun scrollToCaret() {

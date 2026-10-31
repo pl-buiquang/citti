@@ -49,6 +49,22 @@ interface EditorHost {
 
     /** Takes the focus and raises the keyboard. */
     fun focusAndShowKeyboard() = Unit
+
+    /**
+     * A [Marker] at the caret that the view moves with its own edits (Android: a zero-length span). Null when the
+     * view has none; [EditorState] tracks its markers itself either way, the view's one wins while it is attached.
+     */
+    fun markCaret(): Marker? = null
+}
+
+/**
+ * A place in the text that moves with the edits around it, like a zero-length `SPAN_POINT_POINT` span: text
+ * inserted at it goes before it. Where an uploaded Image's link goes. [release] it when done.
+ */
+interface Marker {
+    val offset: Int
+
+    fun release()
 }
 
 /**
@@ -102,6 +118,35 @@ class EditorState(
 
     val selection: Selection get() = host?.selection() ?: Selection(pendingCaret.coerceIn(0, document.length))
 
+    private val markers = mutableListOf<TrackedMarker>()
+
+    /** A marker tracked here, so it outlives the view; [onHost] is the view's own while that view is attached. */
+    private inner class TrackedMarker(
+        var at: Int,
+        var onHost: Marker?,
+    ) : Marker {
+        override val offset: Int
+            get() = (onHost?.offset?.takeIf { it >= 0 } ?: at).coerceIn(0, document.length)
+
+        override fun release() {
+            dropHostMarker()
+            markers -= this
+        }
+
+        fun dropHostMarker() {
+            onHost?.release()
+            onHost = null
+        }
+    }
+
+    /** A [Marker] at the caret (the start of the selection), kept in step with every later change of the text. */
+    fun markCaret(): Marker {
+        val h = host
+        val marker = TrackedMarker(selection.start, h?.markCaret())
+        markers += marker
+        return marker
+    }
+
     fun attach(host: EditorHost) {
         this.host = host
         host.setAll(document.text(), pendingCaret.coerceIn(0, document.length))
@@ -115,6 +160,7 @@ class EditorState(
 
     fun detach(host: EditorHost) {
         if (this.host === host) {
+            markers.forEach { it.dropHostMarker() }
             pendingCaret = host.selection().start
             pendingScroll = host.firstVisibleOffset()
             this.host = null
@@ -130,6 +176,11 @@ class EditorState(
         // The scroll position stays on the same line number.
         val topLine = h?.let { document.lineOf(it.firstVisibleOffset().coerceIn(0, document.length)) }
         document = MarkdownDocument(text)
+        // The view's markers go with its old text; the tracked offsets stay, clamped to the new text.
+        markers.forEach {
+            it.dropHostMarker()
+            it.at = it.at.coerceIn(0, text.length)
+        }
         history.clear()
         pendingCaret = caret.coerceIn(0, text.length)
         h?.setAll(text, pendingCaret)
@@ -172,7 +223,7 @@ class EditorState(
         if (h == null) pendingFocus = true else h.focusAndShowKeyboard()
     }
 
-    /** Applies [edit] to the view as one undo step. */
+    /** Applies [edit] as one undo step: to the view, or to the text alone while no view is attached. */
     fun apply(edit: Edit) = applyEdit(edit, record = true)
 
     fun undo() {
@@ -187,12 +238,16 @@ class EditorState(
         publishHistory()
     }
 
-    /** Runs a toolbar button. Returns false when it did nothing (no view yet). */
+    /**
+     * Runs a toolbar button. Returns false when it did nothing (no view yet). [ToolbarAction.Image] opens a sheet,
+     * not an edit: the caller handles it, and here it does nothing.
+     */
     fun toolbar(action: ToolbarAction): Boolean {
         if (host == null) return false
         val sel = selection
         val edit =
             when (action) {
+                ToolbarAction.Image -> return false
                 ToolbarAction.Bold -> TextOps.bold(document, sel)
                 ToolbarAction.Italic -> TextOps.italic(document, sel)
                 ToolbarAction.Heading -> TextOps.heading(document, sel)
@@ -211,12 +266,12 @@ class EditorState(
         edit: Edit,
         record: Boolean,
     ) {
-        val h = host ?: return
+        val h = host
         val removed = document.text().substring(edit.start, edit.end)
-        val before = h.selection()
-        h.replaceSilently(edit.start, edit.end, edit.replacement, edit.selection)
+        val before = selection
+        if (h != null) h.replaceSilently(edit.start, edit.end, edit.replacement, edit.selection) else pendingCaret = edit.selection.start
         committed(edit.start, removed, edit.replacement, before, edit.selection, record)
-        h.scrollToCaret()
+        h?.scrollToCaret()
     }
 
     private fun committed(
@@ -228,6 +283,7 @@ class EditorState(
         record: Boolean,
     ) {
         val lines = document.replace(start, start + removed.length, inserted)
+        for (m in markers) m.at = shifted(m.at, start, start + removed.length, inserted.length)
         host?.restyle(lines)
         if (record) {
             history.record(HistoryStep(start, removed, inserted, selectionBefore, selectionAfter), clockMs())
@@ -237,6 +293,19 @@ class EditorState(
         _changes.tryEmit(Unit)
         _edits.tryEmit(Unit)
     }
+
+    /** Where a point at [offset] goes when `[start, end)` becomes [inserted] characters (`SPAN_POINT_POINT` rules). */
+    private fun shifted(
+        offset: Int,
+        start: Int,
+        end: Int,
+        inserted: Int,
+    ): Int =
+        when {
+            offset < start -> offset
+            offset >= end -> offset + inserted - (end - start)
+            else -> start + inserted
+        }
 
     private fun publishHistory() {
         _canUndo.value = history.canUndo

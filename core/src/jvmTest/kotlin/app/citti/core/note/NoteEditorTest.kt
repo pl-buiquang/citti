@@ -199,4 +199,48 @@ class NoteEditorTest {
         assertEquals("- [x] one", row(result.copyLocalId).content)
         assertEquals("- [ ] one", row(id).content)
     }
+
+    @Test
+    fun insertAtPutsTheBlockOnItsOwnLineOfTheStoredText() {
+        val id = synced(content = "one\ntwo")
+        val e = editor(id).also { it.load() }
+        assertEquals(SaveResult.Saved, e.insertAt(5, "![](a.jpg)", "e1"))
+        assertEquals("one\nt\n![](a.jpg)\nwo", row(id).content)
+        assertEquals("one\nt\n![](a.jpg)\nwo", e.savedText)
+        assertEquals("DIRTY", row(id).sync_state)
+        assertEquals(1, pushes)
+    }
+
+    @Test
+    fun insertAtClampsTheOffsetToTheStoredText() {
+        val id = synced(content = "one")
+        val e = editor(id).also { it.load() }
+        assertEquals(SaveResult.Saved, e.insertAt(40, "![](a.jpg)", "e1"))
+        assertEquals("one\n![](a.jpg)", row(id).content)
+    }
+
+    @Test
+    fun insertAtOnAStaleBaseMakesAConflictCopy() {
+        val id = synced(content = "one")
+        val e = editor(id).also { it.load() }
+        notes.upsertFromServer(1, "e2", "Plan", "work", false, 200, false, false)
+        notes.updateContent("server", "e2", id)
+        val result = assertIs<SaveResult.Conflict>(e.insertAt(3, "![](a.jpg)", "e1"))
+        assertEquals("ser\n![](a.jpg)\nver", row(result.copyLocalId).content)
+        assertEquals("server", row(id).content)
+    }
+
+    @Test
+    fun insertAtOnAReadOnlyOrDeletedNote() {
+        val ro = synced(content = "one", readonly = true)
+        assertEquals(SaveResult.ReadOnly, editor(ro).also { it.load() }.insertAt(0, "![](a.jpg)", "e1"))
+        assertEquals("one", row(ro).content)
+        notes.upsertFromServer(2, "e1", "Other", "work", false, 100, false, false)
+        val id = notes.selectByRemoteId(2).executeAsOne().local_id
+        notes.updateContent("kept", "e1", id)
+        val e = editor(id).also { it.load() }
+        notes.markDeleted(id)
+        val gone = assertIs<SaveResult.Gone>(e.insertAt(4, "![](a.jpg)", "e1"))
+        assertEquals("kept\n![](a.jpg)", row(gone.copyLocalId).content)
+    }
 }

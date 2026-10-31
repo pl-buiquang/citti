@@ -87,6 +87,13 @@
     <string name="toolbar_list">List</string>
     <string name="toolbar_checkbox">Checkbox</string>
     <string name="toolbar_link">Link</string>
+    <string name="toolbar_image">Insert image</string>
+    <string name="image_camera">Camera</string>
+    <string name="image_gallery">Gallery</string>
+    <string name="uploading_image">Uploading image…</string>
+    <string name="upload_cancel">Cancel</string>
+    <string name="upload_offline">No connection. The image was not inserted.</string>
+    <string name="upload_failed">Upload failed: %s</string>
 
     <!-- Sync status line and banners -->
     <string name="sync_syncing">Syncing</string>

@@ -1,8 +1,12 @@
 package app.citti.ui.note
 
+import app.citti.core.api.ApiError
+import app.citti.core.dav.UploadResult
 import app.citti.core.markdown.Doc
 import app.citti.core.markdown.ObsidianMarkdown
+import app.citti.core.markdown.Selection
 import app.citti.core.markdown.Task
+import app.citti.core.markdown.TextOps
 import app.citti.core.markdown.ToolbarAction
 import app.citti.core.note.EditorDoc
 import app.citti.core.note.LinkTarget
@@ -10,9 +14,13 @@ import app.citti.core.note.NoteBadge
 import app.citti.core.note.NoteEditor.SaveResult
 import app.citti.core.sync.SyncStatus
 import app.citti.ui.components.Snack
+import app.citti.ui.image.ImageUpload
+import app.citti.ui.image.PickedImage
 import app.citti.ui.markdown.EditorState
+import app.citti.ui.markdown.Marker
 import app.citti.ui.nav.Navigator
 import app.citti.ui.nav.Route
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,10 +36,13 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 
 /** The Conflict copy of a Note, or the original of a copy: the banner offers to open it. */
 data class ConflictInfo(
@@ -62,6 +73,10 @@ data class NoteUiState(
     val authFailed: Boolean = false,
     /** The Note no longer exists: the screen pops. */
     val gone: Boolean = false,
+    /** Insert image: the Camera / Gallery sheet is open. */
+    val imageSheet: Boolean = false,
+    /** An Image is being uploaded; its link goes in when it is done. */
+    val uploading: Boolean = false,
 )
 
 /**
@@ -85,6 +100,10 @@ class NoteController(
     clockMs: () -> Long,
     private val saveDelayMs: Long = SAVE_DELAY_MS,
     private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /** Insert image's upload; null while signed out (the upload then fails as offline). */
+    private val imageUpload: ImageUpload? = null,
+    /** Where [editor] may be changed from when an upload ends (Android: the main thread, the view's). */
+    private val editorContext: CoroutineContext = EmptyCoroutineContext,
 ) {
     private val localId = route.localId
     private val route = MutableStateFlow(route)
@@ -101,6 +120,8 @@ class NoteController(
         val doc: Doc? = null,
         val links: Map<LinkRef, LinkTarget> = emptyMap(),
         val gone: Boolean = false,
+        val imageSheet: Boolean = false,
+        val uploading: Boolean = false,
     )
 
     private val model = MutableStateFlow(Model())
@@ -136,6 +157,8 @@ class NoteController(
                 links = m.links,
                 authFailed = s is SyncStatus.AuthFailed,
                 gone = m.gone,
+                imageSheet = m.imageSheet,
+                uploading = m.uploading,
             )
         }.stateIn(scope, SharingStarted.Eagerly, NoteUiState())
 
@@ -212,6 +235,8 @@ class NoteController(
 
     private fun effectivePreviewNow(row: EditorDoc) = route.value.preview || row.readonly
 
+    private fun effectivePreviewNow() = model.value.row?.let(::effectivePreviewNow) ?: route.value.preview
+
     private suspend fun onGone() {
         val m = model.value
         if (m.ready && !m.gone && editor.text != lastSaved && m.row?.readonly != true) {
@@ -285,7 +310,123 @@ class NoteController(
 
     fun onToolbar(action: ToolbarAction) {
         if (model.value.row?.readonly == true || !model.value.ready) return
-        editor.toolbar(action)
+        // Insert image opens a sheet instead of editing the text.
+        if (action == ToolbarAction.Image) openImageSheet() else editor.toolbar(action)
+    }
+
+    // ---- insert image ----
+
+    // Where the link of the Image being picked goes: the caret when the picker opened.
+    private var pickMarker: Marker? = null
+    private var uploadJob: Job? = null
+
+    /** Insert image (toolbar or ⋮ menu): the Camera / Gallery sheet. Not on a read-only Note, nor during an upload. */
+    fun openImageSheet() {
+        val m = model.value
+        if (m.row?.readonly == true || !m.ready || m.uploading) return
+        model.update { it.copy(imageSheet = true) }
+    }
+
+    fun dismissImageSheet() = model.update { it.copy(imageSheet = false) }
+
+    /** A row of the sheet: the platform picker opens now, and the link will go where the caret is now. */
+    fun pickImage() {
+        dismissImageSheet()
+        pickMarker?.release()
+        pickMarker = editor.markCaret()
+    }
+
+    /**
+     * The picker's result (null: cancelled). The upload runs in [leaveScope], so leaving the Note does not stop it;
+     * the link then goes in at the marker, as one undo step, or through `NoteEditor.insertAt` once the entry is gone.
+     * Offline or a failed upload: a snackbar, and the text is untouched.
+     */
+    fun onImagePicked(image: PickedImage?) {
+        val marker = pickMarker
+        pickMarker = null
+        if (image == null || model.value.uploading) {
+            marker?.release()
+            image?.dispose()
+            return
+        }
+        // No marker when the activity was recreated while the picker was up: the caret now.
+        val at = marker ?: editor.markCaret()
+        val folder =
+            model.value.row
+                ?.folder
+                .orEmpty()
+        model.update { it.copy(uploading = true) }
+        uploadJob =
+            leaveScope.launch {
+                try {
+                    val result =
+                        try {
+                            imageUpload?.upload(image.load(), folder) ?: UploadResult.Failed(ApiError.DavNotReady)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            notify(Snack.UploadFailed(e.message ?: e::class.simpleName.orEmpty()))
+                            null
+                        } finally {
+                            image.dispose()
+                        }
+                    when (result) {
+                        is UploadResult.Uploaded -> insertLink(at.offset, result.link)
+                        is UploadResult.Failed -> notify(result.error.toUploadSnack())
+                        null -> Unit
+                    }
+                } finally {
+                    at.release()
+                    model.update { it.copy(uploading = false) }
+                    uploadJob = null
+                }
+            }
+    }
+
+    /** The chip's Cancel: the upload stops and nothing is inserted (a file the server already took stays there). */
+    fun cancelUpload() {
+        uploadJob?.cancel()
+    }
+
+    private suspend fun insertLink(
+        offset: Int,
+        link: String,
+    ) {
+        if (scope.isActive) {
+            withContext(editorContext) {
+                saveLock.withLock {
+                    // The user's selection stays where it was, after the link when it was at or past the marker.
+                    val sel = editor.selection
+                    val edit = TextOps.insertBlock(editor.text, offset, link)
+                    val length = edit.replacement.length
+
+                    fun moved(o: Int) = if (o >= edit.start) o + length else o
+                    editor.apply(edit.copy(selection = Selection(moved(sel.start), moved(sel.end))))
+                }
+            }
+            if (effectivePreviewNow()) parse()
+            return
+        }
+        // The entry is gone. Its last text not saved yet (the leave's save is still queued): the link goes into it.
+        saveLock.withLock {
+            val text = editor.text
+            if (model.value.ready && text != lastSaved) {
+                editor.apply(TextOps.insertBlock(text, offset, link))
+                val withLink = editor.text
+                handle(gateway.save(withLink, baseEtag), withLink)
+                return
+            }
+            // Else the row holds that text: the link goes into the stored text.
+            val result = gateway.insertAt(offset, link, baseEtag)
+            if (result == SaveResult.Saved) {
+                gateway.savedText()?.let {
+                    editor.replaceAll(it)
+                    lastSaved = it
+                }
+            } else {
+                handle(result, text)
+            }
+        }
     }
 
     fun undo() = editor.undo()
@@ -399,6 +540,17 @@ class NoteController(
             is LinkRef.Markdown -> {
                 url.substringBefore('#').substringAfterLast('/').removeSuffix(".md")
             }
+        }
+
+    private fun ApiError.toUploadSnack(): Snack =
+        when (this) {
+            is ApiError.Network, ApiError.DavNotReady -> Snack.UploadOffline
+            is ApiError.Auth -> Snack.UploadFailed("HTTP $status")
+            is ApiError.Server -> Snack.UploadFailed("HTTP $status")
+            is ApiError.Http -> Snack.UploadFailed("HTTP $status")
+            ApiError.NotFound -> Snack.UploadFailed("HTTP 404")
+            is ApiError.BadResponse -> Snack.UploadFailed(message ?: "bad response")
+            ApiError.NotesAppMissing, ApiError.InvalidUrl, ApiError.InsecureUrl -> Snack.UploadFailed(toString())
         }
 
     companion object {

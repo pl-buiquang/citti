@@ -16,7 +16,8 @@ data class Edit(
     val selection: Selection,
 )
 
-enum class ToolbarAction { Bold, Italic, Heading, List, Checkbox, Link }
+/** The buttons of the format toolbar. [Image] opens the Image source sheet instead of editing the text. */
+enum class ToolbarAction { Bold, Italic, Heading, List, Checkbox, Link, Image }
 
 /**
  * The formatting actions of the toolbar and the Enter key, as pure functions of the document and the selection.
@@ -220,6 +221,22 @@ object TextOps {
         if (sel.isCaret) return Edit(sel.start, sel.end, "[[]]", Selection(sel.start + 2))
         val s = doc.text().substring(sel.start, sel.end)
         return Edit(sel.start, sel.end, "[[|$s]]", Selection(sel.start + 2))
+    }
+
+    /**
+     * Puts [block] on its own line at [offset] (clamped to [text]): a `\n` before it unless [offset] is at a line
+     * start, and one after it unless it is at a line end. Nothing else changes; the caret goes after the block.
+     */
+    fun insertBlock(
+        text: String,
+        offset: Int,
+        block: String,
+    ): Edit {
+        val at = offset.coerceIn(0, text.length)
+        val before = if (at == 0 || text[at - 1] == '\n') "" else "\n"
+        val after = if (at == text.length || text[at] == '\n') "" else "\n"
+        val caret = at + before.length + block.length
+        return Edit(at, at, before + block + after, Selection(caret))
     }
 
     /**

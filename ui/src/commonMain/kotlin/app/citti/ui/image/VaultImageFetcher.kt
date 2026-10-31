@@ -54,6 +54,28 @@ data class CachedImageMeta(
 /** The disk cache key of a Vault Image: its resolved path, so two Notes that link the same file share one entry. */
 fun imageDiskKey(path: VaultPath): String = path.value
 
+/**
+ * Puts an Image just uploaded to [path] into the disk cache, as a fresh fetch would, so its new link shows at once
+ * with no request. A cache that cannot take it (another writer, a full disk) is left as is.
+ */
+fun seedImageCache(
+    cache: DiskCache,
+    path: VaultPath,
+    bytes: ByteArray,
+    etag: String?,
+    contentType: String?,
+    nowMs: Long,
+) {
+    val editor = cache.openEditor(imageDiskKey(path)) ?: return
+    try {
+        cache.fileSystem.write(editor.data) { write(bytes) }
+        cache.fileSystem.write(editor.metadata) { writeUtf8(CachedImageMeta(nowMs, etag, contentType).encode()) }
+        editor.commit()
+    } catch (e: Exception) {
+        editor.abort()
+    }
+}
+
 class VaultImageKeyer : Keyer<VaultImageKey> {
     override fun key(
         data: VaultImageKey,

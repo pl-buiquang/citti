@@ -5,10 +5,14 @@ import app.citti.core.api.ApiResult
 import app.citti.core.settings.ImageSettings
 
 sealed interface UploadResult {
-    /** The file is at [path]; [link] is the markdown image link to insert (`![](media/a%20b.jpg)`). */
+    /**
+     * The file is at [path]; [link] is the markdown image link to insert (`![](media/a%20b.jpg)`). [etag] is the
+     * server's, if it sent one, for seeding the Image cache.
+     */
     data class Uploaded(
         val path: VaultPath,
         val link: String,
+        val etag: String? = null,
     ) : UploadResult
 
     data class Failed(
@@ -62,7 +66,7 @@ class ImageUploader(
                         is DavPut.Created -> {
                             val target = linkTarget(path, attachments)
                             resolver.rememberUpload(target, path)
-                            return UploadResult.Uploaded(path, "![]($target)")
+                            return UploadResult.Uploaded(path, "![]($target)", result.value.etag)
                         }
                     }
                 }

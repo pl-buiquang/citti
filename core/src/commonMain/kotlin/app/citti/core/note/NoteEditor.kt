@@ -1,6 +1,8 @@
 package app.citti.core.note
 
 import app.citti.core.db.CittiDatabase
+import app.citti.core.markdown.TextOps
+import app.citti.core.markdown.apply
 import app.citti.core.sync.ConflictCopies
 
 /** The Note as the editor opens it. [text] is null while the content is not downloaded yet. */
@@ -46,7 +48,7 @@ class NoteEditor(
 
         data object ReadOnly : SaveResult
 
-        /** [toggleTask] found something else than the expected checkbox at the offset; nothing was written. */
+        /** [toggleTask] found something else than the expected checkbox, or [insertAt] found no text; nothing was written. */
         data object Mismatch : SaveResult
     }
 
@@ -117,6 +119,28 @@ class NoteEditor(
             } else {
                 val inner = if (expected[1] == ' ') 'x' else ' '
                 write(current.substring(0, box + 1) + inner + current.substring(box + 2), baseEtag)
+            }
+        }
+
+    /**
+     * Puts [block] on its own line at [offset] of the row's text, as [TextOps.insertBlock] does ([offset] clamped to
+     * the text), and saves like [save]: for an Image link whose upload ended after its Note's screen was left. On
+     * [SaveResult.Saved] the new text is [savedText]. A Note gone meanwhile keeps the last text with the block in a
+     * copy ([SaveResult.Gone]); a row with no text yet gives [SaveResult.Mismatch].
+     */
+    fun insertAt(
+        offset: Int,
+        block: String,
+        baseEtag: String?,
+    ): SaveResult =
+        db.transactionWithResult {
+            val row = queries.selectByLocalId(localId).executeAsOneOrNull()
+            // Gone meanwhile: the copy write() makes holds the last text with the block.
+            val current = if (row == null || row.sync_state == "DELETED") lastSaved.orEmpty() else row.content
+            if (current == null) {
+                SaveResult.Mismatch
+            } else {
+                write(current.apply(TextOps.insertBlock(current, offset, block)), baseEtag)
             }
         }
 

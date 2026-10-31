@@ -1,19 +1,31 @@
 package app.citti.ui.note
 
+import app.citti.core.api.ApiError
+import app.citti.core.dav.UploadResult
+import app.citti.core.dav.VaultPath
 import app.citti.core.markdown.Block
 import app.citti.core.markdown.Selection
+import app.citti.core.markdown.TextOps
 import app.citti.core.markdown.ToolbarAction
+import app.citti.core.markdown.apply
 import app.citti.core.note.EditorDoc
 import app.citti.core.note.LinkTarget
 import app.citti.core.note.NoteBadge
 import app.citti.core.note.NoteEditor.SaveResult
 import app.citti.core.sync.SyncStatus
 import app.citti.ui.components.Snack
+import app.citti.ui.image.ImageUpload
+import app.citti.ui.image.LoadedImage
+import app.citti.ui.image.PickedImage
 import app.citti.ui.markdown.EditorHost
 import app.citti.ui.markdown.EditorState
 import app.citti.ui.nav.Navigator
 import app.citti.ui.nav.Route
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -55,6 +67,19 @@ private class FakeGateway : NoteGateway {
         toggles += Triple(box, expected, baseEtag)
         val current = saved ?: row.value?.text.orEmpty()
         saved = current.substring(0, box + 1) + (if (expected[1] == ' ') "x" else " ") + current.substring(box + 2)
+        return SaveResult.Saved
+    }
+
+    val inserts = mutableListOf<Triple<Int, String, String?>>()
+
+    override suspend fun insertAt(
+        offset: Int,
+        block: String,
+        baseEtag: String?,
+    ): SaveResult {
+        inserts += Triple(offset, block, baseEtag)
+        val current = saved ?: row.value?.text.orEmpty()
+        saved = current.apply(TextOps.insertBlock(current, offset, block))
         return SaveResult.Saved
     }
 
@@ -143,6 +168,8 @@ class NoteControllerTest {
         row: EditorDoc? = doc("first\nsecond"),
         route: Route.Note = Route.Note(1),
         status: SyncStatus? = SyncStatus.Idle(null, null),
+        scope: CoroutineScope = backgroundScope,
+        imageUpload: ImageUpload? = null,
         setup: FakeGateway.() -> Unit = {},
     ): Fixture {
         val gateway =
@@ -155,7 +182,7 @@ class NoteControllerTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val controller =
             NoteController(
-                scope = backgroundScope,
+                scope = scope,
                 leaveScope = backgroundScope,
                 gateway = gateway,
                 status = MutableStateFlow(status),
@@ -164,6 +191,7 @@ class NoteControllerTest {
                 notify = { snacks += it },
                 clockMs = { testScheduler.currentTime },
                 parseDispatcher = dispatcher,
+                imageUpload = imageUpload,
             )
         runCurrent()
         return Fixture(this, gateway, navigator, snacks, controller)
@@ -475,5 +503,176 @@ class NoteControllerTest {
             f.controller.openConflict()
             assertIs<Route.Note>(f.navigator.top)
             assertEquals(7L, (f.navigator.top as Route.Note).localId)
+        }
+
+    // ---- insert image ----
+
+    private class FakePick : PickedImage {
+        var disposed = false
+
+        override suspend fun load() = LoadedImage(byteArrayOf(1, 2, 3), "IMG_1.jpg", "image/jpeg")
+
+        override fun dispose() {
+            disposed = true
+        }
+    }
+
+    /** An upload that waits for [result], so the test can act while it runs. */
+    private class SlowUpload : ImageUpload {
+        val result = CompletableDeferred<UploadResult>()
+        val calls = mutableListOf<Pair<String, String>>()
+
+        override suspend fun upload(
+            image: LoadedImage,
+            noteFolder: String,
+        ): UploadResult {
+            calls += image.name to noteFolder
+            return result.await()
+        }
+    }
+
+    private val uploaded = UploadResult.Uploaded(VaultPath.parse("media/IMG_1.jpg")!!, "![](IMG_1.jpg)")
+
+    @Test
+    fun theImageToolbarButtonOpensTheSheetAndChangesNoText() =
+        runTest {
+            val f = open()
+            f.attach()
+            f.controller.onToolbar(ToolbarAction.Image)
+            runCurrent()
+            assertTrue(f.controller.state.value.imageSheet)
+            assertEquals("first\nsecond", f.host.text)
+            assertFalse(f.controller.editor.canUndo.value)
+            f.controller.dismissImageSheet()
+            runCurrent()
+            assertFalse(f.controller.state.value.imageSheet)
+        }
+
+    @Test
+    fun aReadOnlyNoteHasNoImageSheet() =
+        runTest {
+            val f = open(doc("x", readonly = true))
+            f.controller.openImageSheet()
+            runCurrent()
+            assertFalse(f.controller.state.value.imageSheet)
+        }
+
+    @Test
+    fun anUploadInsertsTheLinkAtTheMarkerMovedByTypingAboveIt() =
+        runTest {
+            val upload = SlowUpload()
+            val f = open(imageUpload = upload)
+            f.attach()
+            // The caret after "first", where the picker opens.
+            f.host.sel = Selection(5)
+            f.controller.openImageSheet()
+            runCurrent()
+            assertTrue(f.controller.state.value.imageSheet)
+            f.controller.pickImage()
+            runCurrent()
+            assertFalse(f.controller.state.value.imageSheet)
+            val pick = FakePick()
+            f.controller.onImagePicked(pick)
+            runCurrent()
+            assertTrue(f.controller.state.value.uploading)
+            assertEquals(listOf("IMG_1.jpg" to "work"), upload.calls)
+            // The user types at the start while the upload runs: the marker moves with the text.
+            f.host.sel = Selection(0)
+            f.host.type("> ")
+            upload.result.complete(uploaded)
+            runCurrent()
+            assertEquals("> first\n![](IMG_1.jpg)\nsecond", f.host.text)
+            assertFalse(f.controller.state.value.uploading)
+            assertTrue(pick.disposed)
+            // The user's caret stayed where it was typing.
+            assertEquals(Selection(2), f.host.sel)
+            // One undo step takes the link out again.
+            f.controller.undo()
+            assertEquals("> first\nsecond", f.host.text)
+            advanceTimeBy(1_000)
+            assertEquals(
+                "> first\nsecond",
+                f.gateway.saves
+                    .last()
+                    .first,
+            )
+        }
+
+    @Test
+    fun anUploadOfflineOrFailedShowsASnackbarAndLeavesTheText() =
+        runTest {
+            val offline = SlowUpload().also { it.result.complete(UploadResult.Failed(ApiError.Network(RuntimeException()))) }
+            val f = open(imageUpload = offline)
+            f.attach()
+            f.controller.pickImage()
+            f.controller.onImagePicked(FakePick())
+            runCurrent()
+            assertEquals(listOf<Snack>(Snack.UploadOffline), f.snacks)
+            assertEquals("first\nsecond", f.host.text)
+            assertFalse(f.controller.state.value.uploading)
+
+            val failed = SlowUpload().also { it.result.complete(UploadResult.Failed(ApiError.Server(507))) }
+            val g = open(imageUpload = failed)
+            g.attach()
+            g.controller.pickImage()
+            g.controller.onImagePicked(FakePick())
+            runCurrent()
+            assertEquals(listOf<Snack>(Snack.UploadFailed("HTTP 507")), g.snacks)
+            assertEquals("first\nsecond", g.host.text)
+        }
+
+    @Test
+    fun aCancelledPickOrUploadInsertsNothing() =
+        runTest {
+            val upload = SlowUpload()
+            val f = open(imageUpload = upload)
+            f.attach()
+            f.controller.pickImage()
+            f.controller.onImagePicked(null)
+            runCurrent()
+            assertFalse(f.controller.state.value.uploading)
+            assertTrue(upload.calls.isEmpty())
+
+            f.controller.pickImage()
+            f.controller.onImagePicked(FakePick())
+            runCurrent()
+            f.controller.cancelUpload()
+            runCurrent()
+            upload.result.complete(uploaded)
+            runCurrent()
+            assertFalse(f.controller.state.value.uploading)
+            assertEquals("first\nsecond", f.host.text)
+            assertTrue(f.snacks.isEmpty())
+        }
+
+    @Test
+    fun anUploadEndingAfterTheRouteLeftGoesThroughInsertAt() =
+        runTest {
+            val upload = SlowUpload()
+            val entry = CoroutineScope(backgroundScope.coroutineContext + Job(backgroundScope.coroutineContext[Job]))
+            val f =
+                open(scope = entry, imageUpload = upload) {
+                    saveResult = { text, _ ->
+                        saved = text
+                        SaveResult.Saved
+                    }
+                }
+            f.attach()
+            f.host.sel = Selection(5)
+            f.controller.pickImage()
+            f.controller.onImagePicked(FakePick())
+            runCurrent()
+            // The user leaves: the text is flushed, the entry's scope is cancelled.
+            f.host.sel = Selection(0)
+            f.host.type("> ")
+            f.controller.onLeave()
+            runCurrent()
+            f.controller.editor.detach(f.host)
+            entry.cancel()
+            upload.result.complete(uploaded)
+            runCurrent()
+            assertEquals(listOf<Triple<Int, String, String?>>(Triple(7, "![](IMG_1.jpg)", "e1")), f.gateway.inserts)
+            assertEquals("> first\n![](IMG_1.jpg)\nsecond", f.gateway.saved)
+            assertEquals(1, f.gateway.saves.size)
         }
 }

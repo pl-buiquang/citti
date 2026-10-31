@@ -243,4 +243,56 @@ class TextOpsTest {
             }
         }
     }
+
+    // ---- insertBlock ----
+
+    private fun insert(
+        text: String,
+        at: Int,
+    ): Pair<String, Selection> {
+        val e = TextOps.insertBlock(text, at, "![](a.jpg)")
+        return text.apply(e) to e.selection
+    }
+
+    @Test
+    fun insertBlockAtALineStartAddsANewlineAfter() {
+        assertEquals("one\n![](a.jpg)\ntwo" to caret(14), insert("one\ntwo", 4))
+        assertEquals("![](a.jpg)\none" to caret(10), insert("one", 0))
+    }
+
+    @Test
+    fun insertBlockMidLineGoesOnItsOwnLine() {
+        assertEquals("on\n![](a.jpg)\ne" to caret(13), insert("one", 2))
+    }
+
+    @Test
+    fun insertBlockAtALineEndAddsANewlineBefore() {
+        assertEquals("one\n![](a.jpg)" to caret(14), insert("one", 3))
+        assertEquals("one\n![](a.jpg)\ntwo" to caret(14), insert("one\ntwo", 3))
+    }
+
+    @Test
+    fun insertBlockOnAnEmptyLineOrTextAddsNoNewline() {
+        assertEquals("![](a.jpg)" to caret(10), insert("", 0))
+        assertEquals("a\n![](a.jpg)\nb" to caret(12), insert("a\n\nb", 2))
+    }
+
+    @Test
+    fun insertBlockClampsTheOffset() {
+        assertEquals("one\n![](a.jpg)", insert("one", 99).first)
+        assertEquals("![](a.jpg)\none", insert("one", -3).first)
+    }
+
+    @Test
+    fun insertBlockKeepsTheBytesOutsideTheInsertion() {
+        for (text in samples) {
+            for (at in 0..text.length) {
+                val e = TextOps.insertBlock(text, at, "![](x)")
+                assertEquals(at, e.start)
+                assertEquals(at, e.end)
+                val after = text.apply(e)
+                assertEquals(text, after.removeRange(at, at + e.replacement.length), "$text @$at")
+            }
+        }
+    }
 }

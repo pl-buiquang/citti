@@ -4,6 +4,7 @@ import android.content.Context
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
+import app.citti.core.api.ApiError
 import app.citti.core.api.NotesApi
 import app.citti.core.api.NotesApiConfig
 import app.citti.core.api.createNotesHttpClient
@@ -16,7 +17,9 @@ import app.citti.core.auth.signOut
 import app.citti.core.dav.DavClient
 import app.citti.core.dav.DavSetup
 import app.citti.core.dav.ImageResolver
+import app.citti.core.dav.ImageUploader
 import app.citti.core.dav.ObsidianConfig
+import app.citti.core.dav.UploadResult
 import app.citti.core.db.CittiDatabase
 import app.citti.core.note.ExcerptBackfill
 import app.citti.core.note.LinkResolver
@@ -41,8 +44,10 @@ import app.citti.ui.browse.toRowItem
 import app.citti.ui.components.PickerFolders
 import app.citti.ui.components.pickerFolders
 import app.citti.ui.image.ImageCache
+import app.citti.ui.image.ImageUpload
 import app.citti.ui.image.VaultImageFetcherFactory
 import app.citti.ui.image.VaultImageKeyer
+import app.citti.ui.image.seedImageCache
 import app.citti.ui.note.NoteGateway
 import app.citti.ui.settings.AccountInfo
 import app.citti.ui.settings.CoreSettingsStore
@@ -163,6 +168,7 @@ class AppContainer(
         val dav: DavClient,
         val images: ImageResolver,
         val creator: NoteCreator,
+        val uploader: ImageUploader,
     )
 
     private val stackLock = Mutex()
@@ -344,10 +350,12 @@ class AppContainer(
                     )
                 }
             val dav = DavClient(client, { davSetup.root() }, AndroidSyncLog, api.stats)
-            val images = ImageResolver(dav, ObsidianConfig(dav, database))
+            val obsidian = ObsidianConfig(dav, database)
+            val images = ImageResolver(dav, obsidian)
+            val uploader = ImageUploader(dav, obsidian, imageSettings, images)
             val afterEdit = AfterEditPush(appScope, engine, config.afterEditPushDelay.inWholeMilliseconds)
             val creator = NoteCreator(database, engine, appScope, exclusions, afterEdit::schedule, now)
-            SyncStack(client, engine, afterEdit, dav, images, creator).also { stack.value = it }
+            SyncStack(client, engine, afterEdit, dav, images, creator, uploader).also { stack.value = it }
         }
 
     /** No sync is running and no push after an edit is pending (signed out counts as idle). For the E2E idling resource. */
@@ -358,6 +366,23 @@ class AppContainer(
 
     /** Image links of Notes (M4 UI). Null while signed out. */
     fun imageResolver(): ImageResolver? = stack.value?.images
+
+    /**
+     * Insert image: uploads into the Vault with the current account and seeds the Image cache with the bytes, so the
+     * new link shows at once. Signed out: [ApiError.DavNotReady] (shown as offline).
+     */
+    val imageUpload =
+        ImageUpload { image, noteFolder ->
+            val uploader = stack.value?.uploader ?: return@ImageUpload UploadResult.Failed(ApiError.DavNotReady)
+            withContext(Dispatchers.IO) {
+                // The settings and the Obsidian config are read from the database.
+                val result = uploader.upload(image.bytes, image.name, image.mimeType, noteFolder)
+                if (result is UploadResult.Uploaded) {
+                    seedImageCache(imageDiskCache, result.path, image.bytes, result.etag, image.mimeType, config.nowMillis())
+                }
+                result
+            }
+        }
 
     /** Called by the editor after each successful save; pushes about 2 s after the last one. No-op while signed out. */
     fun scheduleAfterEditPush() {

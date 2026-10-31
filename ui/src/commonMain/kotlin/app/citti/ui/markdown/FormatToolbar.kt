@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -23,10 +24,12 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import app.citti.core.markdown.ToolbarAction
+import app.citti.ui.TestTags
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.toolbar_bold
 import app.citti.ui.resources.toolbar_checkbox
 import app.citti.ui.resources.toolbar_heading
+import app.citti.ui.resources.toolbar_image
 import app.citti.ui.resources.toolbar_italic
 import app.citti.ui.resources.toolbar_link
 import app.citti.ui.resources.toolbar_list
@@ -35,8 +38,8 @@ import app.citti.ui.theme.NotesSize
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The six formatting buttons above the keyboard (design-system `FormatToolbar.md`). Each shows the markdown mark it
- * inserts in the editor face, so the same toolbar serves every theme. A button is pressed (accent fill) while its
+ * The formatting buttons above the keyboard (design-system `FormatToolbar.md`), then Insert image. Each shows the
+ * markdown mark it inserts in the editor face, so the same toolbar serves every theme. A button is pressed (accent fill) while its
  * syntax is active at the caret. Show it only while the editor has focus in Edit mode, above the IME.
  */
 @Composable
@@ -60,6 +63,7 @@ fun FormatToolbar(
                         .sizeIn(minWidth = NotesSize.touchMin, minHeight = NotesSize.touchMin)
                         .background(if (on) colors.accent else colors.surface)
                         .clickable(role = Role.Button) { onAction(action) }
+                        .let { if (action == ToolbarAction.Image) it.testTag(TestTags.TOOLBAR_IMAGE) else it }
                         .semantics {
                             contentDescription = label
                             role = Role.Button
@@ -89,6 +93,7 @@ private fun ToolbarAction.mark() =
         ToolbarAction.List -> "-"
         ToolbarAction.Checkbox -> "[ ]"
         ToolbarAction.Link -> "[["
+        ToolbarAction.Image -> "![]"
     }
 
 private fun ToolbarAction.label() =
@@ -99,4 +104,5 @@ private fun ToolbarAction.label() =
         ToolbarAction.List -> Res.string.toolbar_list
         ToolbarAction.Checkbox -> Res.string.toolbar_checkbox
         ToolbarAction.Link -> Res.string.toolbar_link
+        ToolbarAction.Image -> Res.string.toolbar_image
     }

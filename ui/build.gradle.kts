@@ -29,6 +29,8 @@ kotlin {
         }
         androidMain.dependencies {
             implementation(libs.compose.ui)
+            // Insert image: the camera and Photo Picker result contracts, and FileProvider (androidx.core).
+            implementation(libs.androidx.activity.compose)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

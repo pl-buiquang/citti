@@ -35,9 +35,12 @@ import app.citti.ui.components.BannerKind
 import app.citti.ui.components.CittiIcon
 import app.citti.ui.components.Gutter
 import app.citti.ui.components.IconButton
+import app.citti.ui.components.ImageSourceSheet
 import app.citti.ui.components.StateLabel
+import app.citti.ui.components.UploadChip
 import app.citti.ui.components.colored
 import app.citti.ui.image.ImageEnv
+import app.citti.ui.image.PickSource
 import app.citti.ui.markdown.EditorState
 import app.citti.ui.markdown.FormatToolbar
 import app.citti.ui.markdown.MarkdownEditor
@@ -76,6 +79,10 @@ class NoteActions(
     val onLink: (LinkRef) -> Unit,
     val onOpenConflict: () -> Unit,
     val onSignInAgain: () -> Unit,
+    /** A row of the Insert image sheet: open the platform picker for it. */
+    val onPickImage: (PickSource) -> Unit = {},
+    val onDismissImageSheet: () -> Unit = {},
+    val onCancelUpload: () -> Unit = {},
 )
 
 /**
@@ -114,12 +121,30 @@ fun NoteScreen(
         }
         actions.onTogglePreview()
     }
-    Column(
+    Box(
         Modifier
             .fillMaxSize()
             .background(CittiTheme.colors.bg)
             .safeDrawingPadding(),
     ) {
+        NoteColumn(state, editor, previewListState, actions, images, focused, pressed, toggle)
+        if (state.imageSheet) ImageSourceSheet(onPick = actions.onPickImage, onDismiss = actions.onDismissImageSheet)
+    }
+}
+
+@Composable
+private fun NoteColumn(
+    state: NoteUiState,
+    editor: EditorState,
+    previewListState: LazyListState,
+    actions: NoteActions,
+    images: ImageEnv?,
+    focused: Boolean,
+    pressed: Set<ToolbarAction>,
+    toggle: () -> Unit,
+) {
+    val doc = state.doc
+    Column(Modifier.fillMaxSize()) {
         NoteTopBar(state, showHistory = !state.preview && !state.loading && focused, actions = actions, onToggle = toggle)
         NoteBanner(state, actions)
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -154,6 +179,7 @@ fun NoteScreen(
                 }
             }
         }
+        if (state.uploading) UploadChip(actions.onCancelUpload)
         if (!state.preview && !state.loading && focused) FormatToolbar(pressed, actions.onToolbar)
     }
 }

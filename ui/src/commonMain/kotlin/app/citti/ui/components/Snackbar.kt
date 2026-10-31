@@ -27,6 +27,8 @@ import app.citti.ui.resources.conflict_snackbar
 import app.citti.ui.resources.deleted_snackbar
 import app.citti.ui.resources.link_missing
 import app.citti.ui.resources.link_unsynced
+import app.citti.ui.resources.upload_failed
+import app.citti.ui.resources.upload_offline
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
@@ -52,6 +54,14 @@ sealed interface Snack {
     ) : Snack
 
     data object LinkUnsynced : Snack
+
+    /** Insert image while offline: nothing was inserted. */
+    data object UploadOffline : Snack
+
+    /** Insert image failed ([reason]: the server's status or the error); nothing was inserted. */
+    data class UploadFailed(
+        val reason: String,
+    ) : Snack
 }
 
 /** The one snackbar of the app; a new one replaces the shown one. */
@@ -87,6 +97,8 @@ fun SnackbarHost(
             is Snack.Deleted -> stringResource(Res.string.deleted_snackbar, shown.copyTitle)
             is Snack.LinkMissing -> stringResource(Res.string.link_missing, shown.name)
             Snack.LinkUnsynced -> stringResource(Res.string.link_unsynced)
+            Snack.UploadOffline -> stringResource(Res.string.upload_offline)
+            is Snack.UploadFailed -> stringResource(Res.string.upload_failed, shown.reason)
         }
     val action = if (shown == Snack.LinkUnsynced) stringResource(Res.string.action_open_exclusions) else null
     val colors = CittiTheme.colors

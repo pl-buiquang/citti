@@ -42,6 +42,12 @@ class DbNoteGateway(
         baseEtag: String?,
     ): NoteEditor.SaveResult = withContext(Dispatchers.IO) { editor.toggleTask(box, expected, baseEtag) }
 
+    override suspend fun insertAt(
+        offset: Int,
+        block: String,
+        baseEtag: String?,
+    ): NoteEditor.SaveResult = withContext(Dispatchers.IO) { editor.insertAt(offset, block, baseEtag) }
+
     override fun savedText(): String? = editor.savedText
 
     override suspend fun resolve(

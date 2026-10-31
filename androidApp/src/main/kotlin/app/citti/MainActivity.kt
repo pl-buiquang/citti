@@ -49,6 +49,7 @@ import app.citti.ui.create.NewNoteHost
 import app.citti.ui.create.actions
 import app.citti.ui.create.newNoteFolder
 import app.citti.ui.image.ImageEnv
+import app.citti.ui.image.rememberImagePicker
 import app.citti.ui.login.LoginController
 import app.citti.ui.login.LoginFlowBackend
 import app.citti.ui.login.LoginScreen
@@ -361,6 +362,8 @@ class MainActivity : ComponentActivity() {
             Unit
         }
         BackHandler(onBack = leave)
+        BackHandler(enabled = state.imageSheet, onBack = controller::dismissImageSheet)
+        val picker = rememberImagePicker(container.config::nowMillis, controller::onImagePicked)
         val images = remember(state.folder) { imageEnv(state.folder, controller::onImage) }
         NoteScreen(
             state = state,
@@ -377,6 +380,12 @@ class MainActivity : ComponentActivity() {
                     onLink = controller::onLink,
                     onOpenConflict = controller::openConflict,
                     onSignInAgain = { signInAgain() },
+                    onPickImage = { source ->
+                        controller.pickImage()
+                        picker.launch(source)
+                    },
+                    onDismissImageSheet = controller::dismissImageSheet,
+                    onCancelUpload = controller::cancelUpload,
                 ),
             images = images,
         )
@@ -461,6 +470,8 @@ class MainActivity : ComponentActivity() {
         navigator = navigator,
         notify = snackbars::show,
         clockMs = container.config::nowMillis,
+        imageUpload = container.imageUpload,
+        editorContext = Dispatchers.Main.immediate,
     )
 
     private fun newScope() = CoroutineScope(SupervisorJob(container.appScope.coroutineContext[Job]) + Dispatchers.Default)
