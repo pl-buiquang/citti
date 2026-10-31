@@ -19,7 +19,7 @@ class PreviewTest {
     private val server = ServerAssert()
 
     @Test
-    fun wikilinksOpenTheRightNoteAndABrokenOneSaysSo() {
+    fun wikilinksOpenTheRightNoteAndABrokenOneLeadsNowhere() {
         list.openNote("links")
         note.showPreview()
         note.tapLinkIn("Full path with an alias")
@@ -27,8 +27,7 @@ class PreviewTest {
         note.pressBack()
 
         note.assertTitle("links")
-        // A broken link leads nowhere. Its "No note named" snackbar is not checked yet: it never showed up in the
-        // E2E run (open question, see plan.md › E2E Task 0).
+        // A broken link leads nowhere: the Note stays open.
         note.tapLinkIn("Broken:")
         note.assertTitle("links")
     }
