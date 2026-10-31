@@ -1,10 +1,12 @@
 package app.citti.ui.list
 
 import app.citti.core.db.Note
+import app.citti.core.note.noteBadgeOf
 import app.citti.core.sync.Progress
 import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
 import app.citti.ui.components.RowBadge
+import app.citti.ui.components.toRowBadge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,12 +31,7 @@ fun Note.toListItem(): NoteListItem =
         title = title,
         folder = category,
         favorite = favorite,
-        badge =
-            when {
-                conflict_of != null -> RowBadge.Conflict
-                sync_state != "SYNCED" -> RowBadge.Pending
-                else -> null
-            },
+        badge = noteBadgeOf(conflict_of, sync_state)?.toRowBadge(),
     )
 
 data class NoteListUiState(

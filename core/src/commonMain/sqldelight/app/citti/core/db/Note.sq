@@ -190,3 +190,11 @@ SELECT local_id, title, content FROM note WHERE excerpt IS NULL AND content IS N
 
 setExcerpt:
 UPDATE note SET excerpt = :excerpt WHERE local_id = :localId;
+
+-- Search, step 2: snippets of the content for one page of visible results (NoteSearch). Markers are char(2) and
+-- char(3). Selects note.local_id through the join: SQLDelight cannot compile a query that selects note_fts.docid.
+-- Step 1, the hits with matchinfo(), is in NoteSearch: SQLDelight does not know matchinfo().
+searchSnippets:
+SELECT note.local_id, snippet(note_fts, char(2), char(3), '…', 1, 12) AS snippet
+FROM note_fts JOIN note ON note.local_id = note_fts.docid
+WHERE note_fts MATCH :match AND note.local_id IN :ids;

@@ -30,6 +30,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import app.citti.core.note.NoteBadge
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.badge_conflict
 import app.citti.ui.resources.badge_favorite
@@ -211,6 +212,12 @@ fun CittiTopBar(
 }
 
 enum class RowBadge { Pending, Conflict }
+
+fun NoteBadge.toRowBadge(): RowBadge =
+    when (this) {
+        NoteBadge.Pending -> RowBadge.Pending
+        NoteBadge.Conflict -> RowBadge.Conflict
+    }
 
 /** State is words, not only color. */
 @Composable
