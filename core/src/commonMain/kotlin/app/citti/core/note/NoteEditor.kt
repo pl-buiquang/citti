@@ -18,6 +18,7 @@ data class EditorDoc(
     val pending: Boolean = false,
     /** True when this Note is itself a Conflict copy; then [conflictCopy] is its original. */
     val isConflictCopy: Boolean = false,
+    val favorite: Boolean = false,
 )
 
 /**
@@ -85,6 +86,7 @@ class NoteEditor(
             conflictCopy = copy?.let { it.local_id to it.title } ?: original?.let { it.local_id to it.title },
             pending = row.sync_state != "SYNCED",
             isConflictCopy = original != null,
+            favorite = row.favorite,
         )
     }
 

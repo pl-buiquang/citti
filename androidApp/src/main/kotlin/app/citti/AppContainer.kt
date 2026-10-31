@@ -23,6 +23,7 @@ import app.citti.core.dav.UploadResult
 import app.citti.core.db.CittiDatabase
 import app.citti.core.note.ExcerptBackfill
 import app.citti.core.note.LinkResolver
+import app.citti.core.note.NoteActions
 import app.citti.core.note.NoteCreator
 import app.citti.core.note.NoteEditor
 import app.citti.core.search.NoteSearch
@@ -48,7 +49,9 @@ import app.citti.ui.image.ImageUpload
 import app.citti.ui.image.VaultImageFetcherFactory
 import app.citti.ui.image.VaultImageKeyer
 import app.citti.ui.image.seedImageCache
+import app.citti.ui.note.CoreNoteMenu
 import app.citti.ui.note.NoteGateway
+import app.citti.ui.note.NoteMenuGateway
 import app.citti.ui.settings.AccountInfo
 import app.citti.ui.settings.CoreSettingsStore
 import coil3.ImageLoader
@@ -169,6 +172,7 @@ class AppContainer(
         val images: ImageResolver,
         val creator: NoteCreator,
         val uploader: ImageUploader,
+        val actions: NoteActions,
     )
 
     private val stackLock = Mutex()
@@ -318,6 +322,12 @@ class AppContainer(
     /** Every Note creation goes through it (ADR 0006); null while signed out. */
     fun noteCreator(): NoteCreator? = stack.value?.creator
 
+    /** Favorite, Rename, Move, Delete and Note info of the ⋮ menu; null while signed out. */
+    fun noteActions(): NoteActions? = stack.value?.actions
+
+    /** The ⋮ menu of one open Note for its [app.citti.ui.note.NoteController]. */
+    fun noteMenu(localId: Long): NoteMenuGateway = CoreNoteMenu(localId, ::noteActions, exclusions, Dispatchers.IO)
+
     /** The data of one open Note for its [app.citti.ui.note.NoteController]. */
     fun noteGateway(localId: Long): NoteGateway =
         DbNoteGateway(
@@ -355,7 +365,8 @@ class AppContainer(
             val uploader = ImageUploader(dav, obsidian, imageSettings, images)
             val afterEdit = AfterEditPush(appScope, engine, config.afterEditPushDelay.inWholeMilliseconds)
             val creator = NoteCreator(database, engine, appScope, exclusions, afterEdit::schedule, now)
-            SyncStack(client, engine, afterEdit, dav, images, creator, uploader).also { stack.value = it }
+            val actions = NoteActions(database, creator, exclusions, afterEdit::schedule, now)
+            SyncStack(client, engine, afterEdit, dav, images, creator, uploader, actions).also { stack.value = it }
         }
 
     /** No sync is running and no push after an edit is pending (signed out counts as idle). For the E2E idling resource. */

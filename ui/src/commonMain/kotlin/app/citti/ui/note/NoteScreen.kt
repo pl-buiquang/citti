@@ -36,6 +36,9 @@ import app.citti.ui.components.CittiIcon
 import app.citti.ui.components.Gutter
 import app.citti.ui.components.IconButton
 import app.citti.ui.components.ImageSourceSheet
+import app.citti.ui.components.MenuItem
+import app.citti.ui.components.NoteMenu
+import app.citti.ui.components.PickerFolders
 import app.citti.ui.components.StateLabel
 import app.citti.ui.components.UploadChip
 import app.citti.ui.components.colored
@@ -54,6 +57,7 @@ import app.citti.ui.resources.conflict_banner
 import app.citti.ui.resources.conflict_copy_of
 import app.citti.ui.resources.note_downloading
 import app.citti.ui.resources.note_edit
+import app.citti.ui.resources.note_menu
 import app.citti.ui.resources.note_not_downloaded
 import app.citti.ui.resources.note_preview
 import app.citti.ui.resources.note_readonly
@@ -67,6 +71,7 @@ import app.citti.ui.resources.save_syncing
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
+import kotlinx.coroutines.flow.Flow
 import org.jetbrains.compose.resources.stringResource
 
 class NoteActions(
@@ -83,11 +88,17 @@ class NoteActions(
     val onPickImage: (PickSource) -> Unit = {},
     val onDismissImageSheet: () -> Unit = {},
     val onCancelUpload: () -> Unit = {},
+    /** The ⋮ button, a menu item, a tap outside the menu. */
+    val onOpenMenu: () -> Unit = {},
+    val onMenuItem: (MenuItem) -> Unit = {},
+    val onDismissMenu: () -> Unit = {},
+    /** The ⋮ menu's dialogs; null: none is shown. */
+    val dialogs: NoteDialogActions? = null,
 )
 
 /**
  * The Note screen ([design-brief] §5, §6): top bar (←, title and save indicator, ↶ ↷ while the editor has focus,
- * the Edit/Preview toggle), at most one banner (Conflict, then auth failure), the body (the editor in Edit mode, the
+ * the Edit/Preview toggle, ⋮), at most one banner (Conflict, then auth failure), the body (the editor in Edit mode, the
  * Preview in Preview mode, "Downloading…" while the text is not on the device) and the format toolbar above the
  * keyboard while the editor has focus. [previewListState] is owned by the caller so the reading position survives
  * the toggle. [images] loads the Images of the Preview (null: a box with the file name).
@@ -99,6 +110,10 @@ fun NoteScreen(
     previewListState: LazyListState,
     actions: NoteActions,
     images: ImageEnv? = null,
+    /** The Folders the Move picker lists. */
+    folders: Flow<PickerFolders>? = null,
+    /** Note info's last modified (epoch seconds), as an absolute date and time. */
+    dateTime: (Long) -> String = { it.toString() },
 ) {
     val focused by editor.focused.collectAsState()
     val pressed by editor.pressed.collectAsState()
@@ -128,6 +143,8 @@ fun NoteScreen(
             .safeDrawingPadding(),
     ) {
         NoteColumn(state, editor, previewListState, actions, images, focused, pressed, toggle)
+        if (state.menuOpen) NoteMenu(state.menu, state.favorite, actions.onMenuItem, actions.onDismissMenu)
+        actions.dialogs?.let { NoteDialogHost(state.dialog, state.title, folders, dateTime, it) }
         if (state.imageSheet) ImageSourceSheet(onPick = actions.onPickImage, onDismiss = actions.onDismissImageSheet)
     }
 }
@@ -247,6 +264,14 @@ private fun NoteTopBar(
             } else {
                 IconButton(CittiIcon.Eye, stringResource(Res.string.note_preview), onToggle)
             }
+        }
+        if (state.menu.isNotEmpty()) {
+            IconButton(
+                CittiIcon.More,
+                stringResource(Res.string.note_menu),
+                actions.onOpenMenu,
+                Modifier.testTag(TestTags.NOTE_MENU_BUTTON),
+            )
         }
     }
 }

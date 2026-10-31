@@ -38,6 +38,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -176,6 +177,52 @@ fun CittiTextField(
                     }
                     inner()
                 }
+            },
+        )
+        if (error != null) BasicText(error, style = CittiTheme.typography.meta.copy(color = colors.danger))
+    }
+}
+
+/**
+ * [CittiTextField] over a [TextFieldValue], for a field that opens with its text selected (Rename). Same look, no
+ * secret mode.
+ */
+@Composable
+fun CittiTextField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    error: String? = null,
+    imeAction: ImeAction = ImeAction.Default,
+    onImeAction: (() -> Unit)? = null,
+    focusRequester: FocusRequester? = null,
+) {
+    val colors = CittiTheme.colors
+    val shape = RoundedCornerShape(CittiTheme.shape.control)
+    var focused by remember { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(NotesSpacing.space1)) {
+        BasicText(label, style = CittiTheme.typography.meta.colored(muted = true))
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = enabled,
+            singleLine = true,
+            textStyle = CittiTheme.typography.body.colored(),
+            cursorBrush = SolidColor(colors.accent),
+            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = imeAction),
+            keyboardActions = KeyboardActions(onAny = { onImeAction?.invoke() }),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
+                    .background(colors.surface, shape)
+                    .border(Dp.Hairline, if (focused) colors.focus else colors.line, shape)
+                    .onFocusChanged { focused = it.isFocused }
+                    .padding(horizontal = NotesSpacing.space3),
+            decorationBox = { inner ->
+                Box(Modifier.heightIn(min = NotesSize.touchMin), contentAlignment = Alignment.CenterStart) { inner() }
             },
         )
         if (error != null) BasicText(error, style = CittiTheme.typography.meta.copy(color = colors.danger))

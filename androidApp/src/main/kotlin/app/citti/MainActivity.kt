@@ -60,6 +60,7 @@ import app.citti.ui.note.ImageViewerScreen
 import app.citti.ui.note.NoteActions
 import app.citti.ui.note.NoteController
 import app.citti.ui.note.NoteScreen
+import app.citti.ui.note.dialogActions
 import app.citti.ui.search.SearchActions
 import app.citti.ui.search.SearchController
 import app.citti.ui.search.SearchScreen
@@ -103,6 +104,7 @@ class MainActivity : ComponentActivity() {
     private val pickerFolders by lazy { container.pickerFolders(titleCollator) }
     private val noteCreation by lazy { CoreNoteCreation(container::noteCreator, container.exclusions, Dispatchers.IO) }
     private val rowDates by lazy { JavaTimeRowDateFormatter(zone = container.config.timeZone) }
+    private val noteDateTime by lazy { JavaTimeDateTimeFormatter(zone = container.config.timeZone) }
 
     // POST_NOTIFICATIONS: asked once, never blocks anything; the sync works without it.
     private val notificationPermission =
@@ -362,6 +364,7 @@ class MainActivity : ComponentActivity() {
             Unit
         }
         BackHandler(onBack = leave)
+        BackHandler(enabled = state.menuOpen || state.dialog != null, onBack = { controller.back() })
         BackHandler(enabled = state.imageSheet, onBack = controller::dismissImageSheet)
         val picker = rememberImagePicker(container.config::nowMillis, controller::onImagePicked)
         val images = remember(state.folder) { imageEnv(state.folder, controller::onImage) }
@@ -386,8 +389,14 @@ class MainActivity : ComponentActivity() {
                     },
                     onDismissImageSheet = controller::dismissImageSheet,
                     onCancelUpload = controller::cancelUpload,
+                    onOpenMenu = controller::openMenu,
+                    onMenuItem = controller::onMenu,
+                    onDismissMenu = controller::dismissMenu,
+                    dialogs = remember(controller) { controller.dialogActions() },
                 ),
             images = images,
+            folders = pickerFolders,
+            dateTime = noteDateTime::format,
         )
     }
 
@@ -472,6 +481,7 @@ class MainActivity : ComponentActivity() {
         clockMs = container.config::nowMillis,
         imageUpload = container.imageUpload,
         editorContext = Dispatchers.Main.immediate,
+        menuGateway = container.noteMenu(route.localId),
     )
 
     private fun newScope() = CoroutineScope(SupervisorJob(container.appScope.coroutineContext[Job]) + Dispatchers.Default)

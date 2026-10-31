@@ -27,6 +27,9 @@ import app.citti.ui.resources.conflict_snackbar
 import app.citti.ui.resources.deleted_snackbar
 import app.citti.ui.resources.link_missing
 import app.citti.ui.resources.link_unsynced
+import app.citti.ui.resources.toast_deleted
+import app.citti.ui.resources.toast_favorite_added
+import app.citti.ui.resources.toast_favorite_removed
 import app.citti.ui.resources.upload_failed
 import app.citti.ui.resources.upload_offline
 import app.citti.ui.theme.CittiTheme
@@ -54,6 +57,14 @@ sealed interface Snack {
     ) : Snack
 
     data object LinkUnsynced : Snack
+
+    /** The ⋮ menu's Favorite toast. */
+    data object FavoriteAdded : Snack
+
+    data object FavoriteRemoved : Snack
+
+    /** The ⋮ menu's Delete: shown after the Note pops. */
+    data object NoteDeleted : Snack
 
     /** Insert image while offline: nothing was inserted. */
     data object UploadOffline : Snack
@@ -97,6 +108,9 @@ fun SnackbarHost(
             is Snack.Deleted -> stringResource(Res.string.deleted_snackbar, shown.copyTitle)
             is Snack.LinkMissing -> stringResource(Res.string.link_missing, shown.name)
             Snack.LinkUnsynced -> stringResource(Res.string.link_unsynced)
+            Snack.FavoriteAdded -> stringResource(Res.string.toast_favorite_added)
+            Snack.FavoriteRemoved -> stringResource(Res.string.toast_favorite_removed)
+            Snack.NoteDeleted -> stringResource(Res.string.toast_deleted)
             Snack.UploadOffline -> stringResource(Res.string.upload_offline)
             is Snack.UploadFailed -> stringResource(Res.string.upload_failed, shown.reason)
         }

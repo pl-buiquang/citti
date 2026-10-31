@@ -29,7 +29,26 @@ import kotlin.math.sin
  * Outline icons on a 24-unit grid with a 2-unit stroke (design-system README › Iconography), drawn
  * with Canvas so `:ui` needs no icon library.
  */
-enum class CittiIcon { Menu, Back, Close, Search, Folder, Chevron, Star, Settings, Undo, Redo, Eye, Pencil, Image, Plus }
+enum class CittiIcon {
+    Menu,
+    Back,
+    Close,
+    Search,
+    Folder,
+    Chevron,
+    Star,
+    Settings,
+    Undo,
+    Redo,
+    Eye,
+    Pencil,
+    Image,
+    Plus,
+    More,
+    Info,
+    Trash,
+    StarFilled,
+}
 
 /** Decorative icon (no semantics): pair it with a label, or use [IconButton]. */
 @Composable
@@ -84,13 +103,14 @@ private fun DrawScope.drawIcon(
     fun path(
         vararg points: Pair<Float, Float>,
         close: Boolean = false,
+        fill: Boolean = false,
     ) {
         val path =
             Path().apply {
                 points.forEachIndexed { i, (x, y) -> if (i == 0) moveTo(x * u, y * u) else lineTo(x * u, y * u) }
                 if (close) close()
             }
-        drawPath(path, color, style = stroke)
+        if (fill) drawPath(path, color) else drawPath(path, color, style = stroke)
     }
 
     when (icon) {
@@ -164,7 +184,7 @@ private fun DrawScope.drawIcon(
             line(5f, 12f, 19f, 12f)
         }
 
-        CittiIcon.Star -> {
+        CittiIcon.Star, CittiIcon.StarFilled -> {
             path(
                 12f to 3.5f,
                 14.6f to 9f,
@@ -177,7 +197,27 @@ private fun DrawScope.drawIcon(
                 3.5f to 9.6f,
                 9.4f to 9f,
                 close = true,
+                fill = icon == CittiIcon.StarFilled,
             )
+        }
+
+        CittiIcon.More -> {
+            // ⋮: three dots.
+            for (y in listOf(5f, 12f, 19f)) drawCircle(color, radius = 1.5f * u, center = p(12f, y))
+        }
+
+        CittiIcon.Info -> {
+            drawCircle(color, radius = 9f * u, center = p(12f, 12f), style = stroke)
+            line(12f, 11f, 12f, 17f)
+            drawCircle(color, radius = 1.2f * u, center = p(12f, 7.5f))
+        }
+
+        CittiIcon.Trash -> {
+            line(4f, 6f, 20f, 6f)
+            path(9f to 6f, 9f to 3.5f, 15f to 3.5f, 15f to 6f)
+            path(6f to 6f, 7f to 20.5f, 17f to 20.5f, 18f to 6f)
+            line(10f, 10f, 10f, 17f)
+            line(14f, 10f, 14f, 17f)
         }
     }
 }

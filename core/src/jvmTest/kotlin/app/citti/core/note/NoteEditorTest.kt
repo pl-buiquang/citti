@@ -51,6 +51,14 @@ class NoteEditorTest {
     }
 
     @Test
+    fun loadCarriesTheFavoriteFlagForTheMenu() {
+        val id = synced()
+        assertEquals(false, editor(id).load()?.favorite)
+        notes.setFavorite(true, id)
+        assertEquals(true, editor(id).load()?.favorite)
+    }
+
+    @Test
     fun newStaysNew() {
         notes.insertNew("T", "c", "a", 1, null)
         val id = notes.lastInsertedLocalId().executeAsOne()

@@ -149,6 +149,10 @@ fun FolderPicker(
     state: FolderPickerState,
     folders: PickerFolders?,
     actions: FolderPickerActions,
+    /** Shown above the confirm button in `danger` (Move: the target already has the title). */
+    error: String? = null,
+    /** The confirm button shows an inline progress ring and ignores taps (Move's server check). */
+    busy: Boolean = false,
 ) {
     val children =
         folders
@@ -177,8 +181,12 @@ fun FolderPicker(
             }
             item(key = "new-folder") { NewFolderItem(state, actions) }
         }
-        Column(Modifier.padding(horizontal = CittiTheme.shape.gutter, vertical = NotesSpacing.space3)) {
-            CittiButton(confirmLabel, actions.onConfirm, Modifier.testTag(TestTags.FOLDER_PICKER_CONFIRM))
+        Column(
+            Modifier.padding(horizontal = CittiTheme.shape.gutter, vertical = NotesSpacing.space3),
+            verticalArrangement = Arrangement.spacedBy(NotesSpacing.space2),
+        ) {
+            if (error != null) BasicText(error, style = CittiTheme.typography.meta.copy(color = CittiTheme.colors.danger))
+            CittiButton(confirmLabel, actions.onConfirm, Modifier.testTag(TestTags.FOLDER_PICKER_CONFIRM), busy = busy)
         }
     }
 }

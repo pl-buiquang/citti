@@ -10,9 +10,13 @@ import app.citti.core.markdown.TextOps
 import app.citti.core.markdown.ToolbarAction
 import app.citti.core.note.EditorDoc
 import app.citti.core.note.LinkTarget
+import app.citti.core.note.NameRules
 import app.citti.core.note.NoteBadge
 import app.citti.core.note.NoteEditor.SaveResult
+import app.citti.core.note.RenameResult
 import app.citti.core.sync.SyncStatus
+import app.citti.ui.components.FolderPickerState
+import app.citti.ui.components.MenuItem
 import app.citti.ui.components.Snack
 import app.citti.ui.image.ImageUpload
 import app.citti.ui.image.PickedImage
@@ -77,6 +81,12 @@ data class NoteUiState(
     val imageSheet: Boolean = false,
     /** An Image is being uploaded; its link goes in when it is done. */
     val uploading: Boolean = false,
+    val favorite: Boolean = false,
+    /** The ⋮ menu is open, with [menu]'s items. */
+    val menuOpen: Boolean = false,
+    val menu: List<MenuItem> = emptyList(),
+    /** The dialog or sheet of a ⋮ menu item, over the screen. */
+    val dialog: NoteDialog? = null,
 )
 
 /**
@@ -104,6 +114,8 @@ class NoteController(
     private val imageUpload: ImageUpload? = null,
     /** Where [editor] may be changed from when an upload ends (Android: the main thread, the view's). */
     private val editorContext: CoroutineContext = EmptyCoroutineContext,
+    /** The ⋮ menu's Favorite, Rename, Move, Delete and Note info; null: the menu acts on nothing. */
+    private val menuGateway: NoteMenuGateway? = null,
 ) {
     private val localId = route.localId
     private val route = MutableStateFlow(route)
@@ -122,6 +134,10 @@ class NoteController(
         val gone: Boolean = false,
         val imageSheet: Boolean = false,
         val uploading: Boolean = false,
+        val menuOpen: Boolean = false,
+        val dialog: NoteDialog? = null,
+        /** Deleted from the ⋮ menu: nothing is saved any more, and the screen pops. */
+        val deleted: Boolean = false,
     )
 
     private val model = MutableStateFlow(Model())
@@ -159,6 +175,10 @@ class NoteController(
                 gone = m.gone,
                 imageSheet = m.imageSheet,
                 uploading = m.uploading,
+                favorite = row?.favorite == true,
+                menuOpen = m.menuOpen,
+                menu = menu(row, m.ready),
+                dialog = m.dialog,
             )
         }.stateIn(scope, SharingStarted.Eagerly, NoteUiState())
 
@@ -239,7 +259,7 @@ class NoteController(
 
     private suspend fun onGone() {
         val m = model.value
-        if (m.ready && !m.gone && editor.text != lastSaved && m.row?.readonly != true) {
+        if (m.ready && !m.gone && !m.deleted && editor.text != lastSaved && m.row?.readonly != true) {
             saveNow()
         }
         model.update { it.copy(gone = true) }
@@ -252,7 +272,7 @@ class NoteController(
         saveLock.withLock {
             val m = model.value
             val text = editor.text
-            if (!m.ready || m.row?.readonly == true) return
+            if (!m.ready || m.row?.readonly == true || m.deleted) return
             if (text == lastSaved) {
                 model.update { it.copy(unsaved = false) }
                 return
@@ -429,6 +449,200 @@ class NoteController(
         }
     }
 
+    // ---- the ⋮ menu ----
+
+    /** The ⋮ button: the menu, unless a dialog is up. */
+    fun openMenu() {
+        val m = model.value
+        if (m.dialog != null || m.deleted) return
+        model.update { it.copy(menuOpen = true) }
+    }
+
+    fun dismissMenu() = model.update { it.copy(menuOpen = false) }
+
+    /** A tap on a menu item. Items ending in "…" open a dialog; the others act at once and confirm with a toast. */
+    fun onMenu(item: MenuItem) {
+        dismissMenu()
+        if (item !in menu(model.value.row, model.value.ready)) return
+        when (item) {
+            MenuItem.Favorite -> toggleFavorite()
+            MenuItem.Move -> openMove()
+            MenuItem.Rename -> openRename()
+            MenuItem.InsertImage -> openImageSheet()
+            MenuItem.Info -> openInfo()
+            MenuItem.Delete -> model.update { it.copy(dialog = NoteDialog.DeleteConfirm) }
+        }
+    }
+
+    /** Back: the menu closes, else the Move picker goes up one level (closing at the root), else the dialog closes. */
+    fun back(): Boolean {
+        val m = model.value
+        val dialog = m.dialog
+        when {
+            m.menuOpen -> {
+                dismissMenu()
+            }
+
+            dialog is NoteDialog.Move && !dialog.checking -> {
+                setDialog(
+                    dialog.picker.back()?.let {
+                        dialog.copy(picker = it, error = null, clashFolder = null)
+                    },
+                )
+            }
+
+            dialog != null -> {
+                dismissDialog()
+            }
+
+            else -> {
+                return false
+            }
+        }
+        return true
+    }
+
+    /** Closes the dialog; not while its server check runs (the button shows the progress). */
+    fun dismissDialog() {
+        val d = model.value.dialog
+        if ((d is NoteDialog.Rename && d.checking) || (d is NoteDialog.Move && d.checking)) return
+        setDialog(null)
+    }
+
+    private fun setDialog(dialog: NoteDialog?) = model.update { it.copy(dialog = dialog) }
+
+    private inline fun <reified T : NoteDialog> editDialog(crossinline change: (T) -> T) {
+        model.update { m -> (m.dialog as? T)?.let { m.copy(dialog = change(it)) } ?: m }
+    }
+
+    /** Favorite: toggled at once, with a toast. The row becomes DIRTY (a NEW one stays NEW) and is pushed. */
+    fun toggleFavorite() {
+        val row = model.value.row ?: return
+        if (row.readonly) return
+        val favorite = !row.favorite
+        scope.launch {
+            if (menuGateway?.setFavorite(favorite) == true) {
+                notify(if (favorite) Snack.FavoriteAdded else Snack.FavoriteRemoved)
+            }
+        }
+    }
+
+    // Rename…
+
+    fun openRename() {
+        val row = model.value.row ?: return
+        if (row.readonly) return
+        setDialog(NoteDialog.Rename(row.title))
+    }
+
+    fun onRenameText(text: String) =
+        editDialog<NoteDialog.Rename> {
+            if (it.checking) it else it.copy(text = text, error = null, clashFolder = null)
+        }
+
+    /** Flushes the editor, then renames; a clash or an invalid title keeps the dialog open with the error. */
+    fun confirmRename() {
+        val dialog = model.value.dialog as? NoteDialog.Rename ?: return
+        if (dialog.checking) return
+        val title = dialog.text.trim()
+        NameRules.validateTitle(title)?.let { e ->
+            setDialog(dialog.copy(error = e, clashFolder = null))
+            return
+        }
+        setDialog(dialog.copy(checking = true, error = null, clashFolder = null))
+        scope.launch {
+            saveNow()
+            val result = menuGateway?.rename(title) ?: RenameResult.Gone
+            editDialog<NoteDialog.Rename> { it.copy(checking = false) }
+            when (result) {
+                RenameResult.Done, RenameResult.Unchanged, RenameResult.ReadOnly, RenameResult.Gone -> setDialog(null)
+                is RenameResult.Clash -> editDialog<NoteDialog.Rename> { it.copy(text = title, clashFolder = result.folder) }
+                is RenameResult.Invalid -> editDialog<NoteDialog.Rename> { it.copy(error = result.reason) }
+            }
+        }
+    }
+
+    // Move…
+
+    fun openMove() {
+        val row = model.value.row ?: return
+        if (row.readonly) return
+        setDialog(NoteDialog.Move(FolderPickerState(row.folder)))
+    }
+
+    private fun editPicker(change: (FolderPickerState) -> FolderPickerState) =
+        editDialog<NoteDialog.Move> { if (it.checking) it else it.copy(picker = change(it.picker), error = null, clashFolder = null) }
+
+    fun pickerOpen(path: String) = editPicker { it.open(path) }
+
+    fun pickerNewFolder() = editPicker { it.startNewFolder() }
+
+    fun pickerNewFolderText(text: String) = editPicker { it.onNewFolder(text) }
+
+    fun pickerNewFolderDone() {
+        val picker = (model.value.dialog as? NoteDialog.Move)?.picker ?: return
+        val gateway = menuGateway ?: return
+        scope.launch {
+            val normalised = gateway.normaliseFolder(picker.typedPath())
+            editPicker { if (it == picker) it.withNewFolder(normalised) else it }
+        }
+    }
+
+    /** "Move here": flushes the editor, then moves into the picker's Folder; a clash keeps the picker open. */
+    fun confirmMove() {
+        val dialog = model.value.dialog as? NoteDialog.Move ?: return
+        if (dialog.checking) return
+        val folder = dialog.picker.path
+        setDialog(dialog.copy(checking = true, error = null, clashFolder = null))
+        scope.launch {
+            saveNow()
+            val result = menuGateway?.move(folder) ?: RenameResult.Gone
+            editDialog<NoteDialog.Move> { it.copy(checking = false) }
+            when (result) {
+                RenameResult.Done, RenameResult.Unchanged, RenameResult.ReadOnly, RenameResult.Gone -> setDialog(null)
+                is RenameResult.Clash -> editDialog<NoteDialog.Move> { it.copy(clashFolder = result.folder) }
+                is RenameResult.Invalid -> editDialog<NoteDialog.Move> { it.copy(error = result.reason, errorPath = folder) }
+            }
+        }
+    }
+
+    // Delete
+
+    /**
+     * The confirm dialog's Delete: flushes the editor, deletes (a never-pushed Note outright, any other one is
+     * pushed to the server's trash), and the screen pops with a toast on the app's snackbar.
+     */
+    fun confirmDelete() {
+        if (model.value.dialog != NoteDialog.DeleteConfirm || model.value.row?.readonly == true) return
+        setDialog(null)
+        scope.launch {
+            saveNow()
+            if (menuGateway?.delete() == true) {
+                model.update { it.copy(deleted = true, gone = true, menuOpen = false, dialog = null) }
+                notify(Snack.NoteDeleted)
+            }
+        }
+    }
+
+    // Note info
+
+    /** The Note info sheet, with the counts of the text as saved (the editor is flushed first). */
+    fun openInfo() {
+        scope.launch {
+            saveNow()
+            val info = menuGateway?.info() ?: return@launch
+            setDialog(NoteDialog.Info(info))
+        }
+    }
+
+    /** Note info's "Open conflict copy". */
+    fun openInfoConflict() {
+        val info = (model.value.dialog as? NoteDialog.Info)?.info ?: return
+        val (id, _) = info.conflictCopy ?: return
+        setDialog(null)
+        navigator.push(Route.Note(id))
+    }
+
     fun undo() = editor.undo()
 
     fun redo() = editor.redo()
@@ -554,6 +768,22 @@ class NoteController(
         }
 
     companion object {
+        /** The ⋮ menu of [row]: a read-only Note gets only Note info (the push skips read-only Notes). */
+        fun menu(
+            row: EditorDoc?,
+            ready: Boolean,
+        ): List<MenuItem> =
+            when {
+                row == null -> emptyList()
+
+                row.readonly -> listOf(MenuItem.Info)
+
+                // Insert image needs the text on the device.
+                !ready -> MenuItem.entries - MenuItem.InsertImage
+
+                else -> MenuItem.entries
+            }
+
         const val SAVE_DELAY_MS = 500L
         private const val LINK_BATCH = 40
     }

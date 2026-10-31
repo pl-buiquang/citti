@@ -6,6 +6,7 @@ import java.text.Collator
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
 
 /** Titles in the phone's locale, ignoring case and accents (`PRIMARY` strength). */
@@ -32,4 +33,17 @@ class JavaTimeRowDateFormatter(
         epochSec: Long,
         withYear: Boolean,
     ): String = (if (withYear) dayMonthYear else dayMonth).format(date(epochSec))
+}
+
+/** Note info's last modified: an absolute date and time ("31 Oct 2026, 17:33") in the device zone and locale. */
+class JavaTimeDateTimeFormatter(
+    locale: Locale = Locale.getDefault(),
+    private val zone: () -> ZoneId = ZoneId::systemDefault,
+) {
+    private val formatter =
+        DateTimeFormatter
+            .ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+            .withLocale(locale)
+
+    fun format(epochSec: Long): String = formatter.format(Instant.ofEpochSecond(epochSec).atZone(zone()))
 }

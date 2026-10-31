@@ -35,6 +35,14 @@ object TestTags {
     const val FOLDER_PICKER_NEW_FOLDER = "folderPicker.newFolder"
     const val FOLDER_PICKER_CONFIRM = "folderPicker.confirm"
 
+    /** The Note ⋮ menu: the button, the menu, the dialogs' fields and confirm buttons, the Note info sheet. */
+    const val NOTE_MENU_BUTTON = "note.menuButton"
+    const val NOTE_MENU = "note.menu"
+    const val RENAME_FIELD = "rename.field"
+    const val RENAME_CONFIRM = "rename.confirm"
+    const val DELETE_CONFIRM = "delete.confirm"
+    const val NOTE_INFO = "note.info"
+
     /** Insert image: the toolbar button, the source sheet and its rows, the upload chip. */
     const val TOOLBAR_IMAGE = "toolbar.image"
     const val IMAGE_SHEET = "image.sheet"

@@ -9,10 +9,16 @@ import app.citti.core.markdown.TextOps
 import app.citti.core.markdown.ToolbarAction
 import app.citti.core.markdown.apply
 import app.citti.core.note.EditorDoc
+import app.citti.core.note.InfoState
+import app.citti.core.note.InvalidNameException
 import app.citti.core.note.LinkTarget
+import app.citti.core.note.NameError
 import app.citti.core.note.NoteBadge
 import app.citti.core.note.NoteEditor.SaveResult
+import app.citti.core.note.NoteInfo
+import app.citti.core.note.RenameResult
 import app.citti.core.sync.SyncStatus
+import app.citti.ui.components.MenuItem
 import app.citti.ui.components.Snack
 import app.citti.ui.image.ImageUpload
 import app.citti.ui.image.LoadedImage
@@ -97,7 +103,50 @@ private fun doc(
     readonly: Boolean = false,
     pending: Boolean = false,
     copy: Pair<Long, String>? = null,
-) = EditorDoc(text, etag, "Title", "work", readonly, if (copy != null) NoteBadge.Conflict else null, copy, pending)
+    favorite: Boolean = false,
+) = EditorDoc(text, etag, "Title", "work", readonly, if (copy != null) NoteBadge.Conflict else null, copy, pending, favorite = favorite)
+
+/** The ⋮ menu's data side; [log] records the calls in order, with the gateway's saves, to check the flush order. */
+private class FakeMenu(
+    private val gateway: FakeGateway,
+) : NoteMenuGateway {
+    val log = mutableListOf<String>()
+    var renameResult: (String) -> RenameResult = { RenameResult.Done }
+    var renameWait: CompletableDeferred<Unit>? = null
+    var moveResult: (String) -> RenameResult = { RenameResult.Done }
+    var info: NoteInfo? = null
+
+    override suspend fun setFavorite(favorite: Boolean): Boolean {
+        log += "favorite $favorite"
+        gateway.row.value = gateway.row.value?.copy(favorite = favorite)
+        return true
+    }
+
+    override suspend fun rename(title: String): RenameResult {
+        log += "rename $title after ${gateway.saves.size} saves"
+        renameWait?.await()
+        return renameResult(title)
+    }
+
+    override suspend fun move(folder: String): RenameResult {
+        log += "move $folder after ${gateway.saves.size} saves"
+        return moveResult(folder)
+    }
+
+    override suspend fun delete(): Boolean {
+        log += "delete after ${gateway.saves.size} saves"
+        gateway.row.value = null
+        return true
+    }
+
+    override suspend fun info(): NoteInfo? {
+        log += "info after ${gateway.saves.size} saves"
+        return info
+    }
+
+    override suspend fun normaliseFolder(path: String): Result<String> =
+        if (path.contains("..")) Result.failure(InvalidNameException(NameError.DotSegment)) else Result.success(path.trim('/'))
+}
 
 /** A view that keeps its text in a string, like the platform view would. */
 private class FakeHost(
@@ -170,6 +219,7 @@ class NoteControllerTest {
         status: SyncStatus? = SyncStatus.Idle(null, null),
         scope: CoroutineScope = backgroundScope,
         imageUpload: ImageUpload? = null,
+        menu: ((FakeGateway) -> NoteMenuGateway)? = null,
         setup: FakeGateway.() -> Unit = {},
     ): Fixture {
         val gateway =
@@ -192,6 +242,7 @@ class NoteControllerTest {
                 clockMs = { testScheduler.currentTime },
                 parseDispatcher = dispatcher,
                 imageUpload = imageUpload,
+                menuGateway = menu?.invoke(gateway),
             )
         runCurrent()
         return Fixture(this, gateway, navigator, snacks, controller)
@@ -674,5 +725,241 @@ class NoteControllerTest {
             assertEquals(listOf<Triple<Int, String, String?>>(Triple(7, "![](IMG_1.jpg)", "e1")), f.gateway.inserts)
             assertEquals("> first\n![](IMG_1.jpg)\nsecond", f.gateway.saved)
             assertEquals(1, f.gateway.saves.size)
+        }
+
+    // ---- the ⋮ menu ----
+
+    /** The state once the controller's flows ran. */
+    private fun TestScope.ui(f: Fixture): NoteUiState {
+        runCurrent()
+        return f.controller.state.value
+    }
+
+    private fun TestScope.openWithMenu(row: EditorDoc? = doc("first\nsecond")): Pair<Fixture, FakeMenu> {
+        var menu: FakeMenu? = null
+        val f = open(row, menu = { gateway -> FakeMenu(gateway).also { menu = it } })
+        return f to assertNotNull(menu)
+    }
+
+    @Test
+    fun theMenuHasEveryItemAndAReadOnlyNoteOnlyNoteInfo() =
+        runTest {
+            val (f, _) = openWithMenu()
+            assertEquals(MenuItem.entries, ui(f).menu)
+            val (ro, menu) = openWithMenu(doc("x", readonly = true))
+            assertEquals(listOf(MenuItem.Info), ui(ro).menu)
+            // A hidden item does nothing even when asked for.
+            ro.controller.onMenu(MenuItem.Delete)
+            ro.controller.onMenu(MenuItem.Rename)
+            ro.controller.onMenu(MenuItem.Favorite)
+            runCurrent()
+            assertNull(ui(ro).dialog)
+            assertTrue(menu.log.isEmpty())
+        }
+
+    @Test
+    fun aNoteWithoutItsTextHasNoInsertImage() =
+        runTest {
+            val (f, _) = openWithMenu(doc(null))
+            assertEquals(MenuItem.entries - MenuItem.InsertImage, ui(f).menu)
+        }
+
+    @Test
+    fun theMenuOpensAndAnItemClosesIt() =
+        runTest {
+            val (f, _) = openWithMenu()
+            f.controller.openMenu()
+            assertTrue(ui(f).menuOpen)
+            f.controller.onMenu(MenuItem.InsertImage)
+            assertFalse(ui(f).menuOpen)
+            assertTrue(ui(f).imageSheet)
+            f.controller.dismissImageSheet()
+            f.controller.openMenu()
+            assertTrue(f.controller.back())
+            assertFalse(ui(f).menuOpen)
+            assertFalse(f.controller.back())
+        }
+
+    @Test
+    fun favoriteTogglesAtOnceWithAToast() =
+        runTest {
+            val (f, menu) = openWithMenu()
+            assertFalse(ui(f).favorite)
+            f.controller.onMenu(MenuItem.Favorite)
+            runCurrent()
+            assertTrue(ui(f).favorite)
+            f.controller.onMenu(MenuItem.Favorite)
+            runCurrent()
+            assertEquals(listOf("favorite true", "favorite false"), menu.log)
+            assertEquals(listOf<Snack>(Snack.FavoriteAdded, Snack.FavoriteRemoved), f.snacks)
+        }
+
+    @Test
+    fun renameFlushesTheEditorFirstThenClosesTheDialog() =
+        runTest {
+            val (f, menu) = openWithMenu()
+            f.attach()
+            f.host.type("x")
+            f.controller.onMenu(MenuItem.Rename)
+            assertEquals(NoteDialog.Rename("Title"), ui(f).dialog)
+            f.controller.onRenameText("  New title ")
+            f.controller.confirmRename()
+            runCurrent()
+            assertEquals(listOf("rename New title after 1 saves"), menu.log)
+            assertEquals(
+                "first\nsecondx",
+                f.gateway.saves
+                    .single()
+                    .first,
+            )
+            assertNull(ui(f).dialog)
+        }
+
+    @Test
+    fun whileTheRenameCheckRunsTheDialogShowsProgressAndIgnoresTapsAndDismiss() =
+        runTest {
+            val (f, menu) = openWithMenu()
+            menu.renameWait = CompletableDeferred()
+            f.controller.onMenu(MenuItem.Rename)
+            f.controller.onRenameText("New")
+            f.controller.confirmRename()
+            f.controller.confirmRename()
+            f.controller.dismissDialog()
+            f.controller.onRenameText("Other")
+            assertEquals(NoteDialog.Rename("New", checking = true), ui(f).dialog)
+            menu.renameWait?.complete(Unit)
+            assertNull(ui(f).dialog)
+            assertEquals(1, menu.log.size)
+        }
+
+    @Test
+    fun aRenameClashKeepsTheDialogOpenWithTheError() =
+        runTest {
+            val (f, menu) = openWithMenu()
+            menu.renameResult = { RenameResult.Clash("work") }
+            f.controller.onMenu(MenuItem.Rename)
+            f.controller.onRenameText("Taken")
+            f.controller.confirmRename()
+            runCurrent()
+            assertEquals(NoteDialog.Rename("Taken", clashFolder = "work"), ui(f).dialog)
+            // Typing clears the error.
+            f.controller.onRenameText("Taken 2")
+            assertEquals(NoteDialog.Rename("Taken 2"), ui(f).dialog)
+        }
+
+    @Test
+    fun anInvalidTitleIsRefusedBeforeAnyCheck() =
+        runTest {
+            val (f, menu) = openWithMenu()
+            f.controller.onMenu(MenuItem.Rename)
+            f.controller.onRenameText("a/b")
+            f.controller.confirmRename()
+            runCurrent()
+            assertEquals(NoteDialog.Rename("a/b", error = NameError.Slash), ui(f).dialog)
+            f.controller.onRenameText(" ")
+            f.controller.confirmRename()
+            runCurrent()
+            assertEquals(NameError.Blank, (ui(f).dialog as NoteDialog.Rename).error)
+            assertTrue(menu.log.isEmpty())
+        }
+
+    @Test
+    fun moveWalksThePickerAndMovesIntoItsFolder() =
+        runTest {
+            val (f, menu) = openWithMenu()
+            f.controller.onMenu(MenuItem.Move)
+            assertEquals("work", (ui(f).dialog as NoteDialog.Move).picker.path)
+            f.controller.pickerOpen("projects")
+            f.controller.pickerNewFolder()
+            f.controller.pickerNewFolderText("citti/")
+            f.controller.pickerNewFolderDone()
+            runCurrent()
+            assertEquals("projects/citti", (ui(f).dialog as NoteDialog.Move).picker.path)
+            f.controller.confirmMove()
+            runCurrent()
+            assertEquals(listOf("move projects/citti after 0 saves"), menu.log)
+            assertNull(ui(f).dialog)
+        }
+
+    @Test
+    fun aMoveClashOrARefusedFolderKeepsThePickerOpen() =
+        runTest {
+            val (f, menu) = openWithMenu()
+            menu.moveResult = { if (it == "archive") RenameResult.Clash("archive") else RenameResult.Invalid(NameError.Unsynced) }
+            f.controller.onMenu(MenuItem.Move)
+            f.controller.pickerOpen("archive")
+            f.controller.confirmMove()
+            runCurrent()
+            assertEquals("archive", (ui(f).dialog as NoteDialog.Move).clashFolder)
+            f.controller.pickerOpen("private")
+            assertNull((ui(f).dialog as NoteDialog.Move).clashFolder)
+            f.controller.confirmMove()
+            runCurrent()
+            val d = ui(f).dialog as NoteDialog.Move
+            assertEquals(NameError.Unsynced, d.error)
+            assertEquals("private", d.errorPath)
+        }
+
+    @Test
+    fun backInTheMovePickerGoesUpThenCloses() =
+        runTest {
+            val (f, _) = openWithMenu()
+            f.controller.onMenu(MenuItem.Move)
+            f.controller.pickerOpen("a/b")
+            assertTrue(f.controller.back())
+            assertEquals("a", (ui(f).dialog as NoteDialog.Move).picker.path)
+            f.controller.back()
+            f.controller.back()
+            assertNull(ui(f).dialog)
+        }
+
+    @Test
+    fun deleteAsksFirstThenFlushesDeletesAndPopsWithAToast() =
+        runTest {
+            val (f, menu) = openWithMenu()
+            f.attach()
+            f.host.type("x")
+            f.controller.onMenu(MenuItem.Delete)
+            assertEquals(NoteDialog.DeleteConfirm, ui(f).dialog)
+            assertTrue(menu.log.isEmpty())
+            f.controller.confirmDelete()
+            runCurrent()
+            assertEquals(listOf("delete after 1 saves"), menu.log)
+            val state = ui(f)
+            assertTrue(state.gone)
+            assertNull(state.dialog)
+            assertEquals(listOf<Snack>(Snack.NoteDeleted), f.snacks)
+            // Nothing is saved after the delete: no Conflict copy of a Note the user deleted.
+            f.host.type("y")
+            f.controller.onLeave()
+            advanceTimeBy(1_000)
+            assertEquals(1, f.gateway.saves.size)
+        }
+
+    @Test
+    fun cancellingTheDeleteDeletesNothing() =
+        runTest {
+            val (f, menu) = openWithMenu()
+            f.controller.onMenu(MenuItem.Delete)
+            f.controller.dismissDialog()
+            f.controller.confirmDelete()
+            runCurrent()
+            assertTrue(menu.log.isEmpty())
+            assertFalse(ui(f).gone)
+        }
+
+    @Test
+    fun noteInfoShowsTheSheetAndOpensTheConflictCopy() =
+        runTest {
+            val (f, menu) = openWithMenu()
+            val info =
+                NoteInfo("Title", "work", 0, 12, 2, 12, 2, InfoState.Synced, false, false, null, 9L to "Title (conflict 2026-10-31)")
+            menu.info = info
+            f.controller.onMenu(MenuItem.Info)
+            runCurrent()
+            assertEquals(NoteDialog.Info(info), ui(f).dialog)
+            f.controller.openInfoConflict()
+            assertNull(ui(f).dialog)
+            assertEquals(Route.Note(9), f.navigator.top)
         }
 }
