@@ -46,6 +46,9 @@ interface NoteGateway {
      */
     fun dropped(): Flow<Long> = emptyFlow()
 
+    /** Stores the Reading position: the source line at the top of the screen. Local only. */
+    suspend fun setViewLine(line: Int) {}
+
     /** The text last written to the row. */
     fun savedText(): String?
 

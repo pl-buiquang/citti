@@ -60,6 +60,8 @@ private class FakeGateway : NoteGateway {
     var saveResult: (String, String?) -> SaveResult = { _, _ -> SaveResult.Saved }
     var saved: String? = null
     val targets = mutableMapOf<LinkRef, LinkTarget>()
+    val viewLines = mutableListOf<Int>()
+    val log = mutableListOf<String>()
 
     override fun observe(): Flow<EditorDoc?> = row
 
@@ -72,7 +74,13 @@ private class FakeGateway : NoteGateway {
         baseEtag: String?,
     ): SaveResult {
         saves += text to baseEtag
+        log += "save"
         return saveResult(text, baseEtag)
+    }
+
+    override suspend fun setViewLine(line: Int) {
+        viewLines += line
+        log += "viewLine $line"
     }
 
     override suspend fun toggleTask(
@@ -261,6 +269,94 @@ class NoteControllerTest {
         runCurrent()
         return Fixture(this, gateway, navigator, snacks, controller)
     }
+
+    @Test
+    fun aStartLineOpensWithTheCaretAtThatLineAndScrollsThere() =
+        runTest {
+            val f = open(row = doc("zero\none\ntwo\nthree"), route = Route.Note(1, startLine = 2))
+            assertEquals(9, f.controller.editor.selection.start)
+            assertEquals(9, f.controller.editor.firstVisibleOffset())
+            assertEquals(9, f.controller.state.value.startOffset)
+        }
+
+    @Test
+    fun aStartLinePastTheEndClampsToTheLastLine() =
+        runTest {
+            val f = open(row = doc("zero\none\ntwo"), route = Route.Note(1, startLine = 99))
+            assertEquals(9, f.controller.editor.selection.start)
+        }
+
+    @Test
+    fun aReadOnlyNoteWithAStartLineKeepsItsOffsetForThePreview() =
+        runTest {
+            val f = open(row = doc("# a\n\nbody\n\n## b", readonly = true), route = Route.Note(1, startLine = 4))
+            assertTrue(f.controller.state.value.preview)
+            assertEquals(
+                f.controller.editor.text
+                    .indexOf("## b"),
+                f.controller.state.value.startOffset,
+            )
+        }
+
+    @Test
+    fun theFirstReportedLineDropsTheStartOffset() =
+        runTest {
+            val f = open(row = doc("a\nb\nc"), route = Route.Note(1, startLine = 1))
+            f.controller.onViewLine(2)
+            runCurrent()
+            assertNull(f.controller.state.value.startOffset)
+        }
+
+    @Test
+    fun aStartLineIsIgnoredWithASearchQuery() =
+        runTest {
+            val f = open(row = doc("a\nb\nc"), route = Route.Note(1, searchQuery = "b", startLine = 1))
+            assertEquals(5, f.controller.editor.selection.start)
+            assertNull(f.controller.state.value.startOffset)
+        }
+
+    @Test
+    fun leavingWritesTheReadingPositionOnceAfterTheTextFlush() =
+        runTest {
+            val f = open(row = doc("a\nb\nc"))
+            f.attach()
+            f.host.type("!")
+            f.controller.onViewLine(1)
+            f.controller.onLeave()
+            f.controller.onLeave()
+            runCurrent()
+            assertEquals(listOf("save", "viewLine 1"), f.gateway.log)
+        }
+
+    @Test
+    fun leavingWritesNothingWhenThePositionIsUnchangedOrNeverReported() =
+        runTest {
+            val f = open(row = doc("a\nb\nc"), route = Route.Note(1, startLine = 2))
+            f.controller.onLeave()
+            runCurrent()
+            f.controller.onViewLine(2)
+            f.controller.onLeave()
+            runCurrent()
+            assertEquals(emptyList(), f.gateway.viewLines)
+        }
+
+    @Test
+    fun leavingWhileLoadingWritesNothing() =
+        runTest {
+            val f = open(row = doc(null))
+            f.controller.onViewLine(3)
+            f.controller.onLeave()
+            runCurrent()
+            assertEquals(emptyList(), f.gateway.viewLines)
+        }
+
+    @Test
+    fun withoutAStartLineTheCaretStillOpensAtTheEnd() =
+        runTest {
+            val f = open(row = doc("a\nb"))
+            assertEquals(3, f.controller.editor.selection.start)
+            assertNull(f.controller.state.value.startOffset)
+        }
 
     @Test
     fun opensInEditModeWithTheCaretAtTheEnd() =

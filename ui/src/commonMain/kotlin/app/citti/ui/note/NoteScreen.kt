@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -73,7 +74,10 @@ import app.citti.ui.resources.save_syncing
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.debounce
 import org.jetbrains.compose.resources.stringResource
 
 class NoteActions(
@@ -99,7 +103,11 @@ class NoteActions(
     /** The Template missing banner's "Settings" and "Dismiss". */
     val onOpenSettings: () -> Unit = {},
     val onDismissNotice: () -> Unit = {},
+    /** The source line at the top of the screen, once scrolling settles: the Reading position. */
+    val onViewLine: (Int) -> Unit = {},
 )
+
+private const val VIEW_LINE_MS = 300L
 
 /**
  * The Note screen ([design-brief] §5, §6): top bar (←, title and save indicator, ↶ ↷ while the editor has focus,
@@ -108,6 +116,7 @@ class NoteActions(
  * toolbar above the keyboard while the editor has focus. [previewListState] is owned by the caller so the reading
  * position survives the toggle. [images] loads the Images of the Preview (null: a box with the file name).
  */
+@OptIn(FlowPreview::class)
 @Composable
 fun NoteScreen(
     state: NoteUiState,
@@ -126,18 +135,43 @@ fun NoteScreen(
     var scrollPreviewTo by remember { mutableStateOf<Int?>(null) }
     val doc = state.doc
     LaunchedEffect(doc, state.preview) {
-        val offset = scrollPreviewTo
+        // Or the offset of Route.Note.startLine, when the Note was opened at a line.
+        val offset = scrollPreviewTo ?: state.startOffset
         if (state.preview && doc != null && offset != null) {
             previewListState.scrollToItem(doc.blockIndexAt(offset))
             scrollPreviewTo = null
+            actions.onViewLine(editor.document.lineOf(offset.coerceIn(0, editor.document.length)))
         }
+    }
+    // The Reading position. Edit mode has no scroll event in common code, so the top line is sampled.
+    LaunchedEffect(state.preview, state.loading) {
+        if (state.preview || state.loading) return@LaunchedEffect
+        var last = -1
+        while (true) {
+            delay(VIEW_LINE_MS)
+            val line = editor.document.lineOf(editor.firstVisibleOffset().coerceIn(0, editor.document.length))
+            if (line != last) {
+                last = line
+                actions.onViewLine(line)
+            }
+        }
+    }
+    LaunchedEffect(state.preview, doc) {
+        if (!state.preview || doc == null) return@LaunchedEffect
+        snapshotFlow { previewListState.firstVisibleItemIndex }
+            .debounce(VIEW_LINE_MS)
+            .collect { index -> doc.blocks.getOrNull(index)?.let { actions.onViewLine(editor.document.lineOf(it.start)) } }
     }
     val toggle = {
         if (state.preview) {
             // Preview -> Edit: the editor scrolls to the source line of the first visible block.
-            doc?.blocks?.getOrNull(previewListState.firstVisibleItemIndex)?.let { editor.scrollTo(it.start) }
+            doc?.blocks?.getOrNull(previewListState.firstVisibleItemIndex)?.let {
+                editor.scrollTo(it.start)
+                actions.onViewLine(editor.document.lineOf(it.start))
+            }
         } else {
             scrollPreviewTo = editor.firstVisibleOffset()
+            actions.onViewLine(editor.document.lineOf(scrollPreviewTo!!.coerceIn(0, editor.document.length)))
         }
         actions.onTogglePreview()
     }

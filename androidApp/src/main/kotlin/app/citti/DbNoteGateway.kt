@@ -19,13 +19,15 @@ import kotlinx.coroutines.withContext
 /** The [NoteGateway] of one Note over the local database; every call runs on `Dispatchers.IO`. */
 class DbNoteGateway(
     private val db: CittiDatabase,
-    localId: Long,
+    private val localId: Long,
     private val editor: NoteEditor,
     private val links: LinkResolver,
     /** `SyncEngine.fetchContent` of this Note; false while signed out. */
     private val fetchContent: suspend () -> Boolean = { false },
     /** `SyncEngine.events`' drops of this Note, as the server Note's local id; empty while signed out. */
     private val dropped: () -> Flow<Long> = { emptyFlow() },
+    /** Called after the Reading position was stored (the widgets redraw). */
+    private val onViewLine: () -> Unit = {},
 ) : NoteGateway {
     private val query = db.noteQueries.selectForEditor(localId)
 
@@ -56,6 +58,11 @@ class DbNoteGateway(
     override suspend fun fetchText(): Boolean = withContext(Dispatchers.IO) { fetchContent() }
 
     override fun dropped(): Flow<Long> = dropped.invoke()
+
+    override suspend fun setViewLine(line: Int) {
+        withContext(Dispatchers.IO) { db.noteQueries.setViewLine(line.toLong(), localId) }
+        onViewLine()
+    }
 
     override fun savedText(): String? = editor.savedText
 

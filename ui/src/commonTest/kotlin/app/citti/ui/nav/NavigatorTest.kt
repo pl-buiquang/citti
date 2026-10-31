@@ -115,6 +115,21 @@ class NavigatorTest {
     }
 
     @Test
+    fun aStartLineRoundTripsAndIsPartOfTheSameEntry() {
+        val nav = Navigator(listOf(Route.List(), Route.Note(1, startLine = 5)))
+        assertEquals(nav.stack.value, Navigator.decode(nav.encode()))
+        assertEquals(Route.Note(1).entryId, Route.Note(1, startLine = 5).entryId)
+    }
+
+    @Test
+    fun anM6StackWithoutStartLineDecodes() {
+        val m6 =
+            "[{\"type\":\"app.citti.ui.nav.Route.List\"}," +
+                "{\"type\":\"app.citti.ui.nav.Route.Note\",\"localId\":1,\"preview\":true}]"
+        assertEquals(listOf(Route.List(), Route.Note(1, preview = true)), Navigator.decode(m6))
+    }
+
+    @Test
     fun anM5StackWithoutNoticeDecodes() {
         val m5 =
             "[{\"type\":\"app.citti.ui.nav.Route.Tree\",\"folder\":\"work\"}," +

@@ -46,6 +46,8 @@ sealed interface Route {
         val searchQuery: String? = null,
         val focus: Boolean = false,
         val notice: NoteNotice? = null,
+        /** Opens scrolled so this source line (0-based) is at the top, caret at its start, keyboard closed (a widget tap). */
+        val startLine: Int? = null,
     ) : Route
 
     /** The full-screen Image viewer: [link] is the Image link as written in the Note [noteLocalId]. */

@@ -3,6 +3,7 @@ package app.citti.ui.note
 import app.citti.core.api.ApiError
 import app.citti.core.dav.UploadResult
 import app.citti.core.markdown.Doc
+import app.citti.core.markdown.MarkdownDocument
 import app.citti.core.markdown.ObsidianMarkdown
 import app.citti.core.markdown.Selection
 import app.citti.core.markdown.Task
@@ -97,6 +98,8 @@ data class NoteUiState(
     val dialog: NoteDialog? = null,
     /** The route's notice: a new Daily note whose Template was not found (a banner until dismissed). */
     val notice: NoteNotice? = null,
+    /** `Route.Note.startLine` as a source offset, until the first scroll: the Preview scrolls to its block. */
+    val startOffset: Int? = null,
 )
 
 /**
@@ -132,6 +135,13 @@ class NoteController(
     private val droppedDaily: suspend (folder: String, title: String) -> DroppedDaily? = { _, _ -> null },
 ) {
     private val localId = route.localId
+
+    // `Route.Note.startLine`, applied once at the first load (never together with a search query).
+    private val startLine: Int? = route.startLine?.takeIf { route.searchQuery == null }
+
+    // The Reading position: the last top source line the screen reported, and the one already stored.
+    private var viewLine: Int? = null
+    private var persistedLine: Int? = startLine
     private val route = MutableStateFlow(route)
 
     /** The text of the Note: owned here, so it survives the view and its recomposition. */
@@ -155,6 +165,8 @@ class NoteController(
         val dialog: NoteDialog? = null,
         /** Deleted from the ⋮ menu: nothing is saved any more, and the screen pops. */
         val deleted: Boolean = false,
+        /** The source offset of `Route.Note.startLine`, cleared by the first [onViewLine]. */
+        val startOffset: Int? = null,
     )
 
     private val model = MutableStateFlow(Model())
@@ -197,6 +209,7 @@ class NoteController(
                 menu = menu(row, m.ready),
                 dialog = m.dialog,
                 notice = r.notice,
+                startOffset = m.startOffset,
             )
         }.stateIn(scope, SharingStarted.Eagerly, NoteUiState())
 
@@ -252,11 +265,13 @@ class NoteController(
         when {
             !before.ready || before.reloading -> {
                 // The first text, or the server's text after a refused edit.
-                val caret = if (before.ready) caretAfterReload(editor.text, editor.selection.start, text) else text.length
+                val start = if (before.ready) null else startLine?.let { startOffsetOf(text, it) }
+                val caret = start ?: if (before.ready) caretAfterReload(editor.text, editor.selection.start, text) else text.length
                 editor.replaceAll(text, caret)
+                if (start != null) editor.scrollTo(start)
                 lastSaved = text
                 baseEtag = row.baseEtag
-                model.update { it.copy(row = row, ready = true, reloading = false, unsaved = false) }
+                model.update { it.copy(row = row, ready = true, reloading = false, unsaved = false, startOffset = start ?: it.startOffset) }
                 if (before.ready && effectivePreviewNow(row)) parse()
             }
 
@@ -382,7 +397,35 @@ class NoteController(
 
     /** Flushes the text now, outside the entry's scope, so leaving the screen never drops the last 500 ms. */
     fun onLeave() {
-        leaveScope.launch { saveNow() }
+        leaveScope.launch {
+            saveNow()
+            persistViewLine()
+        }
+    }
+
+    /** The screen reports the source line at its top once scrolling settles (Edit and Preview mode alike). */
+    fun onViewLine(line: Int) {
+        viewLine = line
+        if (model.value.startOffset != null) model.update { it.copy(startOffset = null) }
+    }
+
+    /** Writes the Reading position once: only when it changed since it was stored, and never while loading. */
+    private suspend fun persistViewLine() {
+        saveLock.withLock {
+            val line = viewLine
+            if (line == null || line == persistedLine || !model.value.ready) return
+            persistedLine = line
+            gateway.setViewLine(line)
+        }
+    }
+
+    /** The offset where source line [line] starts in [text], the line clamped to the last one. */
+    private fun startOffsetOf(
+        text: String,
+        line: Int,
+    ): Int {
+        val doc = MarkdownDocument(text)
+        return doc.lineStart(line.coerceIn(0, doc.lineCount - 1))
     }
 
     // ---- modes ----
