@@ -94,7 +94,7 @@
     <string name="uploading_image">Uploading image…</string>
     <string name="upload_cancel">Cancel</string>
     <string name="upload_offline">No connection. The image was not inserted.</string>
-    <string name="upload_failed">Upload failed: %s</string>
+    <string name="upload_failed">Upload failed: %1$s</string>
 
     <!-- Sync status line and banners -->
     <string name="sync_syncing">Syncing</string>
@@ -165,13 +165,13 @@
     <!-- New note, title clash, folder picker -->
     <string name="new_note">New note</string>
     <string name="new_note_title_hint">Title</string>
-    <string name="new_note_folder">Folder: %s</string>
+    <string name="new_note_folder">Folder: %1$s</string>
     <string name="change">Change</string>
     <string name="create">Create</string>
     <string name="action_cancel">Cancel</string>
     <string name="title_clash_title">A note with this title exists</string>
     <string name="title_clash_open">Open existing</string>
-    <string name="title_clash_create">Create “%s”</string>
+    <string name="title_clash_create">Create “%1$s”</string>
     <string name="choose_folder">Choose folder</string>
     <string name="choose">Choose</string>
     <string name="new_folder">New folder…</string>
@@ -180,7 +180,7 @@
     <string name="name_error_slash">Can't contain / or \\</string>
     <string name="name_error_chars">Can't contain : * ? \" &lt; &gt; |</string>
     <string name="name_error_dot">Can't start with a dot</string>
-    <string name="folder_error_unsynced">“%s” is an Unsynced folder</string>
+    <string name="folder_error_unsynced">“%1$s” is an Unsynced folder</string>
     <string name="folder_error_invalid">A folder can't be named . or ..</string>
 
     <string name="image_missing">Image not found</string>
@@ -206,7 +206,7 @@
     <string name="menu_insert_image">Insert image</string>
     <string name="menu_note_info">Note info</string>
     <string name="menu_delete">Delete</string>
-    <string name="delete_title">Delete “%s”?</string>
+    <string name="delete_title">Delete “%1$s”?</string>
     <string name="delete_body">It moves to the server's trash.</string>
     <string name="toast_deleted">Deleted</string>
     <string name="rename_title">Rename</string>
@@ -229,7 +229,7 @@
     <string name="info_readonly">Read-only</string>
     <string name="info_yes">Yes</string>
     <string name="info_no">No</string>
-    <string name="info_hidden_in">In Hidden folder %s</string>
+    <string name="info_hidden_in">In Hidden folder %1$s</string>
     <string name="info_open_conflict">Open conflict copy</string>
     <string name="size_bytes">%1$d B</string>
     <string name="size_kb">%1$s KB</string>
