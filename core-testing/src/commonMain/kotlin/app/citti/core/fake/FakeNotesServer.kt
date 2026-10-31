@@ -47,6 +47,12 @@ enum class Endpoint {
     CLOUD_USER,
     DAV_GET,
 
+    /** WebDAV `PUT` of a file; `If-None-Match: *` gives 412 on an existing one, a missing parent folder 409. */
+    DAV_PUT,
+
+    /** WebDAV `MKCOL`: 201, 405 when something is there, 409 when the parent folder is missing. */
+    DAV_MKCOL,
+
     /** `POST /index.php/login/v2`: starts Login Flow v2. */
     LOGIN_START,
 
@@ -160,6 +166,29 @@ class FakeNotesServer(
     fun removeFile(vaultPath: String) {
         locked { files.remove("$notesPath/$vaultPath") }
     }
+
+    /** The bytes stored at [vaultPath] (seeded or uploaded), or null. */
+    fun file(vaultPath: String): ByteArray? = locked { files["$notesPath/$vaultPath"]?.first }
+
+    /** Folders made with `MKCOL` or [addFolder]. A folder also exists when a file or a Note's category is in it. */
+    private val folders = HashSet<String>()
+
+    fun addFolder(vaultPath: String) {
+        locked { folders += "$notesPath/${vaultPath.trim('/')}" }
+    }
+
+    /** True when [vaultPath] is a folder of the Vault (the root `""` always is). */
+    fun hasFolder(vaultPath: String): Boolean = locked { folderExists(if (vaultPath.isEmpty()) notesPath else "$notesPath/$vaultPath") }
+
+    /** [key] is a path under the user's files (`Notes/media`): the Notes folder and its ancestors always exist. */
+    private fun folderExists(key: String): Boolean =
+        key.isEmpty() ||
+            key == notesPath ||
+            notesPath.startsWith("$key/") ||
+            key in folders ||
+            files.keys.any { it.startsWith("$key/") } ||
+            folders.any { it.startsWith("$key/") } ||
+            noteMap.values.any { n -> n.category.isNotEmpty() && "$notesPath/${n.category}".let { it == key || it.startsWith("$key/") } }
 
     fun fileEtag(vaultPath: String): String? = locked { files["$notesPath/$vaultPath"]?.let { hash("${it.first.size}/${it.second}") } }
 
@@ -316,7 +345,10 @@ class FakeNotesServer(
             request.url.parameters
                 .entries()
                 .associate { it.key to it.value.first() }
-        val headers = request.headers.entries().associate { it.key to it.value }
+        // Ktor keeps the body's Content-Type on the body, not in the headers; record it like a header.
+        val headers =
+            request.headers.entries().associate { it.key to it.value } +
+                listOfNotNull(request.body.contentType?.let { "Content-Type" to listOf(it.toString()) })
         val body = bodyText(request)
 
         fun record(status: Int?) {
@@ -393,6 +425,14 @@ class FakeNotesServer(
 
             rest.startsWith(DAV_FILES) && method == HttpMethod.Get -> {
                 Endpoint.DAV_GET
+            }
+
+            rest.startsWith(DAV_FILES) && method == HttpMethod.Put -> {
+                Endpoint.DAV_PUT
+            }
+
+            rest.startsWith(DAV_FILES) && method.value == "MKCOL" -> {
+                Endpoint.DAV_MKCOL
             }
 
             noteId != null -> {
@@ -516,6 +556,14 @@ class FakeNotesServer(
                 davGet(request, path)
             }
 
+            Endpoint.DAV_PUT -> {
+                davPut(request, path)
+            }
+
+            Endpoint.DAV_MKCOL -> {
+                davMkcol(path)
+            }
+
             Endpoint.LOGIN_START -> {
                 val origin = request.url.protocolWithAuthority + basePath
                 login = LoginState.Pending
@@ -604,6 +652,40 @@ class FakeNotesServer(
         if (request.headers["If-None-Match"] == etag) return respond(ByteArray(0), HttpStatusCode.NotModified, headers.build())
         headers.name("Content-Type", "application/octet-stream")
         return respond(bytes, HttpStatusCode.OK, headers.build())
+    }
+
+    /** The file key (`Notes/media/a.png`) of a DAV URL, or null for another user. */
+    private fun davKey(path: String): String? {
+        val rest = path.removePrefix(basePath).removePrefix(DAV_FILES)
+        val user = percentDecodeForFake(rest.substringBefore('/'))
+        if (user != userId) return null
+        return percentDecodeForFake(rest.substringAfter('/', "")).trimEnd('/')
+    }
+
+    /** Like Nextcloud: 201 with an `OC-ETag` and no plain `ETag` (real-server check 4 of M5). */
+    private fun MockRequestHandleScope.davPut(
+        request: HttpRequestData,
+        path: String,
+    ): HttpResponseData {
+        val key = davKey(path) ?: return text(HttpStatusCode.NotFound, "no such user")
+        val existing = files[key]
+        if (existing != null && request.headers["If-None-Match"] == "*") return text(HttpStatusCode.PreconditionFailed, "exists")
+        if (key in folders) return text(HttpStatusCode.MethodNotAllowed, "is a folder")
+        if (!folderExists(key.substringBeforeLast('/', ""))) return text(HttpStatusCode.Conflict, "parent folder missing")
+        val bytes = (request.body as? ByteArrayContent)?.bytes() ?: ByteArray(0)
+        val version = (existing?.second ?: 0) + 1
+        files[key] = bytes to version
+        val headers = HeadersBuilder()
+        headers.name("OC-ETag", hash("${bytes.size}/$version"))
+        return respond(ByteArray(0), if (existing == null) HttpStatusCode.Created else HttpStatusCode.NoContent, headers.build())
+    }
+
+    private fun MockRequestHandleScope.davMkcol(path: String): HttpResponseData {
+        val key = davKey(path) ?: return text(HttpStatusCode.NotFound, "no such user")
+        if (key in files || folderExists(key)) return text(HttpStatusCode.MethodNotAllowed, "exists")
+        if (!folderExists(key.substringBeforeLast('/', ""))) return text(HttpStatusCode.Conflict, "parent folder missing")
+        folders += key
+        return respond(ByteArray(0), HttpStatusCode.Created)
     }
 
     private fun percentDecodeForFake(s: String): String {

@@ -2,6 +2,7 @@ package app.citti.core.api
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.HttpClientEngine
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.http.HttpHeaders
@@ -39,6 +40,8 @@ fun createNotesHttpClient(
     return HttpClient(engine) {
         expectSuccess = false
         install(ContentNegotiation) { json(apiJson) }
+        // No default timeout; a request sets its own (DavClient.put).
+        install(HttpTimeout)
         defaultRequest {
             headers.append(HttpHeaders.Authorization, "Basic $credentials")
             headers.append(HttpHeaders.UserAgent, USER_AGENT)

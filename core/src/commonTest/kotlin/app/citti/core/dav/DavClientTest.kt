@@ -125,4 +125,95 @@ class DavClientTest {
             assertEquals(0, server.requests.size)
             assertNull(root)
         }
+
+    @Test
+    fun putCreatesANewFileWithItsOcEtag() =
+        runTest {
+            server.addFolder("media")
+            val r = assertIs<ApiResult.Success<DavPut>>(client().put(path("media/a b.png"), byteArrayOf(1, 2), "image/png"))
+            val created = assertIs<DavPut.Created>(r.value)
+            assertNotNull(created.etag)
+            assertEquals(server.fileEtag("media/a b.png"), created.etag)
+            assertContentEquals(byteArrayOf(1, 2), server.file("media/a b.png"))
+            val req = server.requests.single()
+            assertEquals(Endpoint.DAV_PUT, req.endpoint)
+            assertEquals("*", req.header("If-None-Match"))
+            assertEquals("image/png", req.header("Content-Type"))
+            assertEquals("/remote.php/dav/files/alice/Notes/media/a%20b.png", req.path)
+        }
+
+    @Test
+    fun putNeverOverwritesAnExistingFile() =
+        runTest {
+            server.putFile("a.png", byteArrayOf(9))
+            val r = assertIs<ApiResult.Success<DavPut>>(client().put(path("a.png"), byteArrayOf(1), "image/png"))
+            assertEquals(DavPut.Exists, r.value)
+            assertContentEquals(byteArrayOf(9), server.file("a.png"))
+        }
+
+    @Test
+    fun aLowercaseOcEtagHeaderIsRead() =
+        runTest {
+            server.headerCasing = HeaderCasing.LOWERCASE
+            val r = assertIs<ApiResult.Success<DavPut>>(client().put(path("a.png"), byteArrayOf(1), "image/png"))
+            assertNotNull(assertIs<DavPut.Created>(r.value).etag)
+        }
+
+    @Test
+    fun putCreatesTheMissingFoldersThenRetriesOnce() =
+        runTest {
+            val r = client().put(path("a/b/c/x.png"), byteArrayOf(1), "image/png")
+            assertIs<DavPut.Created>(assertIs<ApiResult.Success<DavPut>>(r).value)
+            assertTrue(server.hasFolder("a/b/c"))
+            assertContentEquals(byteArrayOf(1), server.file("a/b/c/x.png"))
+            // PUT 409, MKCOL a/b/c 409, a/b 409, a 201, a/b 201, a/b/c 201, PUT 201.
+            assertEquals(
+                listOf(409, 409, 409, 201, 201, 201, 201),
+                server.requests.map { it.status },
+            )
+            assertEquals(2, server.count(Endpoint.DAV_PUT))
+            assertEquals(5, server.count(Endpoint.DAV_MKCOL))
+        }
+
+    @Test
+    fun putIntoAnExistingFolderIsOneRequest() =
+        runTest {
+            server.addFolder("media")
+            assertIs<ApiResult.Success<DavPut>>(client().put(path("media/x.png"), byteArrayOf(1), "image/png"))
+            assertEquals(1, server.requests.size)
+        }
+
+    @Test
+    fun mkcolOfAnExistingFolderIsExists() =
+        runTest {
+            server.addFolder("media")
+            assertEquals(DavMkcol.Exists, assertIs<ApiResult.Success<DavMkcol>>(client().mkcol(path("media"))).value)
+            assertEquals(DavMkcol.Created, assertIs<ApiResult.Success<DavMkcol>>(client().mkcol(path("other"))).value)
+            assertEquals(ApiError.Http(409), assertIs<ApiResult.Failure>(client().mkcol(path("x/y"))).error)
+        }
+
+    @Test
+    fun putFailuresAreValuesNeverThrown() =
+        runTest {
+            server.failNext(FakeFailure.UNAUTHORIZED)
+            assertIs<ApiError.Auth>(assertIs<ApiResult.Failure>(client().put(path("a.png"), byteArrayOf(1), "image/png")).error)
+            server.failNext(FakeFailure.SERVER_ERROR)
+            assertIs<ApiError.Server>(assertIs<ApiResult.Failure>(client().put(path("a.png"), byteArrayOf(1), "image/png")).error)
+            server.failNext(FakeFailure.NETWORK_ERROR)
+            assertIs<ApiError.Network>(assertIs<ApiResult.Failure>(client().put(path("a.png"), byteArrayOf(1), "image/png")).error)
+            // A failed MKCOL ends the upload with its error.
+            server.failNext(FakeFailure.NETWORK_ERROR, endpoint = Endpoint.DAV_MKCOL)
+            assertIs<ApiError.Network>(assertIs<ApiResult.Failure>(client().put(path("n/a.png"), byteArrayOf(1), "image/png")).error)
+            assertNull(server.file("a.png"))
+            assertNull(server.file("n/a.png"))
+        }
+
+    @Test
+    fun noPutWithoutARoot() =
+        runTest {
+            root = null
+            assertEquals(ApiError.DavNotReady, assertIs<ApiResult.Failure>(client().put(path("a.png"), byteArrayOf(1), "image/png")).error)
+            assertEquals(ApiError.DavNotReady, assertIs<ApiResult.Failure>(client().mkcol(path("a"))).error)
+            assertEquals(0, server.requests.size)
+        }
 }

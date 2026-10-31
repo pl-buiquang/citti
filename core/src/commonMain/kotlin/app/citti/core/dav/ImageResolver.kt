@@ -57,6 +57,9 @@ class ImageResolver(
     private val winners = HashMap<Pair<String, String>, VaultPath>()
     private val misses = HashSet<VaultPath>()
 
+    /** Links inserted after an upload this session, with their file: they resolve the same from any Note folder. */
+    private val uploads = HashMap<String, VaultPath>()
+
     /** The Vault candidates in order (duplicates and paths leaving the Vault dropped), or the one non-Vault source. */
     fun candidates(
         noteFolder: String,
@@ -93,7 +96,7 @@ class ImageResolver(
     fun known(
         noteFolder: String,
         link: String,
-    ): VaultPath? = winners[noteFolder to link]
+    ): VaultPath? = winners[noteFolder to link] ?: uploads[link]
 
     /**
      * The Vault paths this link can be at, with no request: the remembered one first, then the candidates with the
@@ -119,6 +122,18 @@ class ImageResolver(
         if (path !in misses && key !in winners) winners[key] = path
     }
 
+    /**
+     * Seeds the session after [link] was inserted for a file just uploaded to [path]: it resolves to [path] from
+     * any Note folder, with no request, even if [path] was a miss before.
+     */
+    fun rememberUpload(
+        link: String,
+        path: VaultPath,
+    ) {
+        misses -= path
+        uploads[link] = path
+    }
+
     suspend fun open(
         noteFolder: String,
         link: String,
@@ -133,10 +148,11 @@ class ImageResolver(
         }
         val list = candidates(noteFolder, link, config.attachmentFolder())
         val key = noteFolder to link
-        val ordered = listOfNotNull(winners[key]) + list.filterIsInstance<ImageSource.Vault>().map { it.path }.filter { it != winners[key] }
+        val known = known(noteFolder, link)
+        val ordered = listOfNotNull(known) + list.filterIsInstance<ImageSource.Vault>().map { it.path }.filter { it != known }
         for (path in ordered) {
             if (path in misses) continue
-            when (val result = dav.get(path, if (path == winners[key]) ifNoneMatch else null)) {
+            when (val result = dav.get(path, if (path == known) ifNoneMatch else null)) {
                 is ApiResult.Success -> {
                     winners[key] = path
                     return when (val v = result.value) {
@@ -150,6 +166,7 @@ class ImageResolver(
                         ApiError.NotFound -> {
                             misses += path
                             if (winners[key] == path) winners.remove(key)
+                            if (uploads[link] == path) uploads.remove(link)
                         }
 
                         is ApiError.Auth -> {

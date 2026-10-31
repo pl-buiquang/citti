@@ -86,6 +86,24 @@ class SettingsTest {
         }
 
     @Test
+    fun uploadFolderFollowsObsidianUntilSetAndResets() =
+        runTest {
+            val repo = ImageSettings(db, Dispatchers.Unconfined)
+            assertNull(repo.uploadFolder())
+            repo.setUploadFolder(" /photos//phone/ ")
+            assertEquals("photos/phone", repo.uploadFolder())
+            assertEquals("photos/phone", repo.uploadFolderFlow().first())
+            assertEquals("photos/phone", db.settingQueries.selectSetting(KEY_IMAGES_UPLOAD_FOLDER).executeAsOne())
+            for (bad in listOf("..", "a/../..", "/", "./x")) assertFailsWith<IllegalArgumentException>(bad) { repo.setUploadFolder(bad) }
+            assertEquals("photos/phone", repo.uploadFolder())
+            // A stored value that leaves the Vault reads as unset.
+            db.settingQueries.upsertSetting(KEY_IMAGES_UPLOAD_FOLDER, "../Documents")
+            assertNull(repo.uploadFolder())
+            repo.setUploadFolder(null)
+            assertNull(db.settingQueries.selectSetting(KEY_IMAGES_UPLOAD_FOLDER).executeAsOneOrNull())
+        }
+
+    @Test
     fun exclusionsAddNormalizeRemove() {
         val repo = ExclusionRepository(db)
         assertEquals("a/b", repo.add(ExclusionKind.UNSYNCED, " /a//b/ "))

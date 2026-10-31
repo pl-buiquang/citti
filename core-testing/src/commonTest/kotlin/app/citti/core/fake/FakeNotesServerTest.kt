@@ -7,9 +7,11 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.put
+import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -32,6 +34,7 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -581,6 +584,76 @@ class FakeNotesServerTest {
 
             server.offline = false
             assertEquals(HttpStatusCode.OK, http.get("$api/notes").status)
+        }
+
+    @Test
+    fun davPutNeverOverwritesWithIfNoneMatchAndNeedsTheParentFolder() =
+        runTest {
+            val server = FakeNotesServer()
+            val http = client(server)
+            val dav = "/remote.php/dav/files/alice/Notes"
+
+            suspend fun put(
+                path: String,
+                bytes: ByteArray,
+                ifNoneMatch: String? = "*",
+            ) = http.put("$dav/$path") {
+                ifNoneMatch?.let { header(HttpHeaders.IfNoneMatch, it) }
+                setBody(bytes)
+            }
+
+            assertEquals(HttpStatusCode.Conflict, put("media/a%20b.png", byteArrayOf(1)).status)
+            assertFalse(server.hasFolder("media"))
+            val created =
+                put("a.png", byteArrayOf(1)).also {
+                    assertEquals(HttpStatusCode.Created, it.status)
+                }
+            // Like the real server: an OC-ETag, no plain ETag.
+            assertEquals(server.fileEtag("a.png"), created.headers["OC-ETag"])
+            assertNull(created.headers[HttpHeaders.ETag])
+            assertEquals(HttpStatusCode.PreconditionFailed, put("a.png", byteArrayOf(2)).status)
+            assertContentEquals(byteArrayOf(1), server.file("a.png"))
+            assertEquals(HttpStatusCode.NoContent, put("a.png", byteArrayOf(3), ifNoneMatch = null).status)
+            assertContentEquals(byteArrayOf(3), http.get("$dav/a.png").readRawBytes())
+            assertEquals(
+                listOf(
+                    Endpoint.DAV_PUT,
+                    Endpoint.DAV_PUT,
+                    Endpoint.DAV_PUT,
+                    Endpoint.DAV_PUT,
+                    Endpoint.DAV_GET,
+                ),
+                server.requests.map {
+                    it.endpoint
+                },
+            )
+
+            // A folder exists when MKCOL made it, a seeded file is in it, or a Note is filed in it.
+            server.putFile("seeded/x.png", byteArrayOf(1))
+            assertEquals(HttpStatusCode.Created, put("seeded/y.png", byteArrayOf(1)).status)
+            server.addNote("N", category = "journal/2026")
+            assertEquals(HttpStatusCode.Created, put("journal/y.png", byteArrayOf(1)).status)
+            assertEquals(HttpStatusCode.Created, put("journal/2026/y.png", byteArrayOf(1)).status)
+        }
+
+    @Test
+    fun mkcolCreatesOneLevelAt201ElseAnswers405Or409() =
+        runTest {
+            val server = FakeNotesServer()
+            val http = client(server)
+            val dav = "/remote.php/dav/files/alice/Notes"
+
+            suspend fun mkcol(path: String) = http.request("$dav/$path") { method = HttpMethod("MKCOL") }
+
+            assertEquals(HttpStatusCode.Conflict, mkcol("a/b").status)
+            assertEquals(HttpStatusCode.Created, mkcol("a").status)
+            assertEquals(HttpStatusCode.Created, mkcol("a/b").status)
+            assertEquals(HttpStatusCode.MethodNotAllowed, mkcol("a").status)
+            assertTrue(server.hasFolder("a/b"))
+            server.putFile("f.png", byteArrayOf(1))
+            assertEquals(HttpStatusCode.MethodNotAllowed, mkcol("f.png").status)
+            assertEquals(Endpoint.DAV_MKCOL, server.requests.last().endpoint)
+            assertEquals(HttpStatusCode.NotFound, http.request("/remote.php/dav/files/bob/Notes/x") { method = HttpMethod("MKCOL") }.status)
         }
 
     @Test

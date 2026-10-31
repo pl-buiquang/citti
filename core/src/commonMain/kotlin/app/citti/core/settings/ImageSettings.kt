@@ -2,6 +2,7 @@ package app.citti.core.settings
 
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToOneOrNull
+import app.citti.core.dav.VaultPath
 import app.citti.core.db.CittiDatabase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +13,9 @@ import kotlinx.coroutines.flow.map
 const val KEY_IMAGES_CACHE_MB = "images.cache-mb"
 
 const val DEFAULT_IMAGE_CACHE_MB = 500
+
+/** `setting` key of the folder Images are uploaded to; absent means the attachment folder of Obsidian. */
+const val KEY_IMAGES_UPLOAD_FOLDER = "images.upload-folder"
 
 /** The sizes Settings › Images offers, in megabytes. */
 val IMAGE_CACHE_CHOICES_MB = listOf(250, DEFAULT_IMAGE_CACHE_MB, 1000, 2000)
@@ -36,6 +40,32 @@ class ImageSettings(
             .asFlow()
             .mapToOneOrNull(dispatcher)
             .map(::parse)
+
+    /** The upload folder set by the user (a Vault path), or null to follow Obsidian. */
+    fun uploadFolder(): String? = parseFolder(queries.selectSetting(KEY_IMAGES_UPLOAD_FOLDER).executeAsOneOrNull())
+
+    fun uploadFolderFlow(): Flow<String?> =
+        queries
+            .selectSetting(KEY_IMAGES_UPLOAD_FOLDER)
+            .asFlow()
+            .mapToOneOrNull(dispatcher)
+            .map(::parseFolder)
+
+    /**
+     * Overrides the upload folder with a Vault path (`/` trimmed); null or blank resets it to follow Obsidian. A path
+     * that leaves the Vault root is refused; the caller validates names and Unsynced folders first.
+     */
+    fun setUploadFolder(folder: String?) {
+        if (folder.isNullOrBlank()) {
+            queries.deleteSetting(KEY_IMAGES_UPLOAD_FOLDER)
+            return
+        }
+        val path = requireNotNull(parseFolder(folder)) { "Not a folder of the Vault: $folder" }
+        queries.upsertSetting(KEY_IMAGES_UPLOAD_FOLDER, path)
+    }
+
+    private fun parseFolder(raw: String?): String? =
+        raw?.trim()?.takeIf { it.isNotEmpty() && it.split('/').none { s -> s == ".." || s == "." } }?.let { VaultPath.parse(it)?.value }
 
     private fun parse(raw: String?): Int = raw?.toIntOrNull()?.takeIf { it in IMAGE_CACHE_CHOICES_MB } ?: DEFAULT_IMAGE_CACHE_MB
 }
