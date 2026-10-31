@@ -108,6 +108,56 @@ class PushSyncTest {
         }
 
     @Test
+    fun deleteWithMatchingEtagSendsIfMatch() =
+        runTest {
+            val (local, remote) = synced()
+            val etag = notes.selectByLocalId(local).executeAsOne().etag
+            notes.markDeleted(local)
+            assertEquals(1, done().deleted)
+            assertNull(server.note(remote))
+            assertEquals("\"$etag\"", server.requests.single { it.endpoint == Endpoint.DELETE }.header("If-Match"))
+        }
+
+    @Test
+    fun deleteOfNoteEditedOnServerIsUndone() =
+        runTest {
+            val (local, remote) = synced("Plan", "base")
+            notes.markDeleted(local)
+            server.editOnServer(remote, content = "server text")
+
+            val result = done()
+            assertEquals(0, result.deleted)
+            assertEquals(1, result.deleteUndone)
+            assertEquals(0, server.count(Endpoint.DELETE))
+            assertEquals("server text", server.note(remote)!!.content)
+            val row = notes.selectByLocalId(local).executeAsOne()
+            assertEquals("SYNCED", row.sync_state)
+            assertEquals("server text", row.content)
+            assertEquals(server.note(remote)!!.etag, row.etag)
+            assertEquals(0, PendingChanges(db).count())
+        }
+
+    @Test
+    fun deleteRefusedByIfMatchIsUndone() =
+        runTest {
+            push.verifyBeforeDelete = false
+            val (local, remote) = synced("Plan", "base")
+            notes.markDeleted(local)
+            server.editOnServer(remote, content = "server text")
+
+            val result = done()
+            assertEquals(0, result.deleted)
+            assertEquals(1, result.deleteUndone)
+            // no pre-check GET, only the one fetching the server version after the 412
+            assertEquals(1, server.count(Endpoint.GET_NOTE))
+            assertEquals(412, server.requests.single { it.endpoint == Endpoint.DELETE }.status)
+            assertEquals("server text", server.note(remote)!!.content)
+            val row = notes.selectByLocalId(local).executeAsOne()
+            assertEquals("SYNCED", row.sync_state)
+            assertEquals("server text", row.content)
+        }
+
+    @Test
     fun offlineEditIsPushedOnReconnect() =
         runTest {
             val (local, remote) = synced()

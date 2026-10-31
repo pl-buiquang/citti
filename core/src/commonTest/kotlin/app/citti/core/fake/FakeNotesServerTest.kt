@@ -212,6 +212,24 @@ class FakeNotesServerTest {
         }
 
     @Test
+    fun deleteHonorsIfMatch() =
+        runTest {
+            val server = FakeNotesServer()
+            val id = server.addNote("T", "v1")
+            val http = client(server)
+            val stale = server.note(id)!!.etag
+            server.editOnServer(id, content = "v2")
+
+            val refused = http.delete("$api/notes/$id") { header("If-Match", "\"$stale\"") }
+            assertEquals(HttpStatusCode.PreconditionFailed, refused.status)
+            assertEquals("v2", server.note(id)!!.content)
+
+            val ok = http.delete("$api/notes/$id") { header("If-Match", "\"${server.note(id)!!.etag}\"") }
+            assertEquals(HttpStatusCode.OK, ok.status)
+            assertNull(server.note(id))
+        }
+
+    @Test
     fun createGetAndDeleteWork() =
         runTest {
             val server = FakeNotesServer()
