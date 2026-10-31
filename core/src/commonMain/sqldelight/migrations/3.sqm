@@ -1,0 +1,3 @@
+-- The text a New note was created with (M5, ADR 0006). NULL for Conflict copies, rows from before M5 and synced rows.
+-- Last, like excerpt, so that fresh and migrated tables have the same column order.
+ALTER TABLE note ADD COLUMN created_from TEXT;

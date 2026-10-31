@@ -12,7 +12,8 @@ fun NoteQueries.insertNew(
     content: String?,
     modified: Long,
     conflictOf: Long?,
-) = insertNew(title, category, content, excerptOf(content, title), modified, conflictOf)
+    createdFrom: String? = null,
+) = insertNew(title, category, content, excerptOf(content, title), modified, conflictOf, createdFrom)
 
 /** A local edit as the editor makes it: based on the row's current etag, so it is not refused for that. */
 fun NoteQueries.markDirty(

@@ -13,6 +13,18 @@ import app.citti.core.db.CittiDatabase
 import app.citti.core.db.Note
 import app.citti.core.log.SyncLog
 import app.citti.core.note.excerptOf
+import app.citti.core.settings.ExclusionRepository
+
+/**
+ * An untouched New note the push deleted because the server already had its folder and title (ADR 0006). The
+ * server's Note is [serverLocalId].
+ */
+data class Dropped(
+    val localId: Long,
+    val serverLocalId: Long,
+    val title: String,
+    val category: String,
+)
 
 /** A Note whose push failed with an error that does not stop the run. */
 data class PushFailure(
@@ -34,11 +46,17 @@ sealed interface PushResult {
         val failures: List<PushFailure> = emptyList(),
         /** Local deletes undone because the server Note changed since the last sync (server wins). */
         val deleteUndone: Int = 0,
+        /** Untouched New notes deleted because the server already had their title (push-time check). */
+        val dropped: List<Dropped> = emptyList(),
+        /** New notes not pushed in this run because their folder could not be refreshed. */
+        val deferredNew: Int = 0,
     ) : PushResult
 
-    /** Auth, server or network failure: the run stopped and the queue is intact. */
+    /** Auth, server or network failure: the run stopped and the rest of the queue is intact. */
     data class Failed(
         val error: ApiError,
+        /** New notes dropped before the run stopped. */
+        val dropped: List<Dropped> = emptyList(),
     ) : PushResult
 }
 
@@ -47,6 +65,12 @@ sealed interface PushResult {
  * A delete never removes a server version this client has not seen: the server version wins and the Note comes back.
  * With [verifyBeforeDelete] a `GET` compares ETags first, on top of `If-Match` (Nextcloud ignores `If-Match` on
  * `DELETE`, so only the `GET` guards it, with a short race window before the `DELETE`). [now] returns epoch seconds.
+ *
+ * Push-time check (ADR 0006): before a never-pushed New note is created, its folder is refreshed once per run
+ * ([FolderSync]). When the server already has that folder and title, the server wins: an untouched Note (its text
+ * still equals `created_from`) is dropped, any other becomes a Conflict copy of the server Note and is pushed under
+ * that title. The server never refuses a duplicate, it would create `Title (2)`, so a folder that cannot be
+ * refreshed has its New notes kept for a later run instead of created blind.
  */
 class PushSync(
     private val api: NotesApi,
@@ -59,6 +83,7 @@ class PushSync(
 
     private val queries = db.noteQueries
     private val conflictCopies = ConflictCopies(db, now)
+    private val folderSync = FolderSync(db, api, ExclusionRepository(db), log)
     private val database = db
 
     private var updated = 0
@@ -68,6 +93,15 @@ class PushSync(
     private val conflicts = mutableListOf<Long>()
     private val skipped = mutableSetOf<Long>()
     private val failures = mutableListOf<PushFailure>()
+    private val dropped = mutableListOf<Dropped>()
+
+    /** Folders refreshed in this run: true when refreshed, false when blocked (refresh failed). */
+    private val checkedFolders = mutableMapOf<String, Boolean>()
+    private val deferred = mutableSetOf<Long>()
+
+    /** The first folder refresh failure of the run, and whether any folder refresh went through. */
+    private var refreshError: ApiError? = null
+    private var refreshed = false
 
     /** Not safe to call concurrently; the sync engine runs one sync at a time. */
     suspend fun push(): PushResult {
@@ -78,21 +112,104 @@ class PushSync(
         conflicts.clear()
         skipped.clear()
         failures.clear()
+        dropped.clear()
+        checkedFolders.clear()
+        deferred.clear()
+        refreshError = null
+        refreshed = false
 
         val attempted = mutableSetOf<Long>()
         repeat(MAX_PASSES) {
+            // Conflict copies made by a pass are New notes too: each pass checks the New notes it is about to push.
+            checkNewNotes(queries.selectDirty().executeAsList().filter { it.local_id !in attempted })
+                ?.let { return PushResult.Failed(it, dropped.toList()) }
             val batch = queries.selectDirty().executeAsList().filter { it.local_id !in attempted }
             if (batch.isEmpty()) return done()
             for (note in batch) {
                 attempted += note.local_id
+                if (note.isNeverPushed() && checkedFolders[note.category] == false) {
+                    deferred += note.local_id
+                    continue
+                }
                 // A Conflict copy only exists after a pass; stop the whole run on a fatal error.
-                pushOne(note)?.let { return PushResult.Failed(it) }
+                pushOne(note)?.let { return PushResult.Failed(it, dropped.toList()) }
             }
         }
         return done()
     }
 
-    private fun done() = PushResult.Done(updated, created, deleted, conflicts.toList(), skipped.size, failures.toList(), deleteUndone)
+    /**
+     * When New notes were held back and the server was never reached in this run (offline), the run fails with the
+     * refresh error, so the status says Offline instead of Synced.
+     */
+    private fun done(): PushResult {
+        val error = refreshError
+        if (error != null && deferred.isNotEmpty() && !refreshed && updated + created + deleted + deleteUndone == 0 &&
+            conflicts.isEmpty()
+        ) {
+            return PushResult.Failed(error, dropped.toList())
+        }
+        return PushResult.Done(
+            updated,
+            created,
+            deleted,
+            conflicts.toList(),
+            skipped.size,
+            failures.toList(),
+            deleteUndone,
+            dropped.toList(),
+            deferred.size,
+        )
+    }
+
+    private fun Note.isNeverPushed() = sync_state == "NEW" && remote_id == null && !readonly
+
+    /**
+     * Refreshes the folder of each never-pushed New note in [batch] (once per run), then drops or converts the ones
+     * whose folder and title the server has (exact match, like the server). The caller reads the queue again.
+     * Returns an auth error, which stops the run; any other refresh failure only holds back that folder.
+     */
+    private suspend fun checkNewNotes(batch: List<Note>): ApiError? {
+        val fresh = batch.filter { it.isNeverPushed() }
+        for (folder in fresh.map { it.category }.distinct()) {
+            if (folder in checkedFolders) continue
+            checkedFolders[folder] =
+                when (val refresh = folderSync.run(folder)) {
+                    FolderRefresh.NotModified, is FolderRefresh.Refreshed -> {
+                        refreshed = true
+                        true
+                    }
+
+                    // Creation refuses Unsynced folders; never push blind into one.
+                    FolderRefresh.Unsynced -> {
+                        false
+                    }
+
+                    is FolderRefresh.Failed -> {
+                        if (refresh.error is ApiError.Auth) return refresh.error
+                        if (refreshError == null) refreshError = refresh.error
+                        log.warn("push folder refresh failed, its new notes wait ${refresh.error.logText()}")
+                        false
+                    }
+                }
+        }
+        for (note in fresh) {
+            if (checkedFolders[note.category] != true) continue
+            val server = queries.selectServerNote(note.category, note.title).executeAsOneOrNull() ?: continue
+            if (queries.dropIfUntouched(note.local_id).value > 0) {
+                dropped += Dropped(note.local_id, server.local_id, note.title, note.category)
+                log.info("push dropped untouched new note local=${note.local_id} server=${server.local_id}")
+            } else {
+                // Edited (maybe while the folder was refreshed): read it again, the copy title is computed from it.
+                val current = queries.selectByLocalId(note.local_id).executeAsOneOrNull() ?: continue
+                if (conflictCopies.convert(current, server.local_id)) {
+                    conflicts += note.local_id
+                    log.warn("push new note exists on the server, kept as copy local=${note.local_id} server=${server.local_id}")
+                }
+            }
+        }
+        return null
+    }
 
     /** Returns a run-stopping error, or null. */
     private suspend fun pushOne(note: Note): ApiError? {

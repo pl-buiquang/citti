@@ -1,6 +1,7 @@
 package app.citti.core.sync
 
 import app.citti.core.db.CittiDatabase
+import app.citti.core.db.Note
 import app.citti.core.note.excerptOf
 
 /**
@@ -21,11 +22,26 @@ class ConflictCopies(
         text: String,
         conflictOf: Long?,
     ): Long {
-        val copyTitle = freeTitle(category, "$title (conflict ${isoDate(now())})")
+        val copyTitle = freeConflictTitle(category, title)
         // The Excerpt skips a heading equal to the original title, which the text still starts with.
-        queries.insertNew(copyTitle, category, text, excerptOf(text, title), now(), conflictOf)
+        queries.insertNew(copyTitle, category, text, excerptOf(text, title), now(), conflictOf, null)
         return queries.lastInsertedLocalId().executeAsOne()
     }
+
+    /**
+     * Turns the never-pushed [row] into a Conflict copy of the server Note [serverLocalId], which has the same folder
+     * and title (push-time check, ADR 0006): it gets the copy title, `conflict_of` and no `created_from`, and stays
+     * NEW. Returns false when the row is no longer a never-pushed NEW row.
+     */
+    fun convert(
+        row: Note,
+        serverLocalId: Long,
+    ): Boolean = queries.convertToConflictCopy(freeConflictTitle(row.category, row.title), serverLocalId, row.local_id).value > 0
+
+    private fun freeConflictTitle(
+        category: String,
+        title: String,
+    ) = freeTitle(category, "$title (conflict ${isoDate(now())})")
 
     private fun freeTitle(
         category: String,

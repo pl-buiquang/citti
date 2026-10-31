@@ -13,7 +13,11 @@ CREATE TABLE note (
     conflict_of INTEGER,
     -- First meaningful line of content, computed in Kotlin (excerptOf) on every write that sets content.
     -- Last, like the column 2.sqm adds, so that fresh and migrated tables have the same column order.
-    excerpt TEXT
+    excerpt TEXT,
+    -- The text a New note was created with (3.sqm): while content still equals it, the Note is untouched and the
+    -- push may drop it in favour of a server Note with the same title (ADR 0006). NULL once SYNCED, and for Conflict
+    -- copies and rows from before M5 (never dropped).
+    created_from TEXT
 );
 
 -- (category, title) serves the Folder lookups of Tree mode, Today, the Calendar and the creation check (M5/M6).
@@ -107,13 +111,14 @@ selectConflictCopyOf:
 SELECT local_id, title FROM note WHERE conflict_of = ? AND sync_state != 'DELETED' ORDER BY local_id DESC LIMIT 1;
 
 -- A new Note or Conflict copy in a Hidden folder is hidden at once (same prefix rule as FolderPrefix.kt).
+-- createdFrom is the initial text of a creation, NULL for a Conflict copy.
 insertNew:
-INSERT INTO note(title, category, content, excerpt, favorite, modified, hidden, sync_state, conflict_of)
+INSERT INTO note(title, category, content, excerpt, favorite, modified, hidden, sync_state, conflict_of, created_from)
 VALUES (:title, :category, :content, :excerpt, 0, :modified, EXISTS (
     SELECT 1 FROM folder_exclusion e
     WHERE e.kind = 'HIDDEN'
       AND (:category = e.prefix OR substr(:category, 1, length(e.prefix) + 1) = e.prefix || '/')
-), 'NEW', :conflictOf);
+), 'NEW', :conflictOf, :createdFrom);
 
 -- Hidden folders changed: recompute the flag of every row, whatever its sync_state (same prefix rule as insertNew).
 -- Does not touch title, content or category, so it does not re-index.
@@ -131,11 +136,13 @@ SELECT last_insert_rowid();
 -- (every SET reads the old row), so an edit made during the request is kept: title and category follow the server
 -- (which may rename a duplicate to "Title (2)") only where they still equal what was sent, a changed row stays
 -- DIRTY with its modified time, and a DELETED row stays DELETED, now with the remote id. A Favorite toggled during
--- the request also keeps the row DIRTY, so the next push sends it.
+-- the request also keeps the row DIRTY, so the next push sends it. created_from is cleared: the server has the Note,
+-- so the "untouched" rule no longer applies.
 markSynced:
 UPDATE note
 SET remote_id = :remoteId,
     etag = :etag,
+    created_from = NULL,
     title = CASE WHEN title = :sentTitle THEN :title ELSE title END,
     category = CASE WHEN category = :sentCategory THEN :category ELSE category END,
     modified = CASE
@@ -200,8 +207,25 @@ WHERE local_id = :localId;
 resetToNew:
 UPDATE note SET remote_id = NULL, etag = NULL, sync_state = 'NEW' WHERE local_id = ?;
 
+-- Exact match: the server's title match is case-sensitive (M5 real-server check 3).
 folderHasTitle:
 SELECT count(*) FROM note WHERE category = :category AND title = :title AND sync_state != 'DELETED';
+
+-- Push-time check (ADR 0006): the server's copy of a (folder, title), i.e. a row the server knows. Exact match, as
+-- on the server.
+selectServerNote:
+SELECT local_id, title FROM note
+WHERE category = :category AND title = :title AND remote_id IS NOT NULL AND sync_state != 'DELETED' LIMIT 1;
+
+-- Drop an untouched NEW row; 0 rows when it was edited in the meantime (then it becomes a Conflict copy).
+dropIfUntouched:
+DELETE FROM note WHERE local_id = ? AND sync_state = 'NEW' AND remote_id IS NULL
+  AND created_from IS NOT NULL AND coalesce(content, '') = created_from;
+
+-- Push-time check: a NEW row whose title the server already has becomes a Conflict copy of the server Note.
+convertToConflictCopy:
+UPDATE note SET title = :title, conflict_of = :conflictOf, created_from = NULL
+WHERE local_id = :localId AND sync_state = 'NEW' AND remote_id IS NULL;
 
 countConflictCopies:
 SELECT count(*) FROM note WHERE conflict_of IS NOT NULL AND sync_state != 'DELETED';

@@ -404,7 +404,7 @@ class NoteQueriesTest {
         upgraded.syncStateQueries.upsert("k", null, 0, null)
         upgraded.settingQueries.insertExclusion("p", "HIDDEN")
         assertEquals(1, upgraded.noteQueries.countNotes().executeAsOne())
-        assertEquals(3, CittiDatabase.Schema.version)
+        assertEquals(4, CittiDatabase.Schema.version)
     }
 
     /** The v2 schema as 1.sqm leaves it, which is what databases/2.db holds. */
@@ -451,7 +451,25 @@ class NoteQueriesTest {
         // and the triggers keep it current
         migrated.updateContent("Une journée d'été", "e1b", migrated.selectByRemoteId(1).executeAsOne().local_id)
         assertEquals(listOf("1"), driver.strings("$found '\"ete*\" \"journee*\"'"))
-        assertEquals(3, CittiDatabase.Schema.version)
+        assertEquals(4, CittiDatabase.Schema.version)
+    }
+
+    @Test
+    fun migrationThreeAddsCreatedFromAndKeepsPendingRows() {
+        val driver = v2Driver()
+        CittiDatabase.Schema.migrate(driver, 2, 3)
+        // A NEW row from before M5: it has no created_from, so the push never drops it.
+        driver.execute(null, "INSERT INTO note(title, category, content, modified, sync_state) VALUES ('Old', '', '', 1, 'NEW')", 0)
+        CittiDatabase.Schema.migrate(driver, 3, CittiDatabase.Schema.version)
+
+        val migrated = CittiDatabase(driver).noteQueries
+        val old = migrated.selectDirty().executeAsOne()
+        assertNull(old.created_from)
+        assertEquals(0L, migrated.dropIfUntouched(old.local_id).value)
+        migrated.insertNew("New", "", "", 2, null, createdFrom = "")
+        val fresh = migrated.selectByLocalId(migrated.lastInsertedLocalId().executeAsOne()).executeAsOne()
+        assertEquals("", fresh.created_from)
+        assertEquals(1L, migrated.dropIfUntouched(fresh.local_id).value)
     }
 
     @Test

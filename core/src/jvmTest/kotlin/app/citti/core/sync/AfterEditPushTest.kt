@@ -9,6 +9,7 @@ import app.citti.core.fake.Endpoint
 import app.citti.core.fake.FakeFailure
 import app.citti.core.fake.FakeNotesServer
 import app.citti.core.insertNew
+import app.citti.core.markDirty
 import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.plugin
 import kotlinx.coroutines.CompletableDeferred
@@ -80,13 +81,22 @@ class AfterEditPushTest {
         }
 
     @Test
-    fun pushOnlyNeverRequestsTheList() =
+    fun pushOnlyListsJustTheFolderOfItsNewNotes() =
         runTest {
             newLocal("A")
             assertIs<SyncOutcome.Synced>(engine.push())
-            assertEquals(0, server.count(Endpoint.LIST))
+            // The push-time check (ADR 0006): one folder list, never the full list.
+            assertEquals(listOf(""), server.requests.filter { it.endpoint == Endpoint.LIST }.map { it.query["category"] })
             assertEquals(1, server.count(Endpoint.CREATE))
             assertEquals(0, engine.state.value.pendingChanges)
+
+            // Without New notes, no list request at all.
+            server.clearRequests()
+            val synced = notes.selectByRemoteId(server.notes.single().id).executeAsOne().local_id
+            notes.markDirty("edited", 2, synced)
+            assertIs<SyncOutcome.Synced>(engine.push())
+            assertEquals(0, server.count(Endpoint.LIST))
+            assertEquals(1, server.count(Endpoint.UPDATE))
         }
 
     @Test

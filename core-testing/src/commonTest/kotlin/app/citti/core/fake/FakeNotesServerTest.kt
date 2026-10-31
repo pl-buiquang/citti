@@ -320,6 +320,63 @@ class FakeNotesServerTest {
             assertEquals("Hi", create("Hi", "b"))
         }
 
+    @Test
+    fun createTitleMatchIsCaseSensitive() =
+        runTest {
+            val server = FakeNotesServer()
+            server.addNote("X CASE", category = "a")
+            val created = client(server).post("$api/notes") { setBody("""{"title":"X case","content":"","category":"a"}""") }.obj()
+            assertEquals("X case", created.getValue("title").jsonPrimitive.content)
+        }
+
+    @Test
+    fun updateOntoATakenTitleRenamesToTheNextFreeOne() =
+        runTest {
+            val server = FakeNotesServer()
+            server.addNote("T", category = "a")
+            server.addNote("T (2)", category = "a")
+            server.addNote("T", category = "b")
+            val renamed = server.addNote("U", category = "a")
+            val moved = server.addNote("T", category = "c")
+            val http = client(server)
+
+            suspend fun put(
+                id: Long,
+                body: String,
+            ) = http
+                .put("$api/notes/$id") { setBody(body) }
+                .also { assertEquals(HttpStatusCode.OK, it.status) }
+                .obj()
+                .getValue("title")
+                .jsonPrimitive.content
+
+            // Never refused, never overwritten: the next free `Title (n)`, as on the real server.
+            assertEquals("T (3)", put(renamed, """{"title":"T"}"""))
+            assertEquals("T (2)", put(moved, """{"category":"b"}"""))
+            assertEquals(5, server.notes.size)
+            // A PUT that keeps the title and folder keeps the title.
+            assertEquals("T (3)", put(renamed, """{"title":"T (3)","content":"x"}"""))
+        }
+
+    @Test
+    fun categoryListsExactlyThatFolderWithItsOwnEtag() =
+        runTest {
+            val server = FakeNotesServer()
+            val root = server.addNote("R")
+            val a = server.addNote("A", category = "a")
+            server.addNote("Sub", category = "a/b")
+            val http = client(server)
+
+            val folder = http.get("$api/notes?category=a&exclude=content")
+            assertEquals(listOf(a), folder.array().ids())
+            assertEquals(listOf(root), http.get("$api/notes?category=&exclude=content").array().ids())
+
+            val etag = folder.headers["ETag"]!!
+            assertNotEquals(etag, http.get("$api/notes?exclude=content").headers["ETag"])
+            val again = http.get("$api/notes?category=a&exclude=content") { header("If-None-Match", etag) }
+            assertEquals(HttpStatusCode.NotModified, again.status)
+        }
+
     @OptIn(ExperimentalEncodingApi::class)
     @Test
     fun requiresBasicCredentials() =

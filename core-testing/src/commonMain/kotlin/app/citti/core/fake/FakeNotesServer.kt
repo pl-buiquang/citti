@@ -459,11 +459,15 @@ class FakeNotesServer(
                         text(HttpStatusCode.PreconditionFailed, "etag mismatch")
                     } else {
                         val body = bodyJson(body)
+                        val category = body.str("category") ?: n.category
+                        val title = body.str("title") ?: n.title
+                        // Like Nextcloud, a rename or move onto a taken title is never refused: it becomes `Title (n)`.
+                        val moved = title != n.title || category != n.category
                         val updated =
                             n.copy(
-                                title = body.str("title") ?: n.title,
+                                title = if (moved) freeTitle(category, title, except = n.id) else title,
                                 content = body.str("content") ?: n.content,
-                                category = body.str("category") ?: n.category,
+                                category = category,
                                 favorite = body.bool("favorite") ?: n.favorite,
                                 modified = now,
                                 version = n.version + 1,
@@ -617,12 +621,16 @@ class FakeNotesServer(
         return out.toByteArray().decodeToString()
     }
 
-    /** Like Nextcloud, a title already used in the folder becomes `Title (2)`, `Title (3)`... */
+    /**
+     * Like Nextcloud, a title already used in the folder becomes `Title (2)`, `Title (3)`... The match is
+     * case-sensitive, as on the real server. [except] is the Note being renamed or moved.
+     */
     private fun freeTitle(
         category: String,
         title: String,
+        except: Long? = null,
     ): String {
-        fun taken(candidate: String) = noteMap.values.any { it.category == category && it.title == candidate }
+        fun taken(candidate: String) = noteMap.values.any { it.id != except && it.category == category && it.title == candidate }
         var candidate = title
         var n = 2
         while (taken(candidate)) candidate = "$title ($n)".also { n++ }

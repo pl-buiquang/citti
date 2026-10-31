@@ -9,6 +9,7 @@ import app.citti.core.db.CittiDatabase
 import app.citti.core.fake.Endpoint
 import app.citti.core.fake.FakeFailure
 import app.citti.core.fake.FakeNotesServer
+import app.citti.core.sync.Dropped
 import app.citti.core.sync.PendingChanges
 import app.citti.core.sync.PushResult
 import app.citti.core.sync.PushSync
@@ -51,8 +52,9 @@ class PushSyncTest {
         title: String,
         content: String,
         category: String = "",
+        createdFrom: String? = null,
     ): Long {
-        notes.insertNew(title, category, content, 1, null)
+        notes.insertNew(title, category, content, 1, null, createdFrom)
         return notes.lastInsertedLocalId().executeAsOne()
     }
 
@@ -179,8 +181,9 @@ class PushSyncTest {
     @Test
     fun newNoteWithTakenTitleFollowsServerRename() =
         runTest {
-            server.addNote("Plan", "older", "work")
             val local = newLocal("Plan", "text", "work")
+            // Another client creates the title after the folder refresh: the server renames ours.
+            duringRequest(Endpoint.CREATE) { server.addNote("Plan", "older", "work") }
             assertEquals(1, done().created)
             val row = notes.selectByLocalId(local).executeAsOne()
             val remote = server.note(assertNotNull(row.remote_id))!!
@@ -295,9 +298,11 @@ class PushSyncTest {
     @Test
     fun titleEditedDuringCreateIsKeptOverServerRename() =
         runTest {
-            server.addNote("Plan", "older")
             val local = newLocal("Plan", "text")
-            duringRequest(Endpoint.CREATE) { rename(local, "Plan B") }
+            duringRequest(Endpoint.CREATE) {
+                server.addNote("Plan", "older")
+                rename(local, "Plan B")
+            }
             done()
 
             val row = notes.selectByLocalId(local).executeAsOne()
@@ -438,5 +443,170 @@ class PushSyncTest {
             assertEquals("base", server.note(remote)!!.content)
             assertEquals("DIRTY", notes.selectByLocalId(local).executeAsOne().sync_state)
             assertEquals(0, server.count(Endpoint.UPDATE))
+        }
+    // ---- push-time check (ADR 0006) ----
+
+    private fun serverTitles(category: String) =
+        server.notes
+            .filter { it.category == category }
+            .map { it.title }
+            .sorted()
+
+    private fun localOf(remote: Long) = notes.selectByRemoteId(remote).executeAsOne().local_id
+
+    @Test
+    fun untouchedNewNoteWhoseTitleIsOnTheServerIsDropped() =
+        runTest {
+            val remote = server.addNote("Dup", "from the web app", "scratch")
+            val local = newLocal("Dup", "", "scratch", createdFrom = "")
+
+            val result = done()
+            assertEquals(0, server.count(Endpoint.CREATE))
+            assertNull(notes.selectByLocalId(local).executeAsOneOrNull())
+            assertEquals(listOf(Dropped(local, localOf(remote), "Dup", "scratch")), result.dropped)
+            assertEquals(listOf("Dup"), serverTitles("scratch"))
+            assertEquals(0, PendingChanges(db).count())
+        }
+
+    @Test
+    fun editedNewNoteWhoseTitleIsOnTheServerBecomesAConflictCopy() =
+        runTest {
+            val remote = server.addNote("Dup", "from the web app", "scratch")
+            val local = newLocal("Dup", "typed text", "scratch", createdFrom = "")
+
+            val result = done()
+            assertTrue(result.dropped.isEmpty())
+            assertEquals(listOf(local), result.conflicts)
+            val row = notes.selectByLocalId(local).executeAsOne()
+            assertEquals("Dup (conflict 2026-10-31)", row.title)
+            assertEquals(localOf(remote), row.conflict_of)
+            assertNull(row.created_from)
+            assertEquals("SYNCED", row.sync_state)
+            val create = server.requests.single { it.endpoint == Endpoint.CREATE }
+            assertTrue("Dup (conflict 2026-10-31)" in create.body)
+            assertEquals(listOf("Dup", "Dup (conflict 2026-10-31)"), serverTitles("scratch"))
+        }
+
+    @Test
+    fun aFolderThatCannotBeRefreshedKeepsItsNewNotes() =
+        runTest {
+            val blocked = newLocal("A", "x", "a", createdFrom = "")
+            val other = newLocal("B", "y", "b", createdFrom = "")
+            val (synced, remote) = synced("S", "base", "c")
+            notes.markDirty("edited", 5, synced)
+            server.failNext(FakeFailure.NETWORK_ERROR, endpoint = Endpoint.LIST)
+
+            val result = done()
+            assertEquals(1, result.deferredNew)
+            assertEquals(1, result.created)
+            assertEquals(1, result.updated)
+            val row = notes.selectByLocalId(blocked).executeAsOne()
+            assertEquals("NEW", row.sync_state)
+            assertNull(row.remote_id)
+            assertEquals("SYNCED", notes.selectByLocalId(other).executeAsOne().sync_state)
+            assertEquals("edited", server.note(remote)!!.content)
+            assertEquals(emptyList(), serverTitles("a"))
+
+            // The next run refreshes the folder and pushes it.
+            val next = done()
+            assertEquals(0, next.deferredNew)
+            assertEquals(1, next.created)
+            assertEquals(listOf("A"), serverTitles("a"))
+        }
+
+    @Test
+    fun newNotesOfOneFolderCostOneFolderListPerPush() =
+        runTest {
+            newLocal("One", "1", "f", createdFrom = "")
+            newLocal("Two", "2", "f", createdFrom = "")
+            newLocal("Root", "r", createdFrom = "")
+
+            assertEquals(3, done().created)
+            val lists = server.requests.filter { it.endpoint == Endpoint.LIST }
+            assertEquals(listOf("f", ""), lists.map { it.query["category"] })
+            assertTrue(lists.all { it.query["exclude"] == "content" })
+        }
+
+    @Test
+    fun pushWithoutNewNotesListsNothing() =
+        runTest {
+            val (local, _) = synced()
+            notes.markDirty("edited", 5, local)
+            assertEquals(1, done().updated)
+            assertEquals(0, server.count(Endpoint.LIST))
+        }
+
+    @Test
+    fun conflictCopyFromAConflictGoesThroughTheCheck() =
+        runTest {
+            val (local, remote) = synced("Plan", "base", "work")
+            notes.markDirty("local text", 5, local)
+            server.editOnServer(remote, content = "server text")
+            // Another client already made a copy with the same title: ours must not become "(2)" on the server.
+            server.addNote("Plan (conflict 2026-10-31)", "theirs", "work")
+
+            val result = done()
+            assertEquals(1, server.count(Endpoint.LIST))
+            assertEquals("work", server.requests.single { it.endpoint == Endpoint.LIST }.query["category"])
+            val copy = notes.selectByLocalId(result.conflicts.first()).executeAsOne()
+            assertEquals("SYNCED", copy.sync_state)
+            assertEquals("local text", server.note(assertNotNull(copy.remote_id))!!.content)
+            assertTrue(serverTitles("work").none { it.endsWith("(2)") }, serverTitles("work").toString())
+        }
+
+    @Test
+    fun createdFromIsClearedOnceSynced() =
+        runTest {
+            val local = newLocal("Fresh", "text", createdFrom = "text")
+            assertEquals(1, done().created)
+            val row = notes.selectByLocalId(local).executeAsOne()
+            assertEquals("SYNCED", row.sync_state)
+            assertNull(row.created_from)
+        }
+
+    @Test
+    fun newNoteFromBeforeM5IsNeverDropped() =
+        runTest {
+            server.addNote("Dup", "server", "scratch")
+            // created_from NULL, as after the migration: even an empty text is not "untouched".
+            val local = newLocal("Dup", "", "scratch", createdFrom = null)
+
+            val result = done()
+            assertTrue(result.dropped.isEmpty())
+            assertEquals("Dup (conflict 2026-10-31)", notes.selectByLocalId(local).executeAsOne().title)
+            assertEquals(listOf("Dup", "Dup (conflict 2026-10-31)"), serverTitles("scratch"))
+        }
+
+    @Test
+    fun editDuringTheFolderRefreshMakesAConflictCopyNotADrop() =
+        runTest {
+            server.addNote("Dup", "server", "scratch")
+            val local = newLocal("Dup", "", "scratch", createdFrom = "")
+            duringRequest(Endpoint.LIST) { notes.markDirty("typed meanwhile", 6, local) }
+
+            val result = done()
+            assertTrue(result.dropped.isEmpty())
+            val row = notes.selectByLocalId(local).executeAsOne()
+            assertEquals("Dup (conflict 2026-10-31)", row.title)
+            assertEquals("typed meanwhile", server.note(assertNotNull(row.remote_id))!!.content)
+            assertEquals(listOf("Dup", "Dup (conflict 2026-10-31)"), serverTitles("scratch"))
+        }
+
+    @Test
+    fun titleMatchIsCaseSensitiveLikeTheServer() =
+        runTest {
+            server.addNote("X CASE", "server", "scratch")
+            val local = newLocal("X case", "", "scratch", createdFrom = "")
+            assertEquals(1, done().created)
+            assertEquals("X case", notes.selectByLocalId(local).executeAsOne().title)
+        }
+
+    @Test
+    fun authFailureOnTheFolderRefreshStopsTheRun() =
+        runTest {
+            newLocal("N", "n", createdFrom = "")
+            server.failNext(FakeFailure.UNAUTHORIZED, endpoint = Endpoint.LIST)
+            assertIs<ApiError.Auth>(assertIs<PushResult.Failed>(push.push()).error)
+            assertEquals(0, server.count(Endpoint.CREATE))
         }
 }

@@ -92,6 +92,23 @@ class SyncEngineTest {
         }
 
     @Test
+    fun droppedNewNoteIsAnnouncedAsAnEvent() =
+        runTest {
+            val remote = server.addNote("Dup", "server")
+            notes.insertNew("Dup", "", "", 1, null, createdFrom = "")
+            val local = notes.lastInsertedLocalId().executeAsOne()
+            val events = mutableListOf<SyncEvent>()
+            val collector = launch(UnconfinedTestDispatcher(testScheduler)) { engine.events.collect { events += it } }
+
+            val outcome = assertIs<SyncOutcome.Synced>(engine.push())
+            val serverLocal = notes.selectByRemoteId(remote).executeAsOne().local_id
+            assertEquals(listOf(Dropped(local, serverLocal, "Dup", "")), outcome.dropped)
+            assertEquals(listOf<SyncEvent>(SyncEvent.Dropped(local, serverLocal)), events)
+            assertEquals(0, server.count(Endpoint.CREATE))
+            collector.cancelAndJoin()
+        }
+
+    @Test
     fun noChangeRunAfterFirstSyncIsOneRequest() =
         runTest {
             server.generateNotes(20)

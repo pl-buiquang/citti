@@ -8,8 +8,11 @@ import app.citti.core.db.CittiDatabase
 import app.citti.core.log.SyncLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlin.time.TimeSource
@@ -36,12 +39,17 @@ sealed interface SyncOutcome {
     /** Nothing pushed, and the server list answered 304. */
     data object NothingChanged : SyncOutcome
 
-    /** The run reached the end. [conflicts] counts the Conflict copies created by the push. */
+    /**
+     * The run reached the end. [conflicts] counts the Conflict copies created by the push, [dropped] the untouched
+     * New notes it deleted because the server had them, [deleteUndone] the local deletes the server undid.
+     */
     data class Synced(
         val pushed: Int,
         val pulled: Int,
         val conflicts: Int,
         val failures: List<NoteFailure>,
+        val dropped: List<Dropped> = emptyList(),
+        val deleteUndone: Int = 0,
     ) : SyncOutcome
 
     /** A run-stopping [error]; counts are what got done before it. */
@@ -50,7 +58,18 @@ sealed interface SyncOutcome {
         val pushed: Int = 0,
         val conflicts: Int = 0,
         val failures: List<NoteFailure> = emptyList(),
+        val dropped: List<Dropped> = emptyList(),
+        val deleteUndone: Int = 0,
     ) : SyncOutcome
+}
+
+/** One-off things a run did that an open screen reacts to. */
+sealed interface SyncEvent {
+    /** The untouched New note [localId] was deleted: the server already had it as [serverLocalId]. */
+    data class Dropped(
+        val localId: Long,
+        val serverLocalId: Long,
+    ) : SyncEvent
 }
 
 /** What the UI shows: drawer line, badges, banners. Every variant carries the pending and Conflict copy counts. */
@@ -141,6 +160,11 @@ class SyncEngine(
     private val _state = MutableStateFlow<SyncStatus>(idle())
     val state: StateFlow<SyncStatus> = _state.asStateFlow()
 
+    private val _events = MutableSharedFlow<SyncEvent>(replay = 0, extraBufferCapacity = EVENT_BUFFER)
+
+    /** Emitted once the push has written the change; no replay. */
+    val events: SharedFlow<SyncEvent> = _events.asSharedFlow()
+
     /** Recounts pending changes and Conflict copies, e.g. after a local edit. No-op while a run is in progress. */
     fun refreshCounts() {
         val current = _state.value
@@ -193,9 +217,10 @@ class SyncEngine(
     }
 
     /**
-     * Pushes the queue and nothing else: no list request (it costs a round trip even when the answer is a 304).
-     * Meant for [SyncTrigger.AfterEdit]. When a run is in progress it only records the request and the run pushes
-     * again before it ends, so edits made during a long sync do not wait for the next periodic one.
+     * Pushes the queue and nothing else: no full list request (it costs a round trip even when the answer is a 304).
+     * New notes still cost one folder list per folder (push-time check, ADR 0006). Meant for [SyncTrigger.AfterEdit].
+     * When a run is in progress it only records the request and the run pushes again before it ends, so edits made
+     * during a long sync do not wait for the next periodic one.
      */
     suspend fun push(trigger: SyncTrigger = SyncTrigger.AfterEdit): SyncOutcome {
         if (!mutex.tryLock()) {
@@ -266,10 +291,10 @@ class SyncEngine(
         log.info("push start trigger=$trigger pending=${pending.count()}")
         running(SyncPhase.Pushing, null)
         val outcome =
-            when (val result = push.push()) {
+            when (val result = pushAndEmit()) {
                 is PushResult.Failed -> {
                     log.error("push failed ${result.error.logText()}")
-                    fail(result.error)
+                    fail(result.error, dropped = result.dropped)
                 }
 
                 is PushResult.Done -> {
@@ -277,10 +302,12 @@ class SyncEngine(
                     val failures = result.failures.map { NoteFailure(it.localId, null, it.error) }
                     // lastSuccessAt stays: only a full sync, with its pull, says the whole Vault is up to date.
                     _state.value = idle()
-                    if (count == 0 && result.conflicts.isEmpty() && failures.isEmpty()) {
+                    if (count == 0 && result.conflicts.isEmpty() && failures.isEmpty() && result.dropped.isEmpty() &&
+                        result.deleteUndone == 0
+                    ) {
                         SyncOutcome.NothingChanged
                     } else {
-                        SyncOutcome.Synced(count, 0, result.conflicts.size, failures)
+                        SyncOutcome.Synced(count, 0, result.conflicts.size, failures, result.dropped, result.deleteUndone)
                     }
                 }
             }
@@ -289,6 +316,17 @@ class SyncEngine(
         log.info("push done trigger=$trigger ${summary(outcome)} duration=${started.elapsedNow().inWholeMilliseconds}ms$traffic")
         return outcome
     }
+
+    /** Runs the push and emits a [SyncEvent.Dropped] per dropped New note, after the push wrote it. */
+    private suspend fun pushAndEmit(): PushResult =
+        push.push().also { result ->
+            val dropped =
+                when (result) {
+                    is PushResult.Done -> result.dropped
+                    is PushResult.Failed -> result.dropped
+                }
+            dropped.forEach { _events.tryEmit(SyncEvent.Dropped(it.localId, it.serverLocalId)) }
+        }
 
     /** Outside the request count of the sync: a no-change sync stays one request. A failure is ignored. */
     private suspend fun refreshDav(
@@ -337,10 +375,10 @@ class SyncEngine(
         running(SyncPhase.Pushing, null)
         log.info("phase push start pending=${pending.count()}")
         val pushed =
-            when (val result = push.push()) {
+            when (val result = pushAndEmit()) {
                 is PushResult.Failed -> {
                     log.error("phase push failed ${result.error.logText()}")
-                    return fail(result.error)
+                    return fail(result.error, dropped = result.dropped)
                 }
 
                 is PushResult.Done -> {
@@ -349,7 +387,8 @@ class SyncEngine(
             }
         log.info(
             "phase push end updated=${pushed.updated} created=${pushed.created} deleted=${pushed.deleted} " +
-                "conflicts=${pushed.conflicts.size} skippedReadOnly=${pushed.skippedReadOnly} failures=${pushed.failures.size}",
+                "conflicts=${pushed.conflicts.size} skippedReadOnly=${pushed.skippedReadOnly} failures=${pushed.failures.size} " +
+                "dropped=${pushed.dropped.size} deferredNew=${pushed.deferredNew}",
         )
         val pushedCount = pushed.updated + pushed.created + pushed.deleted
         val pushFailures = pushed.failures.map { NoteFailure(it.localId, null, it.error) }
@@ -366,22 +405,31 @@ class SyncEngine(
             ) {
                 is PullResult.Failed -> {
                     log.error("phase pull failed ${result.error.logText()}")
-                    return fail(result.error, pushedCount, pushed.conflicts.size, pushFailures)
+                    return fail(result.error, pushedCount, pushed.conflicts.size, pushFailures, pushed.dropped, pushed.deleteUndone)
                 }
 
                 PullResult.NothingChanged -> {
                     log.info("phase pull end result=NothingChanged")
-                    if (pushedCount == 0 && pushed.conflicts.isEmpty() && pushFailures.isEmpty()) {
+                    if (pushedCount == 0 && pushed.conflicts.isEmpty() && pushFailures.isEmpty() && pushed.dropped.isEmpty() &&
+                        pushed.deleteUndone == 0
+                    ) {
                         SyncOutcome.NothingChanged
                     } else {
-                        SyncOutcome.Synced(pushedCount, 0, pushed.conflicts.size, pushFailures)
+                        SyncOutcome.Synced(pushedCount, 0, pushed.conflicts.size, pushFailures, pushed.dropped, pushed.deleteUndone)
                     }
                 }
 
                 is PullResult.Pulled -> {
                     log.info("phase pull end result=Pulled contentFetched=${result.contentFetched} failures=${result.failures.size}")
                     val failures = pushFailures + result.failures.map { NoteFailure(null, it.remoteId, it.error) }
-                    SyncOutcome.Synced(pushedCount, result.contentFetched, pushed.conflicts.size, failures)
+                    SyncOutcome.Synced(
+                        pushedCount,
+                        result.contentFetched,
+                        pushed.conflicts.size,
+                        failures,
+                        pushed.dropped,
+                        pushed.deleteUndone,
+                    )
                 }
             }
         lastResult =
@@ -401,6 +449,8 @@ class SyncEngine(
         pushed: Int = 0,
         conflicts: Int = 0,
         failures: List<NoteFailure> = emptyList(),
+        dropped: List<Dropped> = emptyList(),
+        deleteUndone: Int = 0,
     ): SyncOutcome {
         val (p, c) = counts()
         val at = lastSuccessAt
@@ -414,7 +464,7 @@ class SyncEngine(
         lastResult = kind
         persist()
         _state.value = status
-        return SyncOutcome.Failed(error, pushed, conflicts, failures)
+        return SyncOutcome.Failed(error, pushed, conflicts, failures, dropped, deleteUndone)
     }
 
     private fun describe(error: ApiError): String =
@@ -461,5 +511,6 @@ class SyncEngine(
         const val KEY_LAST_AT = "sync.last-at"
         const val KEY_LAST_RESULT = "sync.last-result"
         const val DEFAULT_STARTUP_RETRY_DELAY = 2_000L
+        private const val EVENT_BUFFER = 16
     }
 }
