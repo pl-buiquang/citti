@@ -37,8 +37,11 @@ class SyncWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val container = (applicationContext as CittiApp).container
+        AndroidSyncLog.info("worker start attempt=$runAttemptCount")
         val outcome = container.syncEngine()?.sync(SyncTrigger.Periodic)
-        return when (decide(outcome, runAttemptCount)) {
+        val decision = decide(outcome, runAttemptCount)
+        AndroidSyncLog.info("worker decision=$decision attempt=$runAttemptCount signedIn=${outcome != null}")
+        return when (decision) {
             WorkDecision.Success -> Result.success()
             WorkDecision.Retry -> Result.retry()
             WorkDecision.Failure -> Result.failure()

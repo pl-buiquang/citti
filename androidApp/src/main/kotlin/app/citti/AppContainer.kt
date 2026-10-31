@@ -167,12 +167,19 @@ class AppContainer(
             stack.value?.client?.close()
             val config = NotesApiConfig(credentials.serverUrl, credentials.user, credentials.appPassword)
             val client = createNotesHttpClient(config)
-            val api = NotesApi(client, config)
+            val api = NotesApi(client, config, AndroidSyncLog)
             val now = { System.currentTimeMillis() / 1000 }
             // SyncEngine reads settings in its constructor, so build it off the main thread.
             val engine =
                 withContext(Dispatchers.IO) {
-                    SyncEngine(PushSync(api, database, now), PullSync(api, database), database, now)
+                    SyncEngine(
+                        PushSync(api, database, AndroidSyncLog, now),
+                        PullSync(api, database, log = AndroidSyncLog),
+                        database,
+                        AndroidSyncLog,
+                        api.stats,
+                        now,
+                    )
                 }
             SyncStack(client, engine).also { stack.value = it }
         }
