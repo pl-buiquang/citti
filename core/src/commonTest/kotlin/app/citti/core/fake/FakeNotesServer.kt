@@ -271,11 +271,12 @@ class FakeNotesServer(
 
             Endpoint.CREATE -> {
                 val body = bodyJson(request)
+                val category = body.str("category") ?: ""
                 val id =
                     addNote(
-                        title = body.str("title") ?: "",
+                        title = freeTitle(category, body.str("title") ?: ""),
                         content = body.str("content") ?: "",
-                        category = body.str("category") ?: "",
+                        category = category,
                         favorite = body.bool("favorite") ?: false,
                     )
                 val created = noteMap.getValue(id)
@@ -336,6 +337,18 @@ class FakeNotesServer(
                 text(HttpStatusCode.NotFound, "not found")
             }
         }
+
+    /** Like Nextcloud, a title already used in the folder becomes `Title (2)`, `Title (3)`... */
+    private fun freeTitle(
+        category: String,
+        title: String,
+    ): String {
+        fun taken(candidate: String) = noteMap.values.any { it.category == category && it.title == candidate }
+        var candidate = title
+        var n = 2
+        while (taken(candidate)) candidate = "$title ($n)".also { n++ }
+        return candidate
+    }
 
     private fun MockRequestHandleScope.withNote(
         path: String,

@@ -232,6 +232,27 @@ class FakeNotesServerTest {
             assertEquals(HttpStatusCode.NotFound, http.put("$api/notes/999") { setBody("{}") }.status)
         }
 
+    @Test
+    fun createRenamesDuplicateTitleInTheSameFolder() =
+        runTest {
+            val server = FakeNotesServer()
+            val http = client(server)
+
+            suspend fun create(
+                title: String,
+                category: String,
+            ) = http
+                .post("$api/notes") { setBody("""{"title":"$title","content":"","category":"$category"}""") }
+                .obj()
+                .getValue("title")
+                .jsonPrimitive.content
+
+            assertEquals("Hi", create("Hi", "a"))
+            assertEquals("Hi (2)", create("Hi", "a"))
+            assertEquals("Hi (3)", create("Hi", "a"))
+            assertEquals("Hi", create("Hi", "b"))
+        }
+
     @OptIn(ExperimentalEncodingApi::class)
     @Test
     fun requiresBasicCredentials() =
