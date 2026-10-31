@@ -54,6 +54,8 @@ private class CalendarDaily(
         return result(date)
     }
 
+    override suspend fun viewLine(localId: Long): Int? = null
+
     override suspend fun dateOf(
         folder: String,
         title: String,

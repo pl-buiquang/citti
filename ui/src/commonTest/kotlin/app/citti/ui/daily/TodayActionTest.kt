@@ -29,6 +29,7 @@ private class FakeDaily : DailyGateway {
     var wait: CompletableDeferred<Unit>? = null
     val opened = mutableListOf<LocalDate>()
     val dailyDates = mutableMapOf<Pair<String, String>, LocalDate>()
+    val viewLines = mutableMapOf<Long, Int>()
 
     override fun today(): LocalDate = today
 
@@ -39,6 +40,8 @@ private class FakeDaily : DailyGateway {
         wait?.await()
         return result(date)
     }
+
+    override suspend fun viewLine(localId: Long): Int? = viewLines[localId]
 
     override suspend fun dateOf(
         folder: String,
@@ -89,6 +92,54 @@ class TodayActionTest {
             assertEquals(listOf(TODAY), f.daily.opened)
             assertEquals(Route.Note(5), f.navigator.top)
             assertNull(f.action.busy.value)
+        }
+
+    @Test
+    fun resumeOpensAnExistingNoteAtItsReadingPosition() =
+        runTest {
+            val f =
+                fixture {
+                    result = { DailyResult.Opened(5) }
+                    viewLines[5] = 42
+                }
+            f.action.openToday(resume = true)
+            runCurrent()
+            assertEquals(Route.Note(5, startLine = 42), f.navigator.top)
+        }
+
+    @Test
+    fun resumeWithoutAReadingPositionKeepsThePlainOpen() =
+        runTest {
+            val f = fixture { result = { DailyResult.Opened(5) } }
+            f.action.openToday(resume = true)
+            runCurrent()
+            assertEquals(Route.Note(5), f.navigator.top)
+        }
+
+    @Test
+    fun withoutResumeTheReadingPositionIsIgnored() =
+        runTest {
+            val f =
+                fixture {
+                    result = { DailyResult.Opened(5) }
+                    viewLines[5] = 42
+                }
+            f.action.openToday()
+            runCurrent()
+            assertEquals(Route.Note(5), f.navigator.top)
+        }
+
+    @Test
+    fun aCreatedNoteOpensFocusedWhateverResume() =
+        runTest {
+            val f =
+                fixture {
+                    result = { DailyResult.Created(8, templateMissing = null) }
+                    viewLines[8] = 3
+                }
+            f.action.openToday(resume = true)
+            runCurrent()
+            assertEquals(Route.Note(8, focus = true), f.navigator.top)
         }
 
     @Test

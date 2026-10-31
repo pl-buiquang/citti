@@ -62,6 +62,8 @@ import app.citti.ui.image.rememberImagePicker
 import app.citti.ui.login.LoginController
 import app.citti.ui.login.LoginFlowBackend
 import app.citti.ui.login.LoginScreen
+import app.citti.ui.nav.DeepLink
+import app.citti.ui.nav.DeepLinkTarget
 import app.citti.ui.nav.Navigator
 import app.citti.ui.nav.Route
 import app.citti.ui.nav.entryId
@@ -84,6 +86,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -127,8 +131,12 @@ class MainActivity : ComponentActivity() {
             notes = container::dailyNotes,
             today = { localNow().date },
             io = Dispatchers.IO,
+            viewLine = { container.noteWidget(it)?.viewLine },
         )
     }
+
+    /** A `citti://` link waiting for the signed-in back stack to exist; consumed once, never re-applied on recreation. */
+    private val pendingDeepLink = MutableStateFlow<DeepLinkTarget?>(null)
 
     // POST_NOTIFICATIONS: asked once, never blocks anything; the sync works without it.
     private val notificationPermission =
@@ -147,14 +155,55 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (shouldApplyDeepLink(isNewIntent = false, hasSavedState = savedInstanceState != null, flags = intent.flags)) {
+            pendingDeepLink.value = intent.dataString?.let(DeepLink::parse)
+        }
         setContent {
             CittiTheme {
                 val signedIn by container.signedIn.collectAsState()
                 when (signedIn) {
-                    null -> Blank()
-                    false -> LoginRoute()
-                    true -> SignedIn()
+                    null -> {
+                        Blank()
+                    }
+
+                    // A link opened while signed out is dropped.
+                    false -> {
+                        LaunchedEffect(Unit) { pendingDeepLink.value = null }
+                        LoginRoute()
+                    }
+
+                    true -> {
+                        SignedIn()
+                    }
                 }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (shouldApplyDeepLink(isNewIntent = true, hasSavedState = false, flags = intent.flags)) {
+            pendingDeepLink.value = intent.dataString?.let(DeepLink::parse)
+        }
+    }
+
+    /** Resets the stack to the root and the link's target. The open Notes are flushed first (text and Reading position). */
+    private fun applyDeepLink(
+        target: DeepLinkTarget,
+        navigator: Navigator,
+        root: Route,
+        today: TodayAction,
+    ) {
+        routes.controllers<NoteController>().forEach { it.onLeave() }
+        when (target) {
+            is DeepLinkTarget.OpenNote -> {
+                navigator.reset(listOf(root, Route.Note(target.localId, startLine = target.line)))
+            }
+
+            is DeepLinkTarget.Today -> {
+                navigator.reset(listOf(root))
+                today.openToday(resume = target.resume)
             }
         }
     }
@@ -185,8 +234,15 @@ class MainActivity : ComponentActivity() {
             known.addAll(keys)
         }
         BackHandler(enabled = stack.size > 1) { navigator.pop() }
-        // With the back stack, not a screen: the Today button, the Calendar, and a citti://daily link later.
+        // With the back stack, not a screen: the Today button, the Calendar and a citti://daily link.
         val today = remember(navigator) { TodayAction(container.appScope, dailyGateway, navigator::push, snackbars::show) }
+        // A widget or adb link: after the navigator exists, whether the app was cold-started or was already open.
+        LaunchedEffect(navigator) {
+            pendingDeepLink.filterNotNull().collect { target ->
+                applyDeepLink(target, navigator, root, today)
+                pendingDeepLink.value = null
+            }
+        }
         // The automatic Import from Obsidian, after the first Sync: a snackbar only when it read something.
         LaunchedEffect(Unit) {
             container.dailyImportReports.collect { if (it.readSomething) snackbars.show(Snack.DailyImported) }
@@ -527,6 +583,7 @@ class MainActivity : ComponentActivity() {
                     dialogs = remember(controller) { controller.dialogActions() },
                     onOpenSettings = { navigator.push(Route.Settings) },
                     onDismissNotice = controller::dismissNotice,
+                    onViewLine = controller::onViewLine,
                 ),
             images = images,
             folders = pickerFolders,

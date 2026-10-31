@@ -26,6 +26,9 @@ interface DailyGateway {
     /** Opens or creates the Daily note of [date] ([DailyNotes.openOrCreate]); null while signed out. */
     suspend fun openOrCreate(date: LocalDate): DailyResult?
 
+    /** The Reading position of note [localId] ([Route.Note.startLine]), or null when it has none. */
+    suspend fun viewLine(localId: Long): Int?
+
     /** The date of the Daily note [title] of [folder], or null when it isn't one. */
     suspend fun dateOf(
         folder: String,
@@ -38,12 +41,15 @@ class CoreDailyGateway(
     private val notes: () -> DailyNotes?,
     private val today: () -> LocalDate,
     private val io: CoroutineDispatcher,
+    private val viewLine: suspend (localId: Long) -> Int? = { null },
 ) : DailyGateway {
     override fun today(): LocalDate = today.invoke()
 
     override suspend fun localNote(date: LocalDate): Long? = withContext(io) { notes()?.localNote(date) }
 
     override suspend fun openOrCreate(date: LocalDate): DailyResult? = withContext(io) { notes()?.openOrCreate(date) }
+
+    override suspend fun viewLine(localId: Long): Int? = viewLine.invoke(localId)
 
     override suspend fun dateOf(
         folder: String,
@@ -76,8 +82,11 @@ class TodayAction(
     /** The device's local date now. */
     fun today(): LocalDate = gateway.today()
 
-    /** The Today button: today's Daily note. */
-    fun openToday() = open(gateway.today())
+    /**
+     * The Today button: today's Daily note. With [resume] (the Daily note widget), an existing note opens at its Reading
+     * position; a created one still opens focused.
+     */
+    fun openToday(resume: Boolean = false) = open(gateway.today(), resume = resume)
 
     /**
      * Opens or creates [date]'s Daily note. With [confirmPast], a past day without a local Daily note is not created
@@ -86,6 +95,7 @@ class TodayAction(
     fun open(
         date: LocalDate,
         confirmPast: Boolean = false,
+        resume: Boolean = false,
     ) {
         if (!busyDate.compareAndSet(null, date)) return
         scope.launch {
@@ -97,7 +107,8 @@ class TodayAction(
                 confirmDate.value = null
                 when (val result = gateway.openOrCreate(date)) {
                     is DailyResult.Opened -> {
-                        push(Route.Note(result.localId))
+                        val line = if (resume) gateway.viewLine(result.localId) else null
+                        push(Route.Note(result.localId, startLine = line))
                     }
 
                     is DailyResult.Created -> {
