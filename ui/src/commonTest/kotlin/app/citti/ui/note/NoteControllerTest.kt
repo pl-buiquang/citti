@@ -789,7 +789,7 @@ class NoteControllerTest {
             f.gateway.row.value = null
             runCurrent()
             assertEquals(Route.Note(7), f.navigator.top)
-            assertEquals(listOf<Snack>(Snack.AlreadyOnServer), f.snacks)
+            assertEquals(listOf<Snack>(Snack.Dropped("Title", "work")), f.snacks)
             assertFalse(f.controller.state.value.gone)
         }
 
@@ -804,7 +804,7 @@ class NoteControllerTest {
             f.gateway.drops.tryEmit(7)
             runCurrent()
             assertEquals(Route.Note(7), f.navigator.top)
-            assertEquals(listOf<Snack>(Snack.AlreadyOnServer), f.snacks)
+            assertEquals(listOf<Snack>(Snack.Dropped("Title", "work")), f.snacks)
         }
 
     @Test

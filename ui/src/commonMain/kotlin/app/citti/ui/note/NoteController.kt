@@ -292,19 +292,20 @@ class NoteController(
                     null
                 }
         // With unsaved text, the Gone rule's Conflict copy snackbar is the one to show.
-        if (server != null && switchToServerNote(server, snack = !unsaved)) return
+        if (server != null && switchToServerNote(server, m.row, snack = !unsaved)) return
         model.update { it.copy(gone = true) }
     }
 
     /** Dropped while open: the screen becomes the server's Note. False when this Note is no longer on top. */
     private fun switchToServerNote(
         serverLocalId: Long,
+        row: EditorDoc?,
         snack: Boolean,
     ): Boolean {
         val top = navigator.top
         if (top !is Route.Note || top.localId != localId) return false
         navigator.replaceTop(Route.Note(serverLocalId, preview = top.preview))
-        if (snack) notify(Snack.AlreadyOnServer)
+        if (snack && row != null) notify(Snack.Dropped(row.title, row.folder))
         return true
     }
 

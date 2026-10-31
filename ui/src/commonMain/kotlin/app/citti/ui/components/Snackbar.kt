@@ -54,6 +54,12 @@ sealed interface Snack {
         val copyTitle: String,
     ) : Snack
 
+    /** The open New note was dropped at Sync: the server already had [title] in [folder], and the screen shows it. */
+    data class Dropped(
+        val title: String,
+        val folder: String,
+    ) : Snack
+
     /** A tap on a link to no Note; its Create note action opens the New note dialog on [folder] and [title]. */
     data class LinkMissing(
         val name: String,
@@ -70,9 +76,6 @@ sealed interface Snack {
 
     /** The ⋮ menu's Delete: shown after the Note pops. */
     data object NoteDeleted : Snack
-
-    /** The open New note was dropped at push: the screen now shows the server's Note of that title. */
-    data object AlreadyOnServer : Snack
 
     /** Insert image while offline: nothing was inserted. */
     data object UploadOffline : Snack
@@ -114,12 +117,12 @@ fun SnackbarHost(
         when (shown) {
             is Snack.ConflictCopy -> stringResource(Res.string.conflict_snackbar, shown.copyTitle)
             is Snack.Deleted -> stringResource(Res.string.deleted_snackbar, shown.copyTitle)
+            is Snack.Dropped -> stringResource(Res.string.dropped_snackbar)
             is Snack.LinkMissing -> stringResource(Res.string.link_missing, shown.name)
             Snack.LinkUnsynced -> stringResource(Res.string.link_unsynced)
             Snack.FavoriteAdded -> stringResource(Res.string.toast_favorite_added)
             Snack.FavoriteRemoved -> stringResource(Res.string.toast_favorite_removed)
             Snack.NoteDeleted -> stringResource(Res.string.toast_deleted)
-            Snack.AlreadyOnServer -> stringResource(Res.string.dropped_snackbar)
             Snack.UploadOffline -> stringResource(Res.string.upload_offline)
             is Snack.UploadFailed -> stringResource(Res.string.upload_failed, shown.reason)
         }
