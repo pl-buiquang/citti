@@ -14,7 +14,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -24,7 +27,9 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.action_back
@@ -89,9 +94,16 @@ fun SearchBar(
                 focus.requestFocus()
                 keyboard?.show()
             }
+            // The String overload would restart the cursor at 0 when Search is rebuilt (Back from a Note).
+            var field by remember { mutableStateOf(TextFieldValue(query, TextRange(query.length))) }
+            // The query changed from outside the field (✕): follow it, cursor at the end.
+            if (field.text != query) field = TextFieldValue(query, TextRange(query.length))
             BasicTextField(
-                value = query,
-                onValueChange = onQueryChange,
+                value = field,
+                onValueChange = {
+                    field = it
+                    if (it.text != query) onQueryChange(it.text)
+                },
                 singleLine = true,
                 textStyle = CittiTheme.typography.body.colored(),
                 cursorBrush = SolidColor(colors.accent),
