@@ -9,6 +9,8 @@ import app.citti.core.db.CittiDatabase
 import app.citti.core.fake.Endpoint
 import app.citti.core.fake.FakeFailure
 import app.citti.core.fake.FakeNotesServer
+import app.citti.core.insertNew
+import app.citti.core.markDirty
 import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.plugin
 import kotlinx.coroutines.CompletableDeferred

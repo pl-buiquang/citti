@@ -1,0 +1,34 @@
+-- (category, title) serves the Folder lookups of Tree mode, Today, the Calendar and the creation check (M5/M6).
+-- It makes note_category redundant.
+DROP INDEX note_category;
+CREATE INDEX note_category_title ON note(category, title);
+
+ALTER TABLE note ADD COLUMN excerpt TEXT;
+
+CREATE VIRTUAL TABLE note_fts USING fts4(
+    content='note',
+    title,
+    content,
+    category,
+    tokenize=unicode61 "remove_diacritics=1"
+);
+
+-- External content: FTS4 reads the old values from `note`, so deletes run BEFORE and inserts AFTER.
+CREATE TRIGGER note_fts_before_delete BEFORE DELETE ON note BEGIN
+    DELETE FROM note_fts WHERE docid = old.local_id;
+END;
+CREATE TRIGGER note_fts_before_update BEFORE UPDATE OF title, content, category ON note
+WHEN old.title IS NOT new.title OR old.content IS NOT new.content OR old.category IS NOT new.category BEGIN
+    DELETE FROM note_fts WHERE docid = old.local_id;
+END;
+CREATE TRIGGER note_fts_after_update AFTER UPDATE OF title, content, category ON note
+WHEN old.title IS NOT new.title OR old.content IS NOT new.content OR old.category IS NOT new.category BEGIN
+    INSERT INTO note_fts(docid, title, content, category) VALUES (new.local_id, new.title, new.content, new.category);
+END;
+CREATE TRIGGER note_fts_after_insert AFTER INSERT ON note BEGIN
+    INSERT INTO note_fts(docid, title, content, category) VALUES (new.local_id, new.title, new.content, new.category);
+END;
+
+-- Index the existing notes. SQLDelight rejects INSERT INTO note_fts(note_fts) VALUES ('rebuild') in a .sqm;
+-- on a new, empty external-content index this has the same effect.
+INSERT INTO note_fts(docid, title, content, category) SELECT local_id, title, content, category FROM note;

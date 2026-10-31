@@ -8,6 +8,7 @@ import app.citti.core.api.RemoteNote
 import app.citti.core.api.logText
 import app.citti.core.db.CittiDatabase
 import app.citti.core.log.SyncLog
+import app.citti.core.note.excerptOf
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -219,10 +220,17 @@ class PullSync(
         val failures = mutableListOf<ContentFailure>()
         var fetched = 0
         val batch = ArrayList<Pair<Long, RemoteNote>>(writeBatchSize)
+        val titles = targets.associate { it.local_id to it.title }
 
         fun flush() {
             if (batch.isEmpty()) return
-            database.transaction { batch.forEach { (localId, n) -> notes.updateContent(n.content ?: "", n.etag, localId) } }
+            database.transaction {
+                batch.forEach { (localId, n) ->
+                    val content = n.content ?: ""
+                    val title = n.title ?: titles.getValue(localId)
+                    notes.updateContent(content, excerptOf(content, title), n.etag, localId)
+                }
+            }
             fetched += batch.size
             batch.clear()
         }

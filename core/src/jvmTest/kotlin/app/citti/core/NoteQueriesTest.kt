@@ -1,7 +1,9 @@
 package app.citti.core
 
+import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.citti.core.db.CittiDatabase
+import app.citti.core.note.ExcerptBackfill
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -208,6 +210,28 @@ class NoteQueriesTest {
     }
 
     @Test
+    fun insertNewInHiddenFolderIsHidden() {
+        db.settingQueries.insertExclusion("a/b", "HIDDEN")
+        db.settingQueries.insertExclusion("a", "UNSYNCED")
+        server(1, category = "a/b", hidden = true)
+        val origin = notes.selectByRemoteId(1).executeAsOne().local_id
+
+        fun hiddenAfterInsert(
+            category: String,
+            conflictOf: Long? = null,
+        ): Boolean {
+            notes.insertNew("t", category, "body", 5, conflictOf)
+            return notes.selectByLocalId(notes.lastInsertedLocalId().executeAsOne()).executeAsOne().hidden
+        }
+        assertTrue(hiddenAfterInsert("a/b"))
+        assertTrue(hiddenAfterInsert("a/b/c"))
+        assertTrue(hiddenAfterInsert("a/b", conflictOf = origin))
+        assertFalse(hiddenAfterInsert("a/bc"))
+        assertFalse(hiddenAfterInsert("a"))
+        assertFalse(hiddenAfterInsert(""))
+    }
+
+    @Test
     fun deleteByCategoryPrefixMatchesFolderAndSubfoldersOnly() {
         listOf("a", "a/b", "a/b/c", "a/bc", "ab", "_work", "xwork", "").forEachIndexed { i, c ->
             server(i + 1L, category = c)
@@ -292,6 +316,101 @@ class NoteQueriesTest {
         upgraded.syncStateQueries.upsert("k", null, 0, null)
         upgraded.settingQueries.insertExclusion("p", "HIDDEN")
         assertEquals(1, upgraded.noteQueries.countNotes().executeAsOne())
-        assertEquals(2, CittiDatabase.Schema.version)
+        assertEquals(3, CittiDatabase.Schema.version)
+    }
+
+    /** The v2 schema as 1.sqm leaves it, which is what databases/2.db holds. */
+    private fun v2Driver(): JdbcSqliteDriver {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        driver.execute(null, "CREATE TABLE meta (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)", 0)
+        CittiDatabase.Schema.migrate(driver, 1, 2)
+        return driver
+    }
+
+    private fun JdbcSqliteDriver.strings(sql: String): List<String> =
+        executeQuery(
+            null,
+            sql,
+            { c ->
+                val out = mutableListOf<String>()
+                while (c.next().value) out += c.getString(0).orEmpty()
+                QueryResult.Value(out)
+            },
+            0,
+        ).value
+
+    @Test
+    fun migrationTwoAddsIndexExcerptAndFts() {
+        val driver = v2Driver()
+        driver.execute(
+            null,
+            "INSERT INTO note(remote_id, etag, title, category, content, modified) VALUES " +
+                "(1, 'e1', 'Été à Paris', 'voyages', 'Une journée', 1), (2, 'e2', 'Courses', '', NULL, 2)",
+            0,
+        )
+        CittiDatabase.Schema.migrate(driver, 2, CittiDatabase.Schema.version)
+
+        val indexes = driver.strings("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'note'")
+        assertTrue("note_category_title" in indexes)
+        assertFalse("note_category" in indexes)
+        val migrated = CittiDatabase(driver).noteQueries
+        assertNull(migrated.selectByRemoteId(1).executeAsOne().excerpt)
+        // The migration indexed the existing notes: by content and accent-folded title, and by title alone.
+        val found = "SELECT note.remote_id FROM note_fts JOIN note ON note.local_id = note_fts.docid WHERE note_fts MATCH "
+        assertEquals(listOf("1"), driver.strings("$found '\"journee*\"'"))
+        assertEquals(listOf("1"), driver.strings("$found '\"ete*\"'"))
+        assertEquals(listOf("2"), driver.strings("$found '\"courses*\"'"))
+        // and the triggers keep it current
+        migrated.updateContent("Une journée d'été", "e1b", migrated.selectByRemoteId(1).executeAsOne().local_id)
+        assertEquals(listOf("1"), driver.strings("$found '\"ete*\" \"journee*\"'"))
+        assertEquals(3, CittiDatabase.Schema.version)
+    }
+
+    @Test
+    fun excerptBackfillFillsOnlyMissingExcerpts() {
+        val driver = v2Driver()
+        driver.execute(
+            null,
+            "INSERT INTO note(remote_id, etag, title, category, content, modified) VALUES " +
+                "(1, 'e1', 'A', '', '# A\n\nfirst', 1), (2, 'e2', 'B', '', NULL, 2), (3, 'e3', 'C', '', '', 3)",
+            0,
+        )
+        CittiDatabase.Schema.migrate(driver, 2, CittiDatabase.Schema.version)
+        val db = CittiDatabase(driver)
+
+        assertEquals(2, ExcerptBackfill.run(db))
+        assertEquals(
+            "first",
+            db.noteQueries
+                .selectByRemoteId(1)
+                .executeAsOne()
+                .excerpt,
+        )
+        assertNull(
+            db.noteQueries
+                .selectByRemoteId(2)
+                .executeAsOne()
+                .excerpt,
+        )
+        assertEquals(
+            "",
+            db.noteQueries
+                .selectByRemoteId(3)
+                .executeAsOne()
+                .excerpt,
+        )
+        assertEquals(0, ExcerptBackfill.run(db))
+    }
+
+    @Test
+    fun writesThatSetContentStoreTheExcerpt() {
+        server(1, title = "Plan")
+        val id = notes.selectByRemoteId(1).executeAsOne().local_id
+        notes.updateContent("# Plan\n\nfrom the server", "e1", id)
+        assertEquals("from the server", notes.selectByLocalId(id).executeAsOne().excerpt)
+        notes.markDirty("- [ ] typed here", 5, id)
+        assertEquals("typed here", notes.selectByLocalId(id).executeAsOne().excerpt)
+        notes.insertNew("New", "", "> quoted", 6, null)
+        assertEquals("quoted", notes.selectByLocalId(notes.lastInsertedLocalId().executeAsOne()).executeAsOne().excerpt)
     }
 }

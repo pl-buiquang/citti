@@ -10,15 +10,47 @@ CREATE TABLE note (
     readonly INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     hidden INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
     sync_state TEXT NOT NULL DEFAULT 'SYNCED' CHECK (sync_state IN ('SYNCED', 'DIRTY', 'NEW', 'DELETED')),
-    conflict_of INTEGER
+    conflict_of INTEGER,
+    -- First meaningful line of content, computed in Kotlin (excerptOf) on every write that sets content.
+    -- Last, like the column 2.sqm adds, so that fresh and migrated tables have the same column order.
+    excerpt TEXT
 );
 
-CREATE INDEX note_category ON note(category);
+-- (category, title) serves the Folder lookups of Tree mode, Today, the Calendar and the creation check (M5/M6).
+CREATE INDEX note_category_title ON note(category, title);
 CREATE INDEX note_sync_state ON note(sync_state);
+
+-- Search index (ADR 0007), kept in sync by the triggers below. Same statements as migrations/2.sqm.
+CREATE VIRTUAL TABLE note_fts USING fts4(
+    content='note',
+    title,
+    content,
+    category,
+    tokenize=unicode61 "remove_diacritics=1"
+);
+
+-- External content: FTS4 reads the old values from `note`, so deletes run BEFORE and inserts AFTER.
+-- Only title, content and category re-index: markSynced, favorite, hidden and excerpt updates do not.
+-- DELETED rows stay in the index; every search query joins `note` and filters them out.
+CREATE TRIGGER note_fts_before_delete BEFORE DELETE ON note BEGIN
+    DELETE FROM note_fts WHERE docid = old.local_id;
+END;
+CREATE TRIGGER note_fts_before_update BEFORE UPDATE OF title, content, category ON note
+WHEN old.title IS NOT new.title OR old.content IS NOT new.content OR old.category IS NOT new.category BEGIN
+    DELETE FROM note_fts WHERE docid = old.local_id;
+END;
+CREATE TRIGGER note_fts_after_update AFTER UPDATE OF title, content, category ON note
+WHEN old.title IS NOT new.title OR old.content IS NOT new.content OR old.category IS NOT new.category BEGIN
+    INSERT INTO note_fts(docid, title, content, category) VALUES (new.local_id, new.title, new.content, new.category);
+END;
+CREATE TRIGGER note_fts_after_insert AFTER INSERT ON note BEGIN
+    INSERT INTO note_fts(docid, title, content, category) VALUES (new.local_id, new.title, new.content, new.category);
+END;
 
 -- Insert or refresh a Note from server metadata. A Note with pending local changes
 -- (sync_state other than SYNCED) is left untouched, and a changed etag clears the
--- content so that selectNeedingContent picks it up.
+-- content so that selectNeedingContent picks it up. The excerpt is kept: the old one beats a blank row until
+-- updateContent brings the new text.
 upsertFromServer:
 INSERT INTO note(remote_id, etag, title, category, favorite, modified, readonly, hidden, sync_state)
 VALUES (:remoteId, :etag, :title, :category, :favorite, :modified, :readonly, :hidden, 'SYNCED')
@@ -47,10 +79,10 @@ selectSyncIndex:
 SELECT local_id, remote_id, category, sync_state FROM note WHERE remote_id IS NOT NULL;
 
 updateContent:
-UPDATE note SET content = :content, etag = :etag WHERE local_id = :localId;
+UPDATE note SET content = :content, excerpt = :excerpt, etag = :etag WHERE local_id = :localId;
 
 selectNeedingContent:
-SELECT local_id, remote_id, category FROM note WHERE content IS NULL AND sync_state != 'DELETED' AND remote_id IS NOT NULL;
+SELECT local_id, remote_id, title, category FROM note WHERE content IS NULL AND sync_state != 'DELETED' AND remote_id IS NOT NULL;
 
 selectDirty:
 SELECT * FROM note WHERE sync_state IN ('DIRTY', 'NEW', 'DELETED') ORDER BY local_id;
@@ -58,13 +90,19 @@ SELECT * FROM note WHERE sync_state IN ('DIRTY', 'NEW', 'DELETED') ORDER BY loca
 markDirty:
 UPDATE note
 SET content = :content,
+    excerpt = :excerpt,
     modified = :modified,
     sync_state = CASE WHEN sync_state = 'NEW' THEN 'NEW' ELSE 'DIRTY' END
 WHERE local_id = :localId AND sync_state != 'DELETED';
 
+-- A new Note or Conflict copy in a Hidden folder is hidden at once (same prefix rule as FolderPrefix.kt).
 insertNew:
-INSERT INTO note(title, category, content, favorite, modified, sync_state, conflict_of)
-VALUES (:title, :category, :content, 0, :modified, 'NEW', :conflictOf);
+INSERT INTO note(title, category, content, excerpt, favorite, modified, hidden, sync_state, conflict_of)
+VALUES (:title, :category, :content, :excerpt, 0, :modified, EXISTS (
+    SELECT 1 FROM folder_exclusion e
+    WHERE e.kind = 'HIDDEN'
+      AND (:category = e.prefix OR substr(:category, 1, length(e.prefix) + 1) = e.prefix || '/')
+), 'NEW', :conflictOf);
 
 lastInsertedLocalId:
 SELECT last_insert_rowid();
@@ -110,7 +148,7 @@ SELECT count(*) FROM note WHERE content IS NOT NULL AND sync_state != 'DELETED';
 -- Push: store the server's version in place of the local one (server wins on a 412).
 replaceWithServer:
 UPDATE note
-SET title = :title, category = :category, content = :content, favorite = :favorite, etag = :etag,
+SET title = :title, category = :category, content = :content, excerpt = :excerpt, favorite = :favorite, etag = :etag,
     modified = :modified, readonly = :readonly, sync_state = 'SYNCED'
 WHERE local_id = :localId;
 
@@ -136,3 +174,10 @@ WHERE sync_state != 'DELETED' AND (category = :prefix OR substr(category, 1, len
 countPendingUnderPrefix:
 SELECT count(*) FROM note
 WHERE sync_state IN ('DIRTY', 'NEW') AND (category = :prefix OR substr(category, 1, length(:prefix) + 1) = :prefix || '/');
+
+-- Excerpt backfill after the migration, and safety net at startup (ExcerptBackfill).
+selectMissingExcerpt:
+SELECT local_id, title, content FROM note WHERE excerpt IS NULL AND content IS NOT NULL;
+
+setExcerpt:
+UPDATE note SET excerpt = :excerpt WHERE local_id = :localId;

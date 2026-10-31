@@ -15,6 +15,7 @@ import app.citti.core.auth.LoginFlow
 import app.citti.core.auth.prepareForSignIn
 import app.citti.core.auth.signOut
 import app.citti.core.db.CittiDatabase
+import app.citti.core.note.ExcerptBackfill
 import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.SyncSettingsRepository
 import app.citti.core.sync.PullSync
@@ -102,6 +103,11 @@ class AppContainer(
                 buildStack(credentials)
             }
             _signedIn.value = credentials != null
+        }
+        // Excerpts missing after the migration that added them (normally none); the list fills them in as they land.
+        appScope.launch(Dispatchers.IO) {
+            val filled = ExcerptBackfill.run(database)
+            if (filled > 0) AndroidSyncLog.info("excerpt backfill notes=$filled")
         }
     }
 

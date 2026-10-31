@@ -12,6 +12,7 @@ import app.citti.core.api.logText
 import app.citti.core.db.CittiDatabase
 import app.citti.core.db.Note
 import app.citti.core.log.SyncLog
+import app.citti.core.note.excerptOf
 
 /** A Note whose push failed with an error that does not stop the run. */
 data class PushFailure(
@@ -225,7 +226,9 @@ class PushSync(
                     val sameText = server.content.orEmpty() == current.content.orEmpty() && server.title == current.title
                     if (!sameText && current.sync_state != "DELETED") {
                         val title = freeConflictTitle(current.category, "${current.title} (conflict ${isoDate(now())})")
-                        queries.insertNew(title, current.category, current.content.orEmpty(), now(), current.local_id)
+                        val text = current.content.orEmpty()
+                        // The Excerpt skips a heading equal to the original title, which the text still starts with.
+                        queries.insertNew(title, current.category, text, excerptOf(text, current.title), now(), current.local_id)
                         conflicts += queries.lastInsertedLocalId().executeAsOne()
                         log.warn("push conflict: server wins, local text kept as copy local=${conflicts.last()}")
                     }
@@ -243,16 +246,20 @@ class PushSync(
     private fun storeServerVersion(
         note: Note,
         server: RemoteNote,
-    ) = queries.replaceWithServer(
-        title = server.title ?: note.title,
-        category = server.category ?: note.category,
-        content = server.content,
-        favorite = server.favorite ?: note.favorite,
-        etag = server.etag,
-        modified = server.modified ?: now(),
-        readonly = server.readonly ?: false,
-        localId = note.local_id,
-    )
+    ) {
+        val title = server.title ?: note.title
+        queries.replaceWithServer(
+            title = title,
+            category = server.category ?: note.category,
+            content = server.content,
+            excerpt = excerptOf(server.content, title),
+            favorite = server.favorite ?: note.favorite,
+            etag = server.etag,
+            modified = server.modified ?: now(),
+            readonly = server.readonly ?: false,
+            localId = note.local_id,
+        )
+    }
 
     private fun freeConflictTitle(
         category: String,

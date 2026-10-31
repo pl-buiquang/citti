@@ -362,6 +362,16 @@ class PushSyncTest {
         }
 
     @Test
+    fun conflictCopyExcerptSkipsTheOriginalTitleHeading() =
+        runTest {
+            val (local, remote) = synced("Plan", "base")
+            notes.markDirty("# Plan\n\nlocal line", 5, local)
+            server.editOnServer(remote, content = "server")
+            val copy = notes.selectByLocalId(done().conflicts.single()).executeAsOne()
+            assertEquals("local line", copy.excerpt)
+        }
+
+    @Test
     fun duplicateConflictTitleGetsNumericSuffix() =
         runTest {
             val (local, remote) = synced("Plan", "base")

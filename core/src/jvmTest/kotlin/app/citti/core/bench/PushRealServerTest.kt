@@ -11,6 +11,8 @@ import app.citti.core.api.UpdateNote
 import app.citti.core.api.UpdateResult
 import app.citti.core.api.createNotesHttpClient
 import app.citti.core.db.CittiDatabase
+import app.citti.core.insertNew
+import app.citti.core.markDirty
 import app.citti.core.sync.PullResult
 import app.citti.core.sync.PullSync
 import app.citti.core.sync.PushResult

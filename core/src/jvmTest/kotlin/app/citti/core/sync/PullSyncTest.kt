@@ -11,6 +11,7 @@ import app.citti.core.fake.FakeFailure
 import app.citti.core.fake.FakeNotesServer
 import app.citti.core.fake.HeaderCasing
 import app.citti.core.log.SyncLog
+import app.citti.core.markDirty
 import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.plugin
 import kotlinx.coroutines.test.runTest
@@ -144,6 +145,32 @@ class PullSyncTest {
             // and the next run is a 304 again
             server.clearRequests()
             assertEquals(PullResult.NothingChanged, pullSync(40).pull())
+        }
+
+    @Test
+    fun downloadedContentSetsExcerpt() =
+        runTest {
+            val id = server.addNote("Plan", "---\ntags: x\n---\n# Plan\n\nBuy **milk** and [[shop/Eggs]]\n")
+            pullSync().pull()
+            assertEquals("Buy milk and Eggs", byRemote(id)!!.excerpt)
+        }
+
+    @Test
+    fun etagChangeKeepsOldExcerptUntilContentArrives() =
+        runTest {
+            val id = server.addNote("A", "first line")
+            pullSync().pull()
+            server.advance(10)
+            server.editOnServer(id, content = "second line")
+            // The first try and both retries fail, so the content stays NULL after this pull.
+            server.failNext(FakeFailure.SERVER_ERROR, times = 3, endpoint = Endpoint.GET_NOTE)
+            pullSync().pull()
+            assertNull(byRemote(id)!!.content)
+            assertEquals("first line", byRemote(id)!!.excerpt)
+
+            pullSync().pull()
+            assertEquals("second line", byRemote(id)!!.content)
+            assertEquals("second line", byRemote(id)!!.excerpt)
         }
 
     @Test

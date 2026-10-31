@@ -7,6 +7,7 @@ import app.citti.core.api.createNotesHttpClient
 import app.citti.core.db.CittiDatabase
 import app.citti.core.fake.FakeFailure
 import app.citti.core.fake.FakeNotesServer
+import app.citti.core.insertNew
 import app.citti.core.log.SyncLog
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
