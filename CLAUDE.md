@@ -26,7 +26,7 @@ The spec lives in the vault, `~/Nextcloud/Notes/projects/citti/`:
 - **Hidden is filtered inline** in each List, Tree and Search query (never in a shared helper): the Calendar (M6) must see Hidden notes.
 - **Conflicts**: server wins, local text becomes a conflict copy (ADR 0003).
 - **Performance budgets**: no-change sync is a single 304; the real 2.2k-note vault syncs in reasonable time; long notes (thousands of lines) scroll and type without lag (see roadmap exit criteria).
-- **The editor saves through `NoteEditor.save`** with the etag its text was based on (edit base); never write a Note's `content` from the UI any other way.
+- **The editor saves through `NoteEditor.save`** with the etag and the text it was based on (edit base); never write a Note's `content` from the UI any other way.
 - **Images and other Vault files go through `DavClient`**; never build a WebDAV URL by hand.
 - **Search goes through `note_fts`** (ADR 0007): never query `content` with LIKE.
 - **Every HTTP client is built from `AppConfig.httpEngine`**, so the E2E fake sees every request (a request it does not route fails the test).

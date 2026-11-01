@@ -361,7 +361,7 @@ class NoteController(
                 model.update { it.copy(unsaved = false) }
                 return
             }
-            handle(gateway.save(text, baseEtag), text)
+            handle(gateway.save(text, baseEtag, lastSaved), text)
         }
     }
 
@@ -545,11 +545,11 @@ class NoteController(
             if (model.value.ready && text != lastSaved) {
                 editor.apply(TextOps.insertBlock(text, offset, link))
                 val withLink = editor.text
-                handle(gateway.save(withLink, baseEtag), withLink)
+                handle(gateway.save(withLink, baseEtag, lastSaved), withLink)
                 return
             }
             // Else the row holds that text: the link goes into the stored text.
-            val result = gateway.insertAt(offset, link, baseEtag)
+            val result = gateway.insertAt(offset, link, baseEtag, lastSaved)
             if (result == SaveResult.Saved) {
                 gateway.savedText()?.let {
                     editor.replaceAll(it)
@@ -805,10 +805,10 @@ class NoteController(
                 val expected = task.expected(text) ?: return@withLock
                 if (text != lastSaved) {
                     // A pause shorter than the save timer: flush first so the row holds what is shown.
-                    handle(gateway.save(text, baseEtag), text)
+                    handle(gateway.save(text, baseEtag, lastSaved), text)
                     if (lastSaved != text) return@withLock
                 }
-                when (val result = gateway.toggleTask(task.box, expected, baseEtag)) {
+                when (val result = gateway.toggleTask(task.box, expected, baseEtag, lastSaved)) {
                     SaveResult.Saved -> {
                         val saved = gateway.savedText() ?: return@withLock
                         editor.replaceAll(saved, editor.selection.start)

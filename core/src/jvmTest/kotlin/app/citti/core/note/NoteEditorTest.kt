@@ -126,6 +126,28 @@ class NoteEditorTest {
     }
 
     @Test
+    fun staleEtagWithTheBaseTextStillStoredIsSaved() {
+        val id = synced()
+        val e = editor(id).also { it.load() }
+        assertEquals(SaveResult.Saved, e.save("one", "e1"))
+        // Our own push changed the etag; the editor has not seen it yet.
+        notes.markSynced(1, "e5", "Plan", "Plan", "work", "work", "one", false, 300, id)
+        assertEquals(SaveResult.Saved, e.save("two", "e1", "one"))
+        assertEquals("two", row(id).content)
+        assertEquals("DIRTY", row(id).sync_state)
+    }
+
+    @Test
+    fun staleEtagWithOtherStoredTextStillConflicts() {
+        val id = synced()
+        val e = editor(id).also { it.load() }
+        notes.upsertFromServer(1, "e2", "Plan", "work", false, 200, false, false)
+        notes.updateContent("server text", "e2", id)
+        assertIs<SaveResult.Conflict>(e.save("mine", "e1", "my base"))
+        assertEquals("server text", row(id).content)
+    }
+
+    @Test
     fun deletedRowGivesAnUnlinkedCopy() {
         val id = synced()
         val e = editor(id).also { it.load() }

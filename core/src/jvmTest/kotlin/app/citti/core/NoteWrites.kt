@@ -24,7 +24,7 @@ fun NoteQueries.markDirty(
     // A Note whose text was never downloaded has no text to edit; give it an empty one first.
     if (selectByLocalId(localId).executeAsOne().content == null) updateContent("", null, localId)
     val row = selectByLocalId(localId).executeAsOne()
-    saveEdit(content, excerptOf(content, row.title), modified, localId, row.etag)
+    saveEdit(content, excerptOf(content, row.title), modified, localId, row.etag, null)
 }
 
 fun NoteQueries.updateContent(

@@ -18,6 +18,7 @@ interface NoteGateway {
     suspend fun save(
         text: String,
         baseEtag: String?,
+        baseText: String? = null,
     ): NoteEditor.SaveResult
 
     /** `NoteEditor.toggleTask`; on `Saved`, [savedText] is the new text. */
@@ -25,6 +26,7 @@ interface NoteGateway {
         box: Int,
         expected: String,
         baseEtag: String?,
+        baseText: String? = null,
     ): NoteEditor.SaveResult
 
     /** `NoteEditor.insertAt`: [block] on its own line at [offset] of the stored text; on `Saved`, [savedText] is the new text. */
@@ -32,6 +34,7 @@ interface NoteGateway {
         offset: Int,
         block: String,
         baseEtag: String?,
+        baseText: String? = null,
     ): NoteEditor.SaveResult
 
     /**

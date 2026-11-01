@@ -56,6 +56,7 @@ import kotlin.test.assertTrue
 private class FakeGateway : NoteGateway {
     val row = MutableStateFlow<EditorDoc?>(null)
     val saves = mutableListOf<Pair<String, String?>>()
+    val baseTexts = mutableListOf<String?>()
     val toggles = mutableListOf<Triple<Int, String, String?>>()
     var saveResult: (String, String?) -> SaveResult = { _, _ -> SaveResult.Saved }
     var saved: String? = null
@@ -72,8 +73,10 @@ private class FakeGateway : NoteGateway {
     override suspend fun save(
         text: String,
         baseEtag: String?,
+        baseText: String?,
     ): SaveResult {
         saves += text to baseEtag
+        baseTexts += baseText
         log += "save"
         return saveResult(text, baseEtag)
     }
@@ -87,6 +90,7 @@ private class FakeGateway : NoteGateway {
         box: Int,
         expected: String,
         baseEtag: String?,
+        baseText: String?,
     ): SaveResult {
         toggles += Triple(box, expected, baseEtag)
         val current = saved ?: row.value?.text.orEmpty()
@@ -100,6 +104,7 @@ private class FakeGateway : NoteGateway {
         offset: Int,
         block: String,
         baseEtag: String?,
+        baseText: String?,
     ): SaveResult {
         inserts += Triple(offset, block, baseEtag)
         val current = saved ?: row.value?.text.orEmpty()
@@ -269,6 +274,22 @@ class NoteControllerTest {
         runCurrent()
         return Fixture(this, gateway, navigator, snacks, controller)
     }
+
+    @Test
+    fun aSaveNamesTheTextItWasBasedOn() =
+        runTest {
+            val f = open(row = doc("first"))
+            f.attach()
+            f.host.type("!")
+            advanceTimeBy(NoteController.SAVE_DELAY_MS + 1)
+            runCurrent()
+            f.host.type("?")
+            advanceTimeBy(NoteController.SAVE_DELAY_MS + 1)
+            runCurrent()
+            // The first save is based on the loaded text, the next one on the text just saved: a push changing the
+            // etag between them must not make the second save a Conflict copy.
+            assertEquals(listOf<String?>("first", "first!"), f.gateway.baseTexts)
+        }
 
     @Test
     fun aStartLineOpensWithTheCaretAtThatLineAndScrollsThere() =

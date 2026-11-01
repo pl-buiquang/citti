@@ -23,8 +23,9 @@ data class EditorDoc(
 
 /**
  * The only writer of a Note's text from the UI. One per open Note. An edit names the etag its text was based on
- * (the edit base): if a pull brought a newer server version meanwhile, the write is refused and the text becomes a
- * Conflict copy (ADR 0003), so a server change is never saved over unseen.
+ * (the edit base) and the text it was based on: if a pull brought a newer server version meanwhile, the write is
+ * refused and the text becomes a Conflict copy (ADR 0003), so a server change is never saved over unseen. A row that
+ * still holds the base text has no server change to lose (our own push only changes the etag), so it is written.
  */
 class NoteEditor(
     private val db: CittiDatabase,
@@ -97,7 +98,8 @@ class NoteEditor(
     fun save(
         text: String,
         baseEtag: String?,
-    ): SaveResult = db.transactionWithResult { write(text, baseEtag) }
+        baseText: String? = null,
+    ): SaveResult = db.transactionWithResult { write(text, baseEtag, baseText) }
 
     /**
      * Flips the checkbox whose `[` is at [box] (`Task.box`): re-reads the row's text, checks that the three characters
@@ -108,6 +110,7 @@ class NoteEditor(
         box: Int,
         expected: String,
         baseEtag: String?,
+        baseText: String? = null,
     ): SaveResult =
         db.transactionWithResult {
             val current =
@@ -120,7 +123,7 @@ class NoteEditor(
                 SaveResult.Mismatch
             } else {
                 val inner = if (expected[1] == ' ') 'x' else ' '
-                write(current.substring(0, box + 1) + inner + current.substring(box + 2), baseEtag)
+                write(current.substring(0, box + 1) + inner + current.substring(box + 2), baseEtag, baseText)
             }
         }
 
@@ -134,6 +137,7 @@ class NoteEditor(
         offset: Int,
         block: String,
         baseEtag: String?,
+        baseText: String? = null,
     ): SaveResult =
         db.transactionWithResult {
             val row = queries.selectByLocalId(localId).executeAsOneOrNull()
@@ -142,13 +146,14 @@ class NoteEditor(
             if (current == null) {
                 SaveResult.Mismatch
             } else {
-                write(current.apply(TextOps.insertBlock(current, offset, block)), baseEtag)
+                write(current.apply(TextOps.insertBlock(current, offset, block)), baseEtag, baseText)
             }
         }
 
     private fun write(
         text: String,
         baseEtag: String?,
+        baseText: String?,
     ): SaveResult {
         val row = queries.selectByLocalId(localId).executeAsOneOrNull()
         return when {
@@ -166,7 +171,7 @@ class NoteEditor(
             }
 
             else -> {
-                val changed = queries.saveEdit(text, excerptOf(text, row.title), clock(), localId, baseEtag).value
+                val changed = queries.saveEdit(text, excerptOf(text, row.title), clock(), localId, baseEtag, baseText).value
                 if (changed > 0) {
                     lastSaved = text
                     afterEdit()

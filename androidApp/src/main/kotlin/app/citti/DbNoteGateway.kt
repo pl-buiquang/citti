@@ -41,19 +41,22 @@ class DbNoteGateway(
     override suspend fun save(
         text: String,
         baseEtag: String?,
-    ): NoteEditor.SaveResult = withContext(Dispatchers.IO) { editor.save(text, baseEtag) }
+        baseText: String?,
+    ): NoteEditor.SaveResult = withContext(Dispatchers.IO) { editor.save(text, baseEtag, baseText) }
 
     override suspend fun toggleTask(
         box: Int,
         expected: String,
         baseEtag: String?,
-    ): NoteEditor.SaveResult = withContext(Dispatchers.IO) { editor.toggleTask(box, expected, baseEtag) }
+        baseText: String?,
+    ): NoteEditor.SaveResult = withContext(Dispatchers.IO) { editor.toggleTask(box, expected, baseEtag, baseText) }
 
     override suspend fun insertAt(
         offset: Int,
         block: String,
         baseEtag: String?,
-    ): NoteEditor.SaveResult = withContext(Dispatchers.IO) { editor.insertAt(offset, block, baseEtag) }
+        baseText: String?,
+    ): NoteEditor.SaveResult = withContext(Dispatchers.IO) { editor.insertAt(offset, block, baseEtag, baseText) }
 
     override suspend fun fetchText(): Boolean = withContext(Dispatchers.IO) { fetchContent() }
 

@@ -95,8 +95,9 @@ SELECT local_id, remote_id, title, category FROM note WHERE content IS NULL AND 
 selectDirty:
 SELECT * FROM note WHERE sync_state IN ('DIRTY', 'NEW', 'DELETED') ORDER BY local_id;
 
--- Editor save (NoteEditor). Refused (0 rows) when the row's etag is no longer the one the text was based on, or the
--- row's content was cleared by a pull. A NEW row has a NULL etag on both sides.
+-- Editor save (NoteEditor). Refused (0 rows) when the row's etag is no longer the one the text was based on and the row
+-- no longer holds the text the edit was based on (:baseText), or the row's content was cleared by a pull. A NEW row has a
+-- NULL etag on both sides. The text clause covers our own push: it changes the etag, not the text.
 saveEdit:
 UPDATE note
 SET content = :content,
@@ -104,7 +105,7 @@ SET content = :content,
     modified = :modified,
     sync_state = CASE WHEN sync_state = 'NEW' THEN 'NEW' ELSE 'DIRTY' END
 WHERE local_id = :localId AND sync_state != 'DELETED' AND readonly = 0
-  AND etag IS :baseEtag AND content IS NOT NULL;
+  AND content IS NOT NULL AND (etag IS :baseEtag OR content = :baseText);
 
 selectForEditor:
 SELECT local_id, remote_id, etag, title, category, content, favorite, modified, readonly, hidden, sync_state, conflict_of
