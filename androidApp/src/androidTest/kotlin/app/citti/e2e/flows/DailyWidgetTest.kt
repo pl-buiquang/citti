@@ -41,7 +41,7 @@ class DailyWidgetTest {
     private val server = ServerAssert()
 
     @Ignore(
-        "The tap creates the note, but the redraw after the creation (updateDaily) never shows the new text on the launcher within 10 s on api36Google; same suspected cause as aSyncThatChangesTheFavoritesRedrawsTheWidget.",
+        "The tap creates the note, but the redraw after the creation (updateDaily) never shows the new text on the launcher within 10 s on api36Google; a redraw after the first draw does not seem to reach the launcher in the emulator.",
     )
     @Test
     fun withoutANoteTodayTheWidgetSaysSoAndATapCreatesItFromTheTemplate() {
@@ -66,7 +66,7 @@ class DailyWidgetTest {
     }
 
     @Ignore(
-        "Flaky on api36Google: passes alone, but in the full widget run ActivityScenario fails to close the Activity after the widget tap (Current state was null, last stage STARTED). Same cause as the other ignored widget-tap flows.",
+        "Flaky on api36Google: passes alone, but in the full widget run ActivityScenario fails to close the Activity after the widget tap (Current state was null, last stage STARTED).",
     )
     @Test
     fun anExistingNoteShowsFromItsReadingPositionAndATapOpensItThere() {
@@ -85,7 +85,7 @@ class DailyWidgetTest {
     }
 
     @Ignore(
-        "The redraw triggered by DayChangeReceiver does not show the new date on the launcher within 10 s on api36Google; same suspected cause as aSyncThatChangesTheFavoritesRedrawsTheWidget.",
+        "The redraw triggered by DayChangeReceiver does not show the new date on the launcher within 10 s on api36Google; a redraw after the first draw does not seem to reach the launcher in the emulator.",
     )
     @Test
     fun afterMidnightTheWidgetShowsTheNewDayAndATapOpensIt() {

@@ -40,7 +40,7 @@ class NoteWidgetTest {
     }
 
     @Ignore(
-        "The Note picker that Add to home screen should open does not show within 10 s after the launcher reset on api36Google (it did show on a launcher that already held widgets, where its list was empty of the fixture notes). The picker needs a manual look; the Reading position flow is also covered by WidgetIntentsTest and the NoteController tests.",
+        "The Note picker that Add to home screen should open does not show within 10 s after the launcher reset on api36Google (it did show on a launcher that already held widgets, where its list was empty of the fixture notes). The picker has not been checked by hand yet.",
     )
     @Test
     fun thePickerChoosesTheNoteAndTheWidgetShowsItsText() {
@@ -50,7 +50,7 @@ class NoteWidgetTest {
     }
 
     @Ignore(
-        "The Note picker that Add to home screen should open does not show within 10 s after the launcher reset on api36Google (it did show on a launcher that already held widgets, where its list was empty of the fixture notes). The picker needs a manual look; the Reading position flow is also covered by WidgetIntentsTest and the NoteController tests.",
+        "The Note picker that Add to home screen should open does not show within 10 s after the launcher reset on api36Google (it did show on a launcher that already held widgets, where its list was empty of the fixture notes). The picker has not been checked by hand yet.",
     )
     @Test
     fun theWidgetStartsWhereYouLeftTheNoteAndATapOpensItThere() {
@@ -78,7 +78,7 @@ class NoteWidgetTest {
     }
 
     @Ignore(
-        "The Note picker that Add to home screen should open does not show within 10 s after the launcher reset on api36Google (it did show on a launcher that already held widgets, where its list was empty of the fixture notes). The picker needs a manual look; the Reading position flow is also covered by WidgetIntentsTest and the NoteController tests.",
+        "The Note picker that Add to home screen should open does not show within 10 s after the launcher reset on api36Google (it did show on a launcher that already held widgets, where its list was empty of the fixture notes). The picker has not been checked by hand yet.",
     )
     @Test
     fun aNoteThatIsGoneShowsItAndTheTapOpensThePicker() {

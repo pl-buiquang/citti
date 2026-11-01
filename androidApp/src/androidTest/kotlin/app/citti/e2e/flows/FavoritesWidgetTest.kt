@@ -43,7 +43,7 @@ class FavoritesWidgetTest {
             .map { it.title }
 
     @Ignore(
-        "Flaky on api36Google: the Today text is found by waitForText and gone from the launcher tree one read later (the widget redraws or the launcher tree changes between the reads). Needs the redraw behaviour understood first.",
+        "Flaky on api36Google: the Today text is found by waitForText and gone from the launcher tree one read later (the widget redraws or the launcher tree changes between the reads). The cause is not understood yet.",
     )
     @Test
     fun theTodayRowComesFirstThenTheFavoritesNewestFirst() {
@@ -62,7 +62,7 @@ class FavoritesWidgetTest {
     }
 
     @Ignore(
-        "Flaky on api36Google: passed in one run, then ActivityScenario failed to close the Activity after the widget tap (Current state was null, last stage STARTED). Same suspected cause as theTodayRowOpensTodaysExistingNoteWithoutCreatingOne.",
+        "Flaky on api36Google: passed in one run, then ActivityScenario failed to close the Activity after the widget tap (Current state was null, last stage STARTED).",
     )
     @Test
     fun tappingAFavoriteOpensThatNote() {
@@ -76,7 +76,7 @@ class FavoritesWidgetTest {
     }
 
     @Ignore(
-        "The body passes; ActivityScenario fails to close the Activity after this widget tap (Current state was null, last stage STARTED) although tappingAFavoriteOpensThatNote closes fine. Needs a look at the Activity lifecycle after the Today row tap.",
+        "The body passes; ActivityScenario fails to close the Activity after this widget tap (Current state was null, last stage STARTED) although the Activity opened by tapping a Favorite closes fine. Needs a look at the Activity lifecycle after the Today row tap.",
     )
     @Test
     fun theTodayRowOpensTodaysExistingNoteWithoutCreatingOne() {
@@ -107,7 +107,7 @@ class FavoritesWidgetTest {
     }
 
     @Ignore(
-        "A redraw after the first draw (WidgetRefresher after a sync) never shows on the launcher within 10 s on api36Google; suspected test WorkManager (E2eApp SynchronousExecutor) not running the second Glance SessionWorker. Check on a real device.",
+        "A redraw after the first draw (WidgetRefresher after a sync) never shows on the launcher within 10 s on api36Google; suspected test WorkManager (E2eApp SynchronousExecutor) not running the second Glance SessionWorker. Not verified on a real device.",
     )
     @Test
     fun aSyncThatChangesTheFavoritesRedrawsTheWidget() {
