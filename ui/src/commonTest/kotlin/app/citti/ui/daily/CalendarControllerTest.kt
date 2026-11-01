@@ -203,7 +203,7 @@ class CalendarControllerTest {
             val f = fixture()
             f.controller.onDay(CAL_TODAY)
             runCurrent()
-            assertEquals(Route.Note(100, focus = true), f.navigator.top)
+            assertEquals(Route.Note(100, preview = false, focus = true), f.navigator.top)
             f.navigator.pop()
             f.controller.onDay(LocalDate(2026, 11, 4))
             runCurrent()
@@ -232,7 +232,7 @@ class CalendarControllerTest {
             runCurrent()
             assertNull(f.state.confirm)
             assertEquals(listOf(past), f.daily.opened)
-            assertEquals(Route.Note(100, focus = true), f.navigator.top)
+            assertEquals(Route.Note(100, preview = false, focus = true), f.navigator.top)
         }
 
     @Test
@@ -254,7 +254,7 @@ class CalendarControllerTest {
             gate.complete(Unit)
             runCurrent()
             assertNull(f.state.busy)
-            assertEquals(Route.Note(100, focus = true), f.navigator.top)
+            assertEquals(Route.Note(100, preview = false, focus = true), f.navigator.top)
         }
 
     @Test

@@ -95,7 +95,7 @@ class NewNoteControllerTest {
             assertEquals(listOf("work" to "Plan"), f.creation.checks)
             assertEquals(listOf("work" to "Plan"), f.creation.created)
             assertNull(f.controller.state.value)
-            assertEquals(Route.Note(100, focus = true), f.navigator.top)
+            assertEquals(Route.Note(100, preview = false, focus = true), f.navigator.top)
         }
 
     @Test
@@ -108,7 +108,7 @@ class NewNoteControllerTest {
             f.controller.create()
             runCurrent()
             assertEquals(listOf("" to "Offline"), f.creation.created)
-            assertEquals(Route.Note(100, focus = true), f.navigator.top)
+            assertEquals(Route.Note(100, preview = false, focus = true), f.navigator.top)
         }
 
     @Test
@@ -188,7 +188,7 @@ class NewNoteControllerTest {
             runCurrent()
             assertEquals(1, f.creation.checks.size)
             assertEquals(listOf("a" to "T (2)"), f.creation.created)
-            assertEquals(Route.Note(100, focus = true), f.navigator.top)
+            assertEquals(Route.Note(100, preview = false, focus = true), f.navigator.top)
         }
 
     @Test
@@ -330,6 +330,6 @@ class NewNoteControllerTest {
             f.controller.create()
             runCurrent()
             assertEquals(listOf("a/b" to "T"), f.creation.checks)
-            assertEquals(Route.Note(100, focus = true), f.navigator.top)
+            assertEquals(Route.Note(100, preview = false, focus = true), f.navigator.top)
         }
 }

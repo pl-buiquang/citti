@@ -156,6 +156,8 @@ class NoteActionsTest {
         }
         // The fixture's .obsidian/app.json names `attachments`: the link is relative to it.
         val link = "![](e2e%20beach.png)"
+        // Preview draws the link as an Image: its text is in Edit mode.
+        note.ensureEdit()
         note.assertText(link)
         note.assertNoUpload()
         assertContentEquals(png, assertNotNull(E2e.server.file("attachments/e2e beach.png"), "no file on the server"))

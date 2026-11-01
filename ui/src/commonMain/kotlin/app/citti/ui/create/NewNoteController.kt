@@ -223,7 +223,7 @@ class NewNoteController(
     ) {
         val localId = creation.create(folder, title)
         _state.value = null
-        if (localId != null) navigator.push(Route.Note(localId, focus = true))
+        if (localId != null) navigator.push(Route.Note(localId, preview = false, focus = true))
     }
 
     private fun edit(change: (NewNoteState) -> NewNoteState) {

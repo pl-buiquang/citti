@@ -45,7 +45,7 @@ class OfflineDailyTest {
 
         // Meanwhile today's note is made in Obsidian; the local one is open, untouched, when the phone reconnects.
         list.openNote("2026-10-31")
-        note.assertText("# samedi 31 octobre 2026")
+        note.assertText("samedi 31 octobre 2026")
         E2e.server.advance(60)
         E2e.server.addNote("2026-10-31", "# samedi 31 octobre 2026\n\nFrom Obsidian.", category = "journal")
         E2e.server.offline = false

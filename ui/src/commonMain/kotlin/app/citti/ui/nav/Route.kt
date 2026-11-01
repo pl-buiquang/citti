@@ -33,7 +33,7 @@ sealed interface Route {
     ) : Route
 
     /**
-     * A Note. [preview] is the Edit/Preview toggle of this entry (`replaceTop`, so it survives process death without
+     * A Note. [preview] is the Edit/Preview toggle (Preview by default) of this entry (`replaceTop`, so it survives process death without
      * becoming a back stack entry); [searchQuery] is the Search query that opened it (used by in-note search).
      * [focus] opens it in Edit mode with the editor focused and the keyboard up (a New note); the controller clears
      * it once applied (`replaceTop`), so it is not applied again after rotation or process death. [notice] is a banner
@@ -42,7 +42,7 @@ sealed interface Route {
     @Serializable
     data class Note(
         val localId: Long,
-        val preview: Boolean = false,
+        val preview: Boolean = true,
         val searchQuery: String? = null,
         val focus: Boolean = false,
         val notice: NoteNotice? = null,

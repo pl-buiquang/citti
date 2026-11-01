@@ -53,6 +53,8 @@ class EditNoteTest {
     fun longNoteOpens() {
         list.openNote("long")
         note.assertTitle("long")
+        // Opens in Preview; the whole text is in Edit mode.
+        note.ensureEdit()
         note.assertText("The last line of the long Note.")
     }
 }

@@ -404,9 +404,16 @@ class NoteControllerTest {
         }
 
     @Test
-    fun opensInEditModeWithTheCaretAtTheEnd() =
+    fun opensInPreviewByDefault() =
         runTest {
             val f = open()
+            assertTrue(f.controller.state.value.preview)
+        }
+
+    @Test
+    fun opensInEditModeWithTheCaretAtTheEnd() =
+        runTest {
+            val f = open(route = Route.Note(1, preview = false))
             val state = f.controller.state.value
             assertFalse(state.loading)
             assertFalse(state.preview)
@@ -419,10 +426,10 @@ class NoteControllerTest {
     @Test
     fun aFocusRouteFocusesTheEditorOnceAndClearsTheFlag() =
         runTest {
-            val f = open(doc(""), route = Route.Note(1, focus = true))
+            val f = open(doc(""), route = Route.Note(1, preview = false, focus = true))
             f.controller.show(f.navigator.top as Route.Note)
             runCurrent()
-            assertEquals(Route.Note(1), f.navigator.top)
+            assertEquals(Route.Note(1, preview = false), f.navigator.top)
             assertFalse(f.controller.state.value.preview)
             // The view attaches after the focus was asked for: it takes it then, once.
             f.attach()
@@ -663,7 +670,7 @@ class NoteControllerTest {
     @Test
     fun togglingPreviewFlushesFirstThenFlipsTheRoute() =
         runTest {
-            val f = open()
+            val f = open(route = Route.Note(1, preview = false))
             f.attach()
             f.host.type("x")
             f.controller.togglePreview()
@@ -759,7 +766,7 @@ class NoteControllerTest {
             newNote.create()
             runCurrent()
             assertEquals(listOf("a/b" to "T"), creation.created)
-            assertEquals(Route.Note(7, focus = true), f.navigator.top)
+            assertEquals(Route.Note(7, preview = false, focus = true), f.navigator.top)
         }
 
     @Test

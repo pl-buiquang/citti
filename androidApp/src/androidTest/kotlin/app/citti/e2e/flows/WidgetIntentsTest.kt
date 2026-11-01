@@ -71,8 +71,8 @@ class WidgetIntentsTest {
         list.assertRow("Ideas")
         startAppWith(DeepLink.noteUri(e2e.setup.localId("long"), 100))
         note.assertTitle("long")
-        note.assertCaretLine(100)
-        note.assertTopLine(100)
+        // Opens in Preview, on the block that holds the line.
+        note.assertPreviewShows("Line 100:")
         note.pressBack()
         list.assertRow("Ideas")
     }
@@ -82,8 +82,7 @@ class WidgetIntentsTest {
         list.assertRow("Ideas")
         sendToRunningApp(DeepLink.noteUri(e2e.setup.localId("long"), 40))
         note.assertTitle("long")
-        note.assertCaretLine(40)
-        note.assertTopLine(40)
+        note.assertPreviewShows("Line 40:")
         // The link resets the stack to [root, Note]: Back lands on the root.
         note.pressBack()
         list.assertRow("Ideas")

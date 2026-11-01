@@ -113,7 +113,7 @@ class TodayAction(
 
                     is DailyResult.Created -> {
                         val notice = result.templateMissing?.let { NoteNotice.TemplateMissing(it) }
-                        push(Route.Note(result.localId, focus = true, notice = notice))
+                        push(Route.Note(result.localId, preview = false, focus = true, notice = notice))
                     }
 
                     DailyResult.JournalUnsynced -> {

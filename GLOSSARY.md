@@ -71,10 +71,10 @@ _Avoid_: Archived folder, excluded folder
 ## Editing
 
 **Edit mode**:
-The default way of showing a note: raw markdown, ready to type.
+Raw markdown, ready to type. A note opens in Preview mode; a New note and a just-created Daily note open here.
 
 **Preview mode**:
-The rendered view of a note, with images, links and folded frontmatter.
+The default way of showing a note: the rendered view, with images, links and folded frontmatter.
 _Avoid_: Read mode, view mode
 
 **Properties**:

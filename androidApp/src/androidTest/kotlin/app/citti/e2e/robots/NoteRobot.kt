@@ -55,14 +55,34 @@ class NoteRobot(
         waitFor(hasTestTag(TestTags.NOTE_PREVIEW))
     }
 
+    /** Preview mode; a Note opens in it by default, so this only switches when the Edit mode is up. */
     fun showPreview() {
-        waitFor(hasContentDescription(Strings.NOTE_PREVIEW) and hasClickAction()).performClick()
+        awaitMode()
+        if (!preview) waitFor(hasContentDescription(Strings.NOTE_PREVIEW) and hasClickAction()).performClick()
         assertPreviewMode()
+    }
+
+    /** Edit mode, switching from the Preview mode a Note opens in. */
+    fun ensureEdit() {
+        awaitMode()
+        if (preview) showEdit() else assertEditMode()
+    }
+
+    private fun awaitMode() {
+        waitUntil("the Note in Edit or Preview mode") {
+            exists(hasTestTag(TestTags.NOTE_PREVIEW)) || exists(hasTestTag(TestTags.NOTE_EDITOR))
+        }
     }
 
     fun showEdit() {
         waitFor(hasContentDescription(Strings.NOTE_EDIT) and hasClickAction()).performClick()
         assertEditMode()
+    }
+
+    /** Preview: [text] is on screen or just off it, found without scrolling (the lazy list only builds what is near). */
+    fun assertPreviewShows(text: String) {
+        assertPreviewMode()
+        waitFor(hasText(text, substring = true) and hasAnyAncestor(hasTestTag(TestTags.NOTE_PREVIEW)))
     }
 
     /** The Note's text contains [text] (in either mode). */
@@ -76,7 +96,7 @@ class NoteRobot(
     }
 
     fun assertNoText(text: String) {
-        assertEditMode()
+        ensureEdit()
         waitForView { onView(isAssignableFrom(EditText::class.java)).check(matches(withText(not(containsString(text))))) }
     }
 
@@ -91,6 +111,7 @@ class NoteRobot(
 
     /** Focuses the editor with the caret at the end of the first line containing [line]. */
     fun caretAfter(line: String) {
+        ensureEdit()
         assertText(line)
         editText().perform(
             onEditText("caret after '$line'") { view ->
@@ -102,7 +123,7 @@ class NoteRobot(
 
     /** Types [text] at the end of the Note (an empty New note too). */
     fun typeAtEnd(text: String) {
-        assertEditMode()
+        ensureEdit()
         editText().perform(
             onEditText("caret at the end") { view -> view.setSelection(view.text.length) },
             typeTextIntoFocusedView(text),
@@ -117,6 +138,7 @@ class NoteRobot(
 
     /** Selects the first occurrence of [word]. */
     fun select(word: String) {
+        ensureEdit()
         assertText(word)
         editText().perform(
             onEditText("select '$word'") { view ->
@@ -310,7 +332,7 @@ class NoteRobot(
 
     /** The editor's whole text. */
     fun editorText(): String {
-        assertEditMode()
+        ensureEdit()
         var text = ""
         editText().perform(onEditText("read") { text = it.text.toString() })
         return text
@@ -318,7 +340,7 @@ class NoteRobot(
 
     /** The caret is at the start of source line [line] (0-based, split on `\n`), as a link with `?line=` or a widget tap leaves it. */
     fun assertCaretLine(line: Int) {
-        assertEditMode()
+        ensureEdit()
         waitForView {
             editText().perform(
                 onEditText("caret at the start of line $line") { view ->
@@ -339,7 +361,7 @@ class NoteRobot(
         line: Int,
         tolerance: Int = 1,
     ) {
-        assertEditMode()
+        ensureEdit()
         var last = -1
         try {
             waitUntil("source line $line at the top of the editor") {
@@ -366,7 +388,7 @@ class NoteRobot(
 
     /** Scrolls the editor so that source line [line] is at the top, without moving the caret (a reader scrolling). */
     fun scrollEditorToLine(line: Int) {
-        assertEditMode()
+        ensureEdit()
         waitForView {
             editText().perform(
                 onEditText("scroll to line $line") { view ->

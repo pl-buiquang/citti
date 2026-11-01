@@ -139,7 +139,7 @@ class TodayActionTest {
                 }
             f.action.openToday(resume = true)
             runCurrent()
-            assertEquals(Route.Note(8, focus = true), f.navigator.top)
+            assertEquals(Route.Note(8, preview = false, focus = true), f.navigator.top)
         }
 
     @Test
@@ -148,7 +148,7 @@ class TodayActionTest {
             val f = fixture { result = { DailyResult.Created(8, templateMissing = null) } }
             f.action.openToday()
             runCurrent()
-            assertEquals(Route.Note(8, focus = true), f.navigator.top)
+            assertEquals(Route.Note(8, preview = false, focus = true), f.navigator.top)
         }
 
     @Test
@@ -157,7 +157,10 @@ class TodayActionTest {
             val f = fixture { result = { DailyResult.Created(8, templateMissing = "templates/daily.md") } }
             f.action.openToday()
             runCurrent()
-            assertEquals(Route.Note(8, focus = true, notice = NoteNotice.TemplateMissing("templates/daily.md")), f.navigator.top)
+            assertEquals(
+                Route.Note(8, preview = false, focus = true, notice = NoteNotice.TemplateMissing("templates/daily.md")),
+                f.navigator.top,
+            )
         }
 
     @Test
@@ -203,7 +206,7 @@ class TodayActionTest {
             gate.complete(Unit)
             runCurrent()
             assertNull(f.action.busy.value)
-            assertEquals(listOf(Route.List(), Route.Note(8, focus = true)), f.navigator.stack.value)
+            assertEquals(listOf(Route.List(), Route.Note(8, preview = false, focus = true)), f.navigator.stack.value)
         }
 
     @Test
@@ -238,7 +241,7 @@ class TodayActionTest {
             runCurrent()
             assertNull(f.action.confirm.value)
             assertEquals(listOf(past), f.daily.opened)
-            assertEquals(Route.Note(9, focus = true), f.navigator.top)
+            assertEquals(Route.Note(9, preview = false, focus = true), f.navigator.top)
         }
 
     @Test
