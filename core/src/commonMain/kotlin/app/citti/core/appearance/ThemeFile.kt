@@ -136,7 +136,7 @@ sealed interface DecodeResult {
     ) : DecodeResult
 }
 
-/** The largest Theme file we read; a larger one is refused (M9 audit). */
+/** The largest Theme file we read; a larger one is refused. */
 const val MAX_THEME_FILE_BYTES = 64 * 1024
 
 const val THEME_FILE_SCHEMA = 1
