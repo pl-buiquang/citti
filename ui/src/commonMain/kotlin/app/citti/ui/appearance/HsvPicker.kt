@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -51,7 +53,9 @@ private fun Surface2D(
     onCommit: (Hsv) -> Unit,
 ) {
     val line = CittiTheme.colors.line
-    var latest = hsv
+    val current by rememberUpdatedState(hsv)
+    val change by rememberUpdatedState(onChange)
+    val commit by rememberUpdatedState(onCommit)
     Canvas(
         Modifier
             .fillMaxWidth()
@@ -61,16 +65,16 @@ private fun Surface2D(
                     val down = awaitFirstDown()
 
                     fun at(p: Offset): Hsv =
-                        latest.copy(
+                        current.copy(
                             s = (p.x / size.width).coerceIn(0f, 1f),
                             v = 1f - (p.y / size.height).coerceIn(0f, 1f),
                         )
-                    latest = at(down.position).also(onChange)
-                    drag(down.id) { change ->
-                        latest = at(change.position).also(onChange)
-                        change.consume()
+                    var latest = at(down.position).also(change)
+                    drag(down.id) { move ->
+                        latest = at(move.position).also(change)
+                        move.consume()
                     }
-                    onCommit(latest)
+                    commit(latest)
                 }
             },
     ) {
@@ -93,7 +97,9 @@ private fun Bar(
     onCommit: (Hsv) -> Unit,
 ) {
     val line = CittiTheme.colors.line
-    var latest = fraction
+    val at by rememberUpdatedState(hsvAt)
+    val change by rememberUpdatedState(onChange)
+    val commit by rememberUpdatedState(onCommit)
     Canvas(
         Modifier
             .fillMaxWidth()
@@ -102,15 +108,13 @@ private fun Bar(
                 awaitEachGesture {
                     val down = awaitFirstDown()
 
-                    fun at(p: Offset) = (p.x / size.width).coerceIn(0f, 1f)
-                    latest = at(down.position)
-                    onChange(hsvAt(latest))
-                    drag(down.id) { change ->
-                        latest = at(change.position)
-                        onChange(hsvAt(latest))
-                        change.consume()
+                    fun x(p: Offset) = (p.x / size.width).coerceIn(0f, 1f)
+                    var latest = at(x(down.position)).also(change)
+                    drag(down.id) { move ->
+                        latest = at(x(move.position)).also(change)
+                        move.consume()
                     }
-                    onCommit(hsvAt(latest))
+                    commit(latest)
                 }
             },
     ) {
