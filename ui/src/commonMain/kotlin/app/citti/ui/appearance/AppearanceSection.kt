@@ -30,7 +30,6 @@ import app.citti.ui.resources.appearance_theme_signal
 import app.citti.ui.resources.settings_appearance
 import app.citti.ui.settings.Help
 import app.citti.ui.settings.OptionRow
-import app.citti.ui.settings.SectionHeader
 import app.citti.ui.theme.CittiTheme
 import org.jetbrains.compose.resources.stringResource
 
@@ -48,7 +47,6 @@ fun AppearanceSection(
     appearance: Appearance,
     actions: AppearanceActions,
 ) {
-    SectionHeader(Res.string.settings_appearance)
     BasicText(stringResource(Res.string.appearance_theme), style = CittiTheme.typography.meta.colored(muted = true))
     val themes =
         listOf(

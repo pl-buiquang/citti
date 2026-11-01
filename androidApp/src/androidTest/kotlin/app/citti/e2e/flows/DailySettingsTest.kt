@@ -52,7 +52,7 @@ class DailySettingsTest {
         val settings = list.openSettings()
         settings.addUnsyncedFolderRefused("journal", Strings.exclusionJournalRefused("journal"))
         settings.assertFolderNotListed(ExclusionKind.UNSYNCED, "journal")
-        settings.pressBack()
+        settings.leave()
         list.assertRow("2026-10-30")
 
         server.assertRequests(Endpoint.DELETE, 0)

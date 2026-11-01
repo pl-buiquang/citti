@@ -126,6 +126,8 @@
     <!-- Settings -->
     <string name="settings_title">Settings</string>
     <string name="settings_back">Back</string>
+    <!-- Under the Settings menu: %1$s is "1.0.1 · 9ae40fe" (release and commit). -->
+    <string name="settings_version">citti %1$s</string>
     <string name="settings_account">Account</string>
     <string name="settings_server">Server</string>
     <string name="settings_user">User</string>

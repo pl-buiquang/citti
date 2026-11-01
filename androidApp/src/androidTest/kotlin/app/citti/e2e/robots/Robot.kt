@@ -10,11 +10,14 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.espresso.Espresso
 import app.citti.e2e.rules.E2eRules
+import app.citti.ui.TestTags
+import app.citti.ui.settings.SettingsSection
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -80,6 +83,30 @@ abstract class Robot(
     protected fun click(label: String) {
         waitFor(button(label)).performClick()
     }
+
+    /**
+     * Settings is on the page of [section]: from the menu it opens the entry, from another section page it goes
+     * Back to the menu first, and on the page itself it does nothing.
+     */
+    protected fun openSettingsSection(section: SettingsSection) {
+        val heading = hasText(sectionTitle(section)) and isHeading()
+        if (!exists(heading)) {
+            val row = hasTestTag(TestTags.settingsSection(section))
+            if (!exists(row)) click(Strings.BACK)
+            waitFor(row).performClick()
+        }
+        waitFor(heading)
+    }
+
+    protected fun sectionTitle(section: SettingsSection) =
+        when (section) {
+            SettingsSection.ACCOUNT -> "Account"
+            SettingsSection.SYNC -> "Sync"
+            SettingsSection.EXCLUSIONS -> "Exclusions"
+            SettingsSection.IMAGES -> "Images"
+            SettingsSection.APPEARANCE -> "Appearance"
+            SettingsSection.DAILY -> "Daily notes"
+        }
 
     protected fun button(label: String) = hasText(label, ignoreCase = true) and hasClickAction()
 

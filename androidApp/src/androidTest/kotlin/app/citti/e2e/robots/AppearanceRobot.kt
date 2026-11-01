@@ -15,20 +15,24 @@ import app.citti.core.appearance.ModeChoice
 import app.citti.core.appearance.ThemeChoice
 import app.citti.e2e.rules.E2eRules
 import app.citti.ui.TestTags
+import app.citti.ui.settings.SettingsSection
 
 /** Settings › Appearance and the theme editor. The root `theme.state` tag reads `<family>:<light|dark>:<accent>`. */
 class AppearanceRobot(
     e2e: E2eRules,
 ) : Robot(e2e) {
     fun chooseTheme(theme: ThemeChoice) {
+        openSettingsSection(SettingsSection.APPEARANCE)
         waitFor(hasTestTag(TestTags.appearanceTheme(theme))).performScrollTo().performClick()
     }
 
     fun chooseMode(mode: ModeChoice) {
+        openSettingsSection(SettingsSection.APPEARANCE)
         waitFor(hasTestTag(TestTags.appearanceMode(mode))).performScrollTo().performClick()
     }
 
     fun editCustomTheme() {
+        openSettingsSection(SettingsSection.APPEARANCE)
         waitFor(hasTestTag(TestTags.APPEARANCE_EDIT_CUSTOM)).performScrollTo().performClick()
         waitFor(hasTestTag(TestTags.THEME_EDITOR))
     }

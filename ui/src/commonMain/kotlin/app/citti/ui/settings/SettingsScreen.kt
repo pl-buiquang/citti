@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,12 +52,14 @@ import app.citti.ui.resources.Res
 import app.citti.ui.resources.exclusion_journal_refused
 import app.citti.ui.resources.settings_account
 import app.citti.ui.resources.settings_add_folder
+import app.citti.ui.resources.settings_appearance
 import app.citti.ui.resources.settings_back
 import app.citti.ui.resources.settings_cancel
 import app.citti.ui.resources.settings_confirm_delete
 import app.citti.ui.resources.settings_confirm_unsynced_body
 import app.citti.ui.resources.settings_confirm_unsynced_pending
 import app.citti.ui.resources.settings_confirm_unsynced_title
+import app.citti.ui.resources.settings_daily
 import app.citti.ui.resources.settings_exclusions
 import app.citti.ui.resources.settings_folder_add
 import app.citti.ui.resources.settings_folder_blank
@@ -100,6 +103,7 @@ import app.citti.ui.resources.settings_title
 import app.citti.ui.resources.settings_unsynced_help
 import app.citti.ui.resources.settings_unsynced_title
 import app.citti.ui.resources.settings_user
+import app.citti.ui.resources.settings_version
 import app.citti.ui.resources.size_gb
 import app.citti.ui.resources.size_mb
 import app.citti.ui.theme.CittiTheme
@@ -119,6 +123,7 @@ class SettingsActions(
     val onRemoteImages: (RemoteImages) -> Unit,
     val onAskClearImages: () -> Unit,
     val onSyncNow: () -> Unit,
+    val onOpenSection: (SettingsSection) -> Unit,
     val onOpenPicker: (ExclusionKind) -> Unit,
     val onAddFolder: (ExclusionKind, String) -> Unit,
     val onRemoveFolder: (ExclusionKind, String) -> Unit,
@@ -133,7 +138,8 @@ class SettingsActions(
 )
 
 /**
- * Settings: Account, Sync, Exclusions, Images, Appearance and Daily notes (design brief 12).
+ * Settings: a menu whose entries open the pages Account, Sync, Exclusions, Images, Appearance and Daily notes
+ * (design brief 12), with the app version under it.
  * [folders] feeds the Journal folder picker, collected only while it is open.
  */
 @Composable
@@ -142,6 +148,8 @@ fun SettingsScreen(
     editor: ThemeEditorState,
     nowSeconds: () -> Long,
     folders: Flow<PickerFolders>,
+    /** The line under the menu: the release and the commit it was built from. */
+    appVersion: String,
     actions: SettingsActions,
 ) {
     Box(
@@ -151,7 +159,8 @@ fun SettingsScreen(
             .safeDrawingPadding(),
     ) {
         when (val page = state.page) {
-            SettingsPage.Home -> SettingsHome(state, nowSeconds, actions)
+            SettingsPage.Home -> SettingsHome(appVersion, actions)
+            is SettingsPage.Section -> SettingsSectionPage(page.section, state, nowSeconds, actions)
             is SettingsPage.PickFolder -> FolderPicker(page.kind, state, actions)
             is SettingsPage.PickJournal -> JournalFolderPage(page, folders, actions.daily)
             is SettingsPage.PickTemplate -> TemplatePickerPage(page, state.daily.config.template, actions.onBack, actions.daily)
@@ -162,18 +171,12 @@ fun SettingsScreen(
     }
 }
 
+/** The menu: one entry per [SettingsSection], and the app version under them. */
 @Composable
 private fun SettingsHome(
-    state: SettingsUiState,
-    nowSeconds: () -> Long,
+    appVersion: String,
     actions: SettingsActions,
 ) {
-    val now by produceState(nowSeconds()) {
-        while (true) {
-            delay(30_000)
-            value = nowSeconds()
-        }
-    }
     Column(Modifier.fillMaxSize()) {
         CittiTopBar(
             title = stringResource(Res.string.settings_title),
@@ -186,73 +189,174 @@ private fun SettingsHome(
                 .testTag(TestTags.SETTINGS_HOME)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = CittiTheme.shape.gutter),
+        ) {
+            for (section in SettingsSection.entries) {
+                MenuRow(stringResource(section.title()), Modifier.testTag(TestTags.settingsSection(section))) {
+                    actions.onOpenSection(section)
+                }
+            }
+            BasicText(
+                stringResource(Res.string.settings_version, appVersion),
+                modifier = Modifier.padding(top = NotesSpacing.space6, bottom = NotesSpacing.space8).testTag(TestTags.SETTINGS_VERSION),
+                style = CittiTheme.typography.meta.colored(muted = true),
+            )
+        }
+    }
+}
+
+private fun SettingsSection.title(): StringResource =
+    when (this) {
+        SettingsSection.ACCOUNT -> Res.string.settings_account
+        SettingsSection.SYNC -> Res.string.settings_sync
+        SettingsSection.EXCLUSIONS -> Res.string.settings_exclusions
+        SettingsSection.IMAGES -> Res.string.settings_images
+        SettingsSection.APPEARANCE -> Res.string.settings_appearance
+        SettingsSection.DAILY -> Res.string.settings_daily
+    }
+
+@Composable
+private fun MenuRow(
+    title: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier.fillMaxWidth().heightIn(min = NotesSize.touchMin).clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicText(title, Modifier.weight(1f), style = CittiTheme.typography.rowTitle.colored())
+        BasicText("›", style = CittiTheme.typography.rowTitle.colored(muted = true))
+    }
+}
+
+/** A section page: the top bar titled [section], whose Back returns to the menu, over the scrolling [content]. */
+@Composable
+private fun SectionPage(
+    section: SettingsSection,
+    actions: SettingsActions,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        CittiTopBar(
+            title = stringResource(section.title()),
+            actionLabel = stringResource(Res.string.settings_back),
+            onAction = actions.onBack,
+        )
+        Column(
+            Modifier
+                .fillMaxSize()
+                .testTag(TestTags.SETTINGS_SECTION)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = CittiTheme.shape.gutter),
             verticalArrangement = Arrangement.spacedBy(NotesSpacing.space3),
         ) {
-            SectionHeader(Res.string.settings_account)
-            LabelValue(stringResource(Res.string.settings_server), state.account.host)
-            LabelValue(stringResource(Res.string.settings_user), state.account.user)
-            CittiButton(stringResource(Res.string.settings_sign_in_again), actions.onSignInAgain, kind = ButtonKind.Quiet)
-            Help(Res.string.settings_sign_in_again_help)
-            CittiButton(stringResource(Res.string.settings_sign_out), actions.onAskSignOut, kind = ButtonKind.Danger)
-
-            SectionHeader(Res.string.settings_sync)
-            BasicText(stringResource(Res.string.settings_interval), style = CittiTheme.typography.meta.colored(muted = true))
-            for (minutes in SYNC_INTERVAL_CHOICES) {
-                OptionRow(intervalLabel(minutes), selected = state.intervalMinutes == minutes) { actions.onInterval(minutes) }
-            }
-            BasicText(stringResource(Res.string.settings_network), style = CittiTheme.typography.meta.colored(muted = true))
-            OptionRow(stringResource(Res.string.settings_network_any), state.network == SyncNetwork.ANY) {
-                actions.onNetwork(SyncNetwork.ANY)
-            }
-            OptionRow(stringResource(Res.string.settings_network_unmetered), state.network == SyncNetwork.UNMETERED) {
-                actions.onNetwork(SyncNetwork.UNMETERED)
-            }
-            BasicText(
-                statusText(syncLine(state.status, now), state.status),
-                style = CittiTheme.typography.meta.colored(muted = true),
-            )
-            CittiButton(
-                stringResource(Res.string.settings_sync_now),
-                actions.onSyncNow,
-                kind = ButtonKind.Quiet,
-                enabled = !state.syncing,
-            )
-
-            SectionHeader(Res.string.settings_exclusions)
-            state.daily.conflict?.let { DailyGuardBanner(it) }
-            FolderList(ExclusionKind.UNSYNCED, Res.string.settings_unsynced_title, Res.string.settings_unsynced_help, state, actions)
-            FolderList(ExclusionKind.HIDDEN, Res.string.settings_hidden_title, Res.string.settings_hidden_help, state, actions)
-
-            SectionHeader(Res.string.settings_images)
-            BasicText(stringResource(Res.string.settings_image_cache_size), style = CittiTheme.typography.meta.colored(muted = true))
-            for (mb in IMAGE_CACHE_CHOICES_MB) {
-                OptionRow(cacheSizeLabel(mb), selected = state.imageCacheMb == mb) { actions.onImageCacheMb(mb) }
-            }
-            BasicText(
-                stringResource(
-                    Res.string.settings_image_cache_used,
-                    cacheSizeLabel(((state.imageCacheBytes + MB / 2) / MB).toInt(), exact = true),
-                ),
-                style = CittiTheme.typography.meta.colored(muted = true),
-            )
-            BasicText(stringResource(Res.string.settings_image_remote), style = CittiTheme.typography.meta.colored(muted = true))
-            OptionRow(
-                stringResource(Res.string.settings_image_remote_ask),
-                selected = state.remoteImages == RemoteImages.ASK,
-            ) { actions.onRemoteImages(RemoteImages.ASK) }
-            OptionRow(
-                stringResource(Res.string.settings_image_remote_always),
-                selected = state.remoteImages == RemoteImages.ALWAYS,
-            ) { actions.onRemoteImages(RemoteImages.ALWAYS) }
-            BasicText(stringResource(Res.string.settings_image_remote_help), style = CittiTheme.typography.meta.colored(muted = true))
-            CittiButton(stringResource(Res.string.settings_image_cache_clear), actions.onAskClearImages, kind = ButtonKind.Quiet)
-
-            AppearanceSection(state.appearance, actions.appearance)
-
-            DailyNotesSection(state.daily, actions.daily)
+            content()
             Box(Modifier.padding(bottom = NotesSpacing.space8))
         }
     }
+}
+
+@Composable
+private fun SettingsSectionPage(
+    section: SettingsSection,
+    state: SettingsUiState,
+    nowSeconds: () -> Long,
+    actions: SettingsActions,
+) {
+    when (section) {
+        SettingsSection.ACCOUNT -> AccountPage(state, actions)
+        SettingsSection.SYNC -> SyncPage(state, nowSeconds, actions)
+        SettingsSection.EXCLUSIONS -> ExclusionsPage(state, actions)
+        SettingsSection.IMAGES -> ImagesPage(state, actions)
+        SettingsSection.APPEARANCE -> SectionPage(section, actions) { AppearanceSection(state.appearance, actions.appearance) }
+        SettingsSection.DAILY -> SectionPage(section, actions) { DailyNotesSection(state.daily, actions.daily) }
+    }
+}
+
+@Composable
+private fun AccountPage(
+    state: SettingsUiState,
+    actions: SettingsActions,
+) = SectionPage(SettingsSection.ACCOUNT, actions) {
+    LabelValue(stringResource(Res.string.settings_server), state.account.host)
+    LabelValue(stringResource(Res.string.settings_user), state.account.user)
+    CittiButton(stringResource(Res.string.settings_sign_in_again), actions.onSignInAgain, kind = ButtonKind.Quiet)
+    Help(Res.string.settings_sign_in_again_help)
+    CittiButton(stringResource(Res.string.settings_sign_out), actions.onAskSignOut, kind = ButtonKind.Danger)
+}
+
+@Composable
+private fun SyncPage(
+    state: SettingsUiState,
+    nowSeconds: () -> Long,
+    actions: SettingsActions,
+) = SectionPage(SettingsSection.SYNC, actions) {
+    val now by produceState(nowSeconds()) {
+        while (true) {
+            delay(30_000)
+            value = nowSeconds()
+        }
+    }
+    BasicText(stringResource(Res.string.settings_interval), style = CittiTheme.typography.meta.colored(muted = true))
+    for (minutes in SYNC_INTERVAL_CHOICES) {
+        OptionRow(intervalLabel(minutes), selected = state.intervalMinutes == minutes) { actions.onInterval(minutes) }
+    }
+    BasicText(stringResource(Res.string.settings_network), style = CittiTheme.typography.meta.colored(muted = true))
+    OptionRow(stringResource(Res.string.settings_network_any), state.network == SyncNetwork.ANY) {
+        actions.onNetwork(SyncNetwork.ANY)
+    }
+    OptionRow(stringResource(Res.string.settings_network_unmetered), state.network == SyncNetwork.UNMETERED) {
+        actions.onNetwork(SyncNetwork.UNMETERED)
+    }
+    BasicText(
+        statusText(syncLine(state.status, now), state.status),
+        style = CittiTheme.typography.meta.colored(muted = true),
+    )
+    CittiButton(
+        stringResource(Res.string.settings_sync_now),
+        actions.onSyncNow,
+        kind = ButtonKind.Quiet,
+        enabled = !state.syncing,
+    )
+}
+
+@Composable
+private fun ExclusionsPage(
+    state: SettingsUiState,
+    actions: SettingsActions,
+) = SectionPage(SettingsSection.EXCLUSIONS, actions) {
+    state.daily.conflict?.let { DailyGuardBanner(it) }
+    FolderList(ExclusionKind.UNSYNCED, Res.string.settings_unsynced_title, Res.string.settings_unsynced_help, state, actions)
+    FolderList(ExclusionKind.HIDDEN, Res.string.settings_hidden_title, Res.string.settings_hidden_help, state, actions)
+}
+
+@Composable
+private fun ImagesPage(
+    state: SettingsUiState,
+    actions: SettingsActions,
+) = SectionPage(SettingsSection.IMAGES, actions) {
+    BasicText(stringResource(Res.string.settings_image_cache_size), style = CittiTheme.typography.meta.colored(muted = true))
+    for (mb in IMAGE_CACHE_CHOICES_MB) {
+        OptionRow(cacheSizeLabel(mb), selected = state.imageCacheMb == mb) { actions.onImageCacheMb(mb) }
+    }
+    BasicText(
+        stringResource(
+            Res.string.settings_image_cache_used,
+            cacheSizeLabel(((state.imageCacheBytes + MB / 2) / MB).toInt(), exact = true),
+        ),
+        style = CittiTheme.typography.meta.colored(muted = true),
+    )
+    BasicText(stringResource(Res.string.settings_image_remote), style = CittiTheme.typography.meta.colored(muted = true))
+    OptionRow(
+        stringResource(Res.string.settings_image_remote_ask),
+        selected = state.remoteImages == RemoteImages.ASK,
+    ) { actions.onRemoteImages(RemoteImages.ASK) }
+    OptionRow(
+        stringResource(Res.string.settings_image_remote_always),
+        selected = state.remoteImages == RemoteImages.ALWAYS,
+    ) { actions.onRemoteImages(RemoteImages.ALWAYS) }
+    BasicText(stringResource(Res.string.settings_image_remote_help), style = CittiTheme.typography.meta.colored(muted = true))
+    CittiButton(stringResource(Res.string.settings_image_cache_clear), actions.onAskClearImages, kind = ButtonKind.Quiet)
 }
 
 @Composable

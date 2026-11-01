@@ -21,6 +21,7 @@ object Strings {
     const val TREE_ROOT = "Notes"
     const val FAVORITES = "Favorites"
     const val SETTINGS = "Settings"
+    const val SETTINGS_VERSION = "citti "
     const val FIRST_SYNC_EMPTY = "Your notes are on their way"
     const val BANNER_AUTH_FAILED = "The server refused the saved sign-in. Your Notes stay on this device."
     const val BANNER_SIGN_IN_AGAIN = "Sign in again"

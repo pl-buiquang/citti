@@ -10,6 +10,7 @@ import app.citti.e2e.robots.ListRobot
 import app.citti.e2e.robots.LoginRobot
 import app.citti.e2e.rules.E2eRules
 import app.citti.e2e.rules.Setup
+import app.citti.ui.settings.SettingsSection
 import org.junit.Rule
 import org.junit.Test
 
@@ -35,7 +36,7 @@ class AppearanceTest {
 
         e2e.recreate()
         appearance.assertState("paper:light:theme")
-        settings.assertShown()
+        settings.assertSectionShown(SettingsSection.APPEARANCE)
         // M8 sends no request of its own.
         server.assertNoRequests()
     }

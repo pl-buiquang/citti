@@ -106,9 +106,18 @@ class CoreSettingsStore(
     override fun pendingUnder(path: String) = exclusions.pendingUnder(path)
 }
 
-/** Where Settings is: the home page, the folder picker for one list, or a picker of Settings › Daily notes. */
+/** The pages the Settings menu opens, in menu order. */
+enum class SettingsSection { ACCOUNT, SYNC, EXCLUSIONS, IMAGES, APPEARANCE, DAILY }
+
+/** Where Settings is: the menu, a section page, the folder picker for one list, or a picker of Settings › Daily notes. */
 sealed interface SettingsPage {
+    /** The menu: one entry per [SettingsSection]. */
     data object Home : SettingsPage
+
+    /** The page of one [SettingsSection]. */
+    data class Section(
+        val section: SettingsSection,
+    ) : SettingsPage
 
     data class PickFolder(
         val kind: ExclusionKind,
@@ -321,7 +330,7 @@ class SettingsController(
             }
 
             l.page != SettingsPage.Home -> {
-                home()
+                up()
                 true
             }
 
@@ -352,7 +361,7 @@ class SettingsController(
     }
 
     fun openPicker(kind: ExclusionKind) {
-        local.value = Local(page = SettingsPage.PickFolder(kind))
+        local.update { Local(page = SettingsPage.PickFolder(kind), imageBytes = it.imageBytes) }
     }
 
     fun clearFolderError() = local.update { it.copy(folderError = null) }
@@ -426,7 +435,7 @@ class SettingsController(
     ) {
         when (val result = store.addExclusion(kind, path)) {
             is AddResult.Added -> {
-                local.value = Local()
+                up()
                 syncAfterChange()
             }
 
@@ -473,8 +482,20 @@ class SettingsController(
 
     // ---- Settings › Daily notes ----
 
-    /** Back to the home page, keeping what it shows (the Image cache size). */
-    private fun home() = local.update { Local(imageBytes = it.imageBytes) }
+    /** The page Back leads to from [page]: a section from its pickers and editor, the menu from a section. */
+    private fun parentOf(page: SettingsPage): SettingsPage =
+        when (page) {
+            SettingsPage.Home, is SettingsPage.Section -> SettingsPage.Home
+            is SettingsPage.PickFolder -> SettingsPage.Section(SettingsSection.EXCLUSIONS)
+            is SettingsPage.PickJournal, is SettingsPage.PickTemplate -> SettingsPage.Section(SettingsSection.DAILY)
+            SettingsPage.ThemeEditor -> SettingsPage.Section(SettingsSection.APPEARANCE)
+        }
+
+    /** One level up (see [parentOf]), keeping what the pages show (the Image cache size). */
+    private fun up() = local.update { Local(page = parentOf(it.page), imageBytes = it.imageBytes) }
+
+    /** A menu entry: opens the page of [section]. */
+    fun openSection(section: SettingsSection) = local.update { it.copy(page = SettingsPage.Section(section), confirm = null) }
 
     private fun editJournal(change: (SettingsPage.PickJournal) -> SettingsPage.PickJournal) =
         local.update { l -> (l.page as? SettingsPage.PickJournal)?.let { l.copy(page = change(it)) } ?: l }
@@ -488,7 +509,7 @@ class SettingsController(
     /** The picker's ←: up one level, closing it at the Vault root. */
     fun journalBack() {
         val page = local.value.page as? SettingsPage.PickJournal ?: return
-        page.picker.back()?.let { up -> editJournal { SettingsPage.PickJournal(up) } } ?: home()
+        page.picker.back()?.let { up -> editJournal { SettingsPage.PickJournal(up) } } ?: up()
     }
 
     fun journalNewFolder() = editJournal { SettingsPage.PickJournal(it.picker.startNewFolder()) }
@@ -508,7 +529,7 @@ class SettingsController(
         val page = local.value.page as? SettingsPage.PickJournal ?: return
         scope.launch {
             when (val result = daily.setFolder(page.picker.path)) {
-                is FolderResult.Saved -> home()
+                is FolderResult.Saved -> up()
                 is FolderResult.Refused -> editJournal { if (it.picker == page.picker) it.copy(error = result.error) else it }
             }
         }
@@ -538,7 +559,7 @@ class SettingsController(
     fun chooseTemplate(path: String) {
         scope.launch {
             daily.setTemplate(path)
-            home()
+            up()
         }
     }
 

@@ -1,6 +1,7 @@
 package app.citti.ui
 
 import app.citti.core.settings.ExclusionKind
+import app.citti.ui.settings.SettingsSection
 
 /**
  * `testTag`s shared by the screens and the E2E Robots, named `<screen>.<element>`. Only nodes with no unique
@@ -66,6 +67,10 @@ object TestTags {
     const val NEIGHBOR_NEXT = "note.neighborNext"
 
     const val SETTINGS_HOME = "settings.home"
+
+    /** The scrolling body of a Settings section page, and the version line under the menu. */
+    const val SETTINGS_SECTION = "settings.section"
+    const val SETTINGS_VERSION = "settings.version"
     const val APPEARANCE_EDIT_CUSTOM = "appearance.edit-custom"
     const val THEME_EDITOR = "appearance.editor"
     const val THEME_PREVIEW = "appearance.preview"
@@ -117,6 +122,8 @@ object TestTags {
     fun settingsWeekStart(day: String?): String = "settings.daily.week.${day?.lowercase() ?: "auto"}"
 
     fun settingsAdd(kind: ExclusionKind): String = "settings.${kind.name.lowercase()}.add"
+
+    fun settingsSection(section: SettingsSection): String = "settings.menu.${section.name.lowercase()}"
 
     fun settingsRemove(
         kind: ExclusionKind,

@@ -242,7 +242,7 @@ class SettingsControllerTest {
             assertEquals(SettingsPage.PickFolder(ExclusionKind.HIDDEN), c.state.value.page)
             c.addFolder(ExclusionKind.HIDDEN, " /secret/ ")
             assertEquals(listOf("secret"), c.state.value.hidden)
-            assertEquals(SettingsPage.Home, c.state.value.page)
+            assertEquals(SettingsPage.Section(SettingsSection.EXCLUSIONS), c.state.value.page)
             assertEquals(listOf(SyncTrigger.Manual), triggers)
         }
 
@@ -327,6 +327,8 @@ class SettingsControllerTest {
             assertTrue(c.onBack())
             assertNull(c.state.value.confirm)
             assertTrue(c.onBack())
+            assertEquals(SettingsPage.Section(SettingsSection.EXCLUSIONS), c.state.value.page)
+            assertTrue(c.onBack())
             assertEquals(SettingsPage.Home, c.state.value.page)
             assertFalse(c.onBack())
         }
@@ -397,7 +399,7 @@ class SettingsControllerTest {
             assertEquals(SettingsPage.PickJournal(FolderPickerState("notes/daily")), c.state.value.page)
             c.journalConfirm()
             assertEquals("notes/daily", daily.config.value.folder)
-            assertEquals(SettingsPage.Home, c.state.value.page)
+            assertEquals(SettingsPage.Section(SettingsSection.DAILY), c.state.value.page)
         }
 
     @Test
@@ -414,7 +416,7 @@ class SettingsControllerTest {
             assertTrue(c.onBack())
             assertEquals(SettingsPage.PickJournal(FolderPickerState("")), c.state.value.page)
             assertTrue(c.onBack())
-            assertEquals(SettingsPage.Home, c.state.value.page)
+            assertEquals(SettingsPage.Section(SettingsSection.DAILY), c.state.value.page)
         }
 
     @Test
@@ -429,7 +431,7 @@ class SettingsControllerTest {
             assertEquals(listOf("Weekly"), page.suggestions.map { it.title })
             c.chooseTemplate(page.suggestions.single().templatePath())
             assertEquals("templates/Weekly.md", daily.config.value.template)
-            assertEquals(SettingsPage.Home, c.state.value.page)
+            assertEquals(SettingsPage.Section(SettingsSection.DAILY), c.state.value.page)
             c.openTemplatePicker()
             c.chooseTemplate("")
             assertEquals("", daily.config.value.template)
@@ -549,7 +551,44 @@ class SettingsControllerTest {
             assertEquals(CustomTheme(BaseTheme.INDEX), c.state.value.appearance.custom)
             assertEquals(SettingsPage.ThemeEditor, c.state.value.page)
             assertTrue(c.onBack())
+            assertEquals(SettingsPage.Section(SettingsSection.APPEARANCE), c.state.value.page)
+        }
+
+    @Test
+    fun theMenuOpensASectionAndBackLeadsToTheMenuThenOutOfSettings() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
             assertEquals(SettingsPage.Home, c.state.value.page)
+            assertFalse(c.onBack())
+            for (section in SettingsSection.entries) {
+                c.openSection(section)
+                assertEquals(SettingsPage.Section(section), c.state.value.page)
+                assertTrue(c.onBack())
+                assertEquals(SettingsPage.Home, c.state.value.page)
+            }
+        }
+
+    @Test
+    fun aDialogOpenOnASectionCloseBeforeTheSectionDoes() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            c.openSection(SettingsSection.ACCOUNT)
+            c.askSignOut()
+            assertTrue(c.onBack())
+            assertNull(c.state.value.confirm)
+            assertEquals(SettingsPage.Section(SettingsSection.ACCOUNT), c.state.value.page)
+        }
+
+    @Test
+    fun theThemeEditorLeavesAndComesBackThroughAppearance() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            c.openSection(SettingsSection.APPEARANCE)
+            c.openThemeEditor()
+            assertTrue(c.onBack())
+            assertTrue(c.onBack())
+            assertEquals(SettingsPage.Home, c.state.value.page)
+            assertFalse(c.onBack())
         }
 
     @Test

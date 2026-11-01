@@ -27,12 +27,14 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,7 +97,9 @@ import app.citti.ui.search.SearchScreen
 import app.citti.ui.settings.AccountInfo
 import app.citti.ui.settings.SettingsActions
 import app.citti.ui.settings.SettingsController
+import app.citti.ui.settings.SettingsPage
 import app.citti.ui.settings.SettingsScreen
+import app.citti.ui.settings.SettingsSection
 import app.citti.ui.settings.dailyActions
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.background
@@ -108,6 +112,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -733,6 +738,21 @@ class MainActivity : ComponentActivity() {
         val info = account ?: return
         val controller = remember(index) { routes.controller(index, Route.Settings) { newSettingsController(it, info) } }
         val state by controller.state.collectAsState()
+        // The controller goes with the Activity; the open section is saved so a rotation keeps the page.
+        var savedSection by rememberSaveable { mutableStateOf<String?>(null) }
+        LaunchedEffect(controller) {
+            SettingsSection.entries.firstOrNull { it.name == savedSection }?.let { section ->
+                controller.openSection(section)
+                controller.state.first { it.page == SettingsPage.Section(section) }
+            }
+            controller.state.map { it.page }.collect { page ->
+                when (page) {
+                    is SettingsPage.Section -> savedSection = page.section.name
+                    SettingsPage.Home -> savedSection = null
+                    else -> Unit
+                }
+            }
+        }
         BackHandler { if (!controller.onBack()) navigator.pop() }
         val editor by controller.themeEditor.state.collectAsState()
         DisposableEffect(controller) {
@@ -744,6 +764,7 @@ class MainActivity : ComponentActivity() {
             editor = editor,
             nowSeconds = { container.config.nowSeconds() },
             folders = pickerFolders,
+            appVersion = "${BuildConfig.VERSION_NAME} · ${BuildConfig.GIT_SHA}",
             actions =
                 SettingsActions(
                     onBack = { if (!controller.onBack()) navigator.pop() },
@@ -753,6 +774,7 @@ class MainActivity : ComponentActivity() {
                     onRemoteImages = controller::setRemoteImages,
                     onAskClearImages = controller::askClearImages,
                     onSyncNow = controller::syncNow,
+                    onOpenSection = controller::openSection,
                     onOpenPicker = controller::openPicker,
                     onAddFolder = controller::addFolder,
                     onRemoveFolder = controller::removeFolder,

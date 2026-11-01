@@ -151,7 +151,6 @@ internal fun DailyNotesSection(
     actions: DailySettingsActions,
 ) {
     val config = state.config
-    SectionHeader(Res.string.settings_daily)
     state.conflict?.let { DailyGuardBanner(it) }
 
     ValueRow(

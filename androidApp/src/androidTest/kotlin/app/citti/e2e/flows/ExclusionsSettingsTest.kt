@@ -24,7 +24,7 @@ class ExclusionsSettingsTest {
         settings.addHiddenFolder("personal")
         settings.assertFolderListed(ExclusionKind.HIDDEN, "personal")
         settings.removeHiddenFolder("archive")
-        list.pressBack()
+        settings.leave()
 
         list.assertNoRow("Travel")
         list.assertRow("Old plan")
@@ -42,7 +42,7 @@ class ExclusionsSettingsTest {
         val settings = list.openSettings()
         settings.addUnsyncedFolder("work")
         settings.removeUnsyncedFolder("private")
-        list.pressBack()
+        settings.leave()
         list.assertNoRow("Standup")
 
         E2e.server.clearRequests()

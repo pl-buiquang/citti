@@ -3,6 +3,9 @@
 -keep class app.citti.AppConfig { *; }
 -keep class app.citti.AppContainer { *; }
 -keep class app.citti.CittiApp { *; }
+# The Settings menu flow walks every section of the enum and finds the entries by their test tags.
+-keep class app.citti.ui.TestTags { *; }
+-keep class app.citti.ui.settings.SettingsSection { *; }
 
 # Libraries the test APK shares with the app: it does not bundle its own copy of a class the app has, so
 # R8 must not strip or rename what the tests and the fake server call. App code stays fully shrunk.
