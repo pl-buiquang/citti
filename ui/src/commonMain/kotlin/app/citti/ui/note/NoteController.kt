@@ -139,6 +139,10 @@ class NoteController(
     // `Route.Note.startLine`, applied once at the first load (never together with a search query).
     private val startLine: Int? = route.startLine?.takeIf { route.searchQuery == null }
 
+    // Without a startLine, the stored Reading position opens the Note, except for a Search result (the top, until
+    // in-note search lands) and a focused open (a New note, Edit mode at the end).
+    private val resumes = route.startLine == null && route.searchQuery == null && !route.focus
+
     // The Reading position: the last top source line the screen reported, and the one already stored.
     private var viewLine: Int? = null
     private var persistedLine: Int? = startLine
@@ -265,7 +269,9 @@ class NoteController(
         when {
             !before.ready || before.reloading -> {
                 // The first text, or the server's text after a refused edit.
-                val start = if (before.ready) null else startLine?.let { startOffsetOf(text, it) }
+                val line = if (before.ready) null else startLine ?: if (resumes) gateway.viewLine() else null
+                if (line != null && startLine == null) persistedLine = line
+                val start = line?.let { startOffsetOf(text, it) }
                 val caret = start ?: if (before.ready) caretAfterReload(editor.text, editor.selection.start, text) else text.length
                 editor.replaceAll(text, caret)
                 if (start != null) editor.scrollTo(start)

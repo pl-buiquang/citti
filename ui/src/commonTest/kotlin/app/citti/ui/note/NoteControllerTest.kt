@@ -62,6 +62,7 @@ private class FakeGateway : NoteGateway {
     var saved: String? = null
     val targets = mutableMapOf<LinkRef, LinkTarget>()
     val viewLines = mutableListOf<Int>()
+    var storedLine: Int? = null
     val log = mutableListOf<String>()
 
     override fun observe(): Flow<EditorDoc?> = row
@@ -80,6 +81,8 @@ private class FakeGateway : NoteGateway {
         log += "save"
         return saveResult(text, baseEtag)
     }
+
+    override suspend fun viewLine(): Int? = storedLine
 
     override suspend fun setViewLine(line: Int) {
         viewLines += line
@@ -289,6 +292,27 @@ class NoteControllerTest {
             // The first save is based on the loaded text, the next one on the text just saved: a push changing the
             // etag between them must not make the second save a Conflict copy.
             assertEquals(listOf<String?>("first", "first!"), f.gateway.baseTexts)
+        }
+
+    @Test
+    fun theStoredReadingPositionOpensTheNote() =
+        runTest {
+            val f = open(row = doc("zero\none\ntwo\nthree")) { storedLine = 2 }
+            assertEquals(9, f.controller.state.value.startOffset)
+            // Unchanged: leaving does not write it again.
+            f.controller.onViewLine(2)
+            f.controller.onLeave()
+            runCurrent()
+            assertEquals(emptyList(), f.gateway.viewLines)
+        }
+
+    @Test
+    fun aSearchResultOrAFocusedOpenIgnoresTheReadingPosition() =
+        runTest {
+            val search = open(row = doc("zero\none\ntwo"), route = Route.Note(1, searchQuery = "one")) { storedLine = 2 }
+            assertNull(search.controller.state.value.startOffset)
+            val focused = open(row = doc("zero\none\ntwo"), route = Route.Note(1, focus = true)) { storedLine = 2 }
+            assertNull(focused.controller.state.value.startOffset)
         }
 
     @Test

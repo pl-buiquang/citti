@@ -67,6 +67,15 @@ class DbNoteGateway(
         onViewLine()
     }
 
+    override suspend fun viewLine(): Int? =
+        withContext(Dispatchers.IO) {
+            db.noteQueries
+                .selectViewLine(localId)
+                .executeAsOneOrNull()
+                ?.view_line
+                ?.toInt()
+        }
+
     override fun savedText(): String? = editor.savedText
 
     override suspend fun resolve(

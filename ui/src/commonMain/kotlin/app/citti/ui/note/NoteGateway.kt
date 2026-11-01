@@ -52,6 +52,9 @@ interface NoteGateway {
     /** Stores the Reading position: the source line at the top of the screen. Local only. */
     suspend fun setViewLine(line: Int) {}
 
+    /** The stored Reading position, or null when the Note has none yet. */
+    suspend fun viewLine(): Int? = null
+
     /** The text last written to the row. */
     fun savedText(): String?
 
