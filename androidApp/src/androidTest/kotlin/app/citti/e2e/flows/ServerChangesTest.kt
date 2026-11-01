@@ -5,6 +5,7 @@ import app.citti.e2e.robots.ListRobot
 import app.citti.e2e.robots.NoteRobot
 import app.citti.e2e.rules.E2eRules
 import app.citti.e2e.rules.Setup
+import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import kotlin.time.Duration.Companion.minutes
@@ -31,6 +32,12 @@ class ServerChangesTest {
         note.assertText("Buy oat milk")
     }
 
+    @Ignore(
+        "Flaky, cause not established: rarely, the sync that deletes the open Note makes Compose throw " +
+            "IllegalStateException \"LayoutNode should be attached to an owner\" from a Row placement during the " +
+            "layout pass while the Note screen is popped. It looks like a race between the screen leaving the " +
+            "composition and a layout pass of that same frame; it did not reproduce in 4 local runs, so it is not fixed.",
+    )
     @Test
     fun serverDeleteOfTheOpenNoteGoesBackToTheList() {
         list.openNote("todo")
