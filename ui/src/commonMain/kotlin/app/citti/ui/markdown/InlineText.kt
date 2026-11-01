@@ -65,7 +65,11 @@ private fun AnnotatedString.Builder.appendInlines(
 
             is Inline.Link -> {
                 val link = SpanStyle(color = colors.accentInk, textDecoration = TextDecoration.Underline)
-                withLink(LinkAnnotation.Url(inline.url, TextLinkStyles(link))) { appendInlines(inline.children, styles) }
+                if (isOpenableUrl(inline.url)) {
+                    withLink(LinkAnnotation.Url(inline.url, TextLinkStyles(link))) { appendInlines(inline.children, styles) }
+                } else {
+                    appendInlines(inline.children, styles)
+                }
             }
 
             is Inline.NoteLink -> {
@@ -93,6 +97,11 @@ private fun AnnotatedString.Builder.appendInlines(
         }
     }
 }
+
+private val OPENABLE_SCHEMES = setOf("http", "https", "mailto", "tel")
+
+/** Whether a tap on the link [url] may hand it to the system: only web, mail and phone links. Any other text stays inert. */
+internal fun isOpenableUrl(url: String): Boolean = url.substringBefore(':', "").lowercase() in OPENABLE_SCHEMES
 
 private inline fun AnnotatedString.Builder.noteLink(
     ref: LinkRef,
