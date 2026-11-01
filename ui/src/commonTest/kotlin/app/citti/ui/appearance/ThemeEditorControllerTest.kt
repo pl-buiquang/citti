@@ -182,4 +182,45 @@ class ThemeEditorControllerTest {
             assertNull(e.state.value.sheet)
             assertFalse(e.onBack())
         }
+
+    /** A store whose flow never emits again, like a state that lags the database write. */
+    private fun laggingStore(): app.citti.ui.settings.AppearanceStore {
+        val initial = store.state.value
+        return object : app.citti.ui.settings.AppearanceStore by store {
+            override fun appearance() = kotlinx.coroutines.flow.flowOf(initial)
+        }
+    }
+
+    @Test
+    fun quickTextSizeTapsAddUpDespiteALaggingState() =
+        runTest(UnconfinedTestDispatcher()) {
+            val e = ThemeEditorController(backgroundScope, laggingStore())
+            e.stepTextScale(+1)
+            e.stepTextScale(+1)
+            assertEquals(
+                1.1,
+                store.state.value.custom!!
+                    .roles.textScale,
+            )
+        }
+
+    @Test
+    fun setBaseCountsTheStoredOverridesDespiteALaggingState() =
+        runTest(UnconfinedTestDispatcher()) {
+            val e = ThemeEditorController(backgroundScope, laggingStore())
+            e.setColor(ColorToken.BG, false, 1)
+            e.setTextScale(1.2)
+            e.setBase(BaseTheme.INDEX)
+            assertEquals(2, e.state.value.keptOverrides)
+            assertEquals(
+                BaseTheme.INDEX,
+                store.state.value.custom!!
+                    .base,
+            )
+            assertEquals(
+                2,
+                store.state.value.custom!!
+                    .overrideCount,
+            )
+        }
 }

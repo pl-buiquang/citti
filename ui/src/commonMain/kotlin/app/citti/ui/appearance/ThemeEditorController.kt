@@ -106,16 +106,23 @@ class ThemeEditorController(
         keepNotices: Boolean = false,
         change: (CustomTheme) -> CustomTheme,
     ) {
-        val seed = state.value.custom.base
-        store.updateCustom(seed, change)
+        store.updateCustom(BaseTheme.SIGNAL, change)
         local.update { if (keepNotices) it else it.copy(importError = false, keptOverrides = 0) }
     }
 
     fun setBase(base: BaseTheme) {
-        val before = state.value.custom
-        if (before.base == base) return
-        edit(keepNotices = true) { it.copy(base = base) }
-        local.update { it.copy(importError = false, keptOverrides = before.overrideCount) }
+        // Read the stored theme inside the update: the state flow lags the write.
+        var kept: Int? = null
+        edit(keepNotices = true) {
+            if (it.base == base) {
+                it
+            } else {
+                kept = it.overrideCount
+                it.copy(base = base)
+            }
+        }
+        val keptCount = kept ?: return
+        local.update { it.copy(importError = false, keptOverrides = keptCount) }
     }
 
     fun setEditDark(dark: Boolean) = local.update { it.copy(editDark = dark) }
@@ -173,14 +180,13 @@ class ThemeEditorController(
 
     /** Snaps to the 5 % steps of 85 %..130 %; 100 % is stored as an override only when it was asked for. */
     fun setTextScale(scale: Double) {
-        val steps = (scale * 20).roundToInt() / 20.0
-        edit { it.withRoles { r -> r.copy(textScale = steps.coerceIn(MIN_TEXT_SCALE, MAX_TEXT_SCALE)) } }
+        edit { it.withRoles { r -> r.copy(textScale = snapTextScale(scale)) } }
     }
 
-    fun stepTextScale(delta: Int) {
-        val current = state.value.custom.roles.textScale ?: 1.0
-        setTextScale(current + delta * 0.05)
-    }
+    /** Steps from the stored value (not the lagging state), so quick taps add up. */
+    fun stepTextScale(delta: Int) = edit { it.withRoles { r -> r.copy(textScale = snapTextScale((r.textScale ?: 1.0) + delta * 0.05)) } }
+
+    private fun snapTextScale(scale: Double) = ((scale * 20).roundToInt() / 20.0).coerceIn(MIN_TEXT_SCALE, MAX_TEXT_SCALE)
 
     fun resetTextScale() = edit { it.withRoles { r -> r.copy(textScale = null) } }
 
