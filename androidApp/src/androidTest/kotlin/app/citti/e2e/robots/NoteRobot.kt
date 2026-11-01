@@ -6,6 +6,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.filterToOne
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -17,6 +18,7 @@ import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.onChildren
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.UiController
 import androidx.test.espresso.ViewAction
@@ -32,6 +34,7 @@ import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import androidx.test.espresso.action.ViewActions.doubleClick as espressoDoubleClick
 
 /**
  * The Note screen, Edit and Preview modes. Edit mode is a platform `EditText` (ADR 0009), reached through
@@ -60,6 +63,17 @@ class NoteRobot(
         awaitMode()
         if (!preview) waitFor(hasContentDescription(Strings.NOTE_PREVIEW) and hasClickAction()).performClick()
         assertPreviewMode()
+    }
+
+    /** Preview: a double tap on the block containing [text]. */
+    fun doubleTapBlock(text: String) {
+        scrollTo(TestTags.NOTE_PREVIEW, hasText(text, substring = true)).performTouchInput { doubleClick() }
+    }
+
+    /** Edit: a double tap in the editor. */
+    fun doubleTapEditor() {
+        assertEditMode()
+        editText().perform(espressoDoubleClick())
     }
 
     /** Edit mode, switching from the Preview mode a Note opens in. */

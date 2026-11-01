@@ -54,4 +54,14 @@ class PreviewTest {
         server.awaitRequest(Endpoint.UPDATE)
         assertEquals(before.replace("- [ ] Buy milk", "- [x] Buy milk"), E2e.server.note(e2e.setup.id("todo"))!!.content)
     }
+
+    @Test
+    fun aDoubleTapSwitchesTheModeBothWays() {
+        list.openNote("todo")
+        note.assertPreviewMode()
+        note.doubleTapBlock("Buy milk")
+        note.assertEditorFocused()
+        note.doubleTapEditor()
+        note.assertPreviewMode()
+    }
 }

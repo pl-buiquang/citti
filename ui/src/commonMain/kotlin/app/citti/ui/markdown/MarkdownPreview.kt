@@ -4,6 +4,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,7 +44,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -91,11 +98,43 @@ fun MarkdownPreview(
     onLink: (LinkRef) -> Unit,
     modifier: Modifier = Modifier,
     images: ImageEnv? = null,
+    /** A double tap on block [Int] (an index of [Doc.blocks]); null: the Preview ignores double taps. */
+    onDoubleTap: ((Int) -> Unit)? = null,
 ) {
     val colors = CittiTheme.colors
+    val doubleTap by rememberUpdatedState(onDoubleTap)
+    val viewConfiguration = LocalViewConfiguration.current
     val styles = remember(colors, links, onLink) { InlineStyles(colors, links, onLink) }
     val scope = PreviewScope(styles, readonly, onTask, images)
-    LazyColumn(modifier.fillMaxSize().testTag(TestTags.NOTE_PREVIEW), state = listState) {
+    LazyColumn(
+        modifier
+            .fillMaxSize()
+            .testTag(TestTags.NOTE_PREVIEW)
+            // Watches the taps in the Initial pass and consumes nothing: links, tasks and selection keep working.
+            .pointerInput(viewConfiguration) {
+                var lastUp = 0L
+                var lastAt = Offset.Zero
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val up = waitForUpOrCancellation(PointerEventPass.Initial) ?: return@awaitEachGesture
+                    val second =
+                        lastUp != 0L &&
+                            up.uptimeMillis - lastUp <= viewConfiguration.doubleTapTimeoutMillis &&
+                            (down.position - lastAt).getDistance() <= viewConfiguration.touchSlop * 4
+                    if (second) {
+                        lastUp = 0L
+                        val hit =
+                            listState.layoutInfo.visibleItemsInfo
+                                .firstOrNull { down.position.y >= it.offset && down.position.y < it.offset + it.size }
+                        hit?.let { doubleTap?.invoke(it.index) }
+                    } else {
+                        lastUp = up.uptimeMillis
+                        lastAt = up.position
+                    }
+                }
+            },
+        state = listState,
+    ) {
         itemsIndexed(doc.blocks, key = { index, block -> "$index:${block.start}" }) { index, block ->
             // Each extra blank line of the source is one more body line of space.
             val gap =

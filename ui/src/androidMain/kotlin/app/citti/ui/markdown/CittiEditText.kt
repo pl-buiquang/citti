@@ -5,7 +5,9 @@ import android.text.Editable
 import android.text.InputType
 import android.text.Spanned
 import android.text.TextWatcher
+import android.view.GestureDetector
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import app.citti.core.markdown.Selection
@@ -75,6 +77,32 @@ internal class CittiEditText(
                 }
             },
         )
+    }
+
+    // A double tap switches mode (the screen decides); the second tap does not select a word.
+    private var swallowing = false
+    private val doubleTaps =
+        GestureDetector(
+            context,
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onDoubleTap(e: MotionEvent): Boolean {
+                    val handler = state.onDoubleTap ?: return false
+                    swallowing = true
+                    handler()
+                    return true
+                }
+            },
+        )
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (state.onDoubleTap != null) {
+            doubleTaps.onTouchEvent(event)
+            if (swallowing) {
+                if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) swallowing = false
+                return true
+            }
+        }
+        return super.onTouchEvent(event)
     }
 
     private var changeStart = 0

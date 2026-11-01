@@ -88,6 +88,9 @@ class EditorState(
 
     // Set by [requestFocus] before the view attaches.
     private var pendingFocus = false
+
+    /** A double tap in the view (Edit mode): the screen switches mode. Null: the view keeps the platform behaviour. */
+    var onDoubleTap: (() -> Unit)? = null
     private val history = EditorHistory()
 
     private val _changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -209,6 +212,15 @@ class EditorState(
         val at = offset.coerceIn(0, document.length)
         pendingScroll = at
         host?.scrollToOffset(at)
+    }
+
+    /** The caret goes to [offset], scrolled to the top, and the keyboard comes up, when the view attaches next. */
+    fun placeCaret(offset: Int) {
+        if (host != null) return
+        val at = offset.coerceIn(0, document.length)
+        pendingCaret = at
+        pendingScroll = at
+        requestFocus()
     }
 
     fun selectionChanged() = updatePressed()

@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -162,11 +164,14 @@ fun NoteScreen(
             .debounce(VIEW_LINE_MS)
             .collect { index -> doc.blocks.getOrNull(index)?.let { actions.onViewLine(editor.document.lineOf(it.start)) } }
     }
-    val toggle = {
+    // Switches mode. [tapped] is the block a double tap in Preview hit: the editor then puts the caret there and
+    // raises the keyboard; the toggle button (null) only keeps the first visible line.
+    val switchMode = { tapped: Int? ->
         if (state.preview) {
             // Preview -> Edit: the editor scrolls to the source line of the first visible block.
-            doc?.blocks?.getOrNull(previewListState.firstVisibleItemIndex)?.let {
+            doc?.blocks?.getOrNull(tapped ?: previewListState.firstVisibleItemIndex)?.let {
                 editor.scrollTo(it.start)
+                if (tapped != null) editor.placeCaret(it.start)
                 actions.onViewLine(editor.document.lineOf(it.start))
             }
         } else {
@@ -175,13 +180,20 @@ fun NoteScreen(
         }
         actions.onTogglePreview()
     }
+    val toggle = { switchMode(null) }
+    // A double tap in Edit mode switches too (the view hands it over; the read-only Note has no Edit mode).
+    val latestSwitch by rememberUpdatedState(switchMode)
+    DisposableEffect(editor, state.readonly) {
+        editor.onDoubleTap = if (state.readonly) null else ({ latestSwitch(null) })
+        onDispose { editor.onDoubleTap = null }
+    }
     Box(
         Modifier
             .fillMaxSize()
             .background(CittiTheme.colors.bg)
             .safeDrawingPadding(),
     ) {
-        NoteColumn(state, editor, previewListState, actions, images, focused, pressed, toggle)
+        NoteColumn(state, editor, previewListState, actions, images, focused, pressed, toggle, switchMode)
         if (state.menuOpen) NoteMenu(state.menu, state.favorite, actions.onMenuItem, actions.onDismissMenu)
         actions.dialogs?.let { NoteDialogHost(state.dialog, state.title, folders, dateTime, it) }
         if (state.imageSheet) ImageSourceSheet(onPick = actions.onPickImage, onDismiss = actions.onDismissImageSheet)
@@ -198,6 +210,7 @@ private fun NoteColumn(
     focused: Boolean,
     pressed: Set<ToolbarAction>,
     toggle: () -> Unit,
+    switchMode: (Int?) -> Unit,
 ) {
     val doc = state.doc
     Column(Modifier.fillMaxSize()) {
@@ -226,6 +239,7 @@ private fun NoteColumn(
                             onTask = actions.onTask,
                             onLink = actions.onLink,
                             images = images,
+                            onDoubleTap = if (state.readonly) null else switchMode,
                         )
                     }
                 }
