@@ -23,6 +23,22 @@ import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSpacing
 
 /**
+ * Geometry and colors of the picker's own widgets. The semantic tokens do not cover them: the gradients must be pure
+ * white and black to mean "saturation" and "value" whatever the theme, and the handles must stay visible on any
+ * color under them. This is the only place in the picker that may hold raw dp or Color values (tokens-only exemption).
+ */
+private object PickerGeometry {
+    val squareHeight = 176.dp
+    val handleRadius = 11.dp
+    val handleStroke = 3.dp
+    val handleOutlineGap = 1.5.dp
+    val handleOutlineStroke = 1.dp
+    val barHandleHalfWidth = 2.dp
+    val gradientLight = Color.White
+    val gradientDark = Color.Black
+}
+
+/**
  * A hue / saturation / value picker drawn on a Canvas: a saturation × value square, a hue bar and, for tokens that
  * carry alpha, an alpha bar. [onChange] is called while dragging with the draft; [onCommit] when the finger lifts.
  */
@@ -59,7 +75,7 @@ private fun Surface2D(
     Canvas(
         Modifier
             .fillMaxWidth()
-            .height(176.dp)
+            .height(PickerGeometry.squareHeight)
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
@@ -79,12 +95,22 @@ private fun Surface2D(
             },
     ) {
         drawRect(Color(hsvToArgb(Hsv(hsv.h, 1f, 1f))))
-        drawRect(Brush.horizontalGradient(listOf(Color.White, Color.Transparent)))
-        drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
+        drawRect(Brush.horizontalGradient(listOf(PickerGeometry.gradientLight, Color.Transparent)))
+        drawRect(Brush.verticalGradient(listOf(Color.Transparent, PickerGeometry.gradientDark)))
         drawRect(line, style = Stroke(1f))
         val center = Offset(hsv.s * size.width, (1f - hsv.v) * size.height)
-        drawCircle(Color.White, radius = 11.dp.toPx(), center = center, style = Stroke(3.dp.toPx()))
-        drawCircle(Color.Black, radius = 11.dp.toPx() + 1.5.dp.toPx(), center = center, style = Stroke(1.dp.toPx()))
+        drawCircle(
+            PickerGeometry.gradientLight,
+            radius = PickerGeometry.handleRadius.toPx(),
+            center = center,
+            style = Stroke(PickerGeometry.handleStroke.toPx()),
+        )
+        drawCircle(
+            PickerGeometry.gradientDark,
+            radius = (PickerGeometry.handleRadius + PickerGeometry.handleOutlineGap).toPx(),
+            center = center,
+            style = Stroke(PickerGeometry.handleOutlineStroke.toPx()),
+        )
     }
 }
 
@@ -103,7 +129,7 @@ private fun Bar(
     Canvas(
         Modifier
             .fillMaxWidth()
-            .height(32.dp)
+            .height(NotesSpacing.space8)
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
@@ -121,7 +147,8 @@ private fun Bar(
         drawRect(brush, size = Size(size.width, size.height))
         drawRect(line, style = Stroke(1f))
         val x = fraction * size.width
-        drawRect(Color.White, topLeft = Offset(x - 2.dp.toPx(), 0f), size = Size(4.dp.toPx(), size.height))
-        drawRect(Color.Black, topLeft = Offset(x - 2.dp.toPx(), 0f), size = Size(4.dp.toPx(), size.height), style = Stroke(1f))
+        val half = PickerGeometry.barHandleHalfWidth.toPx()
+        drawRect(PickerGeometry.gradientLight, topLeft = Offset(x - half, 0f), size = Size(2 * half, size.height))
+        drawRect(PickerGeometry.gradientDark, topLeft = Offset(x - half, 0f), size = Size(2 * half, size.height), style = Stroke(1f))
     }
 }
