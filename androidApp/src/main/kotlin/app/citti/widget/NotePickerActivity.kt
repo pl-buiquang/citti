@@ -55,7 +55,8 @@ class NotePickerActivity : ComponentActivity() {
             ?: AppWidgetManager.INVALID_APPWIDGET_ID
         // Back (or any early exit) cancels, and Android then does not place a new widget.
         setResult(RESULT_CANCELED, result())
-        if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
+        // Exported for the launcher: any app can start it, so it only serves a placed Note widget of ours.
+        if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID || !isNoteWidget(appWidgetId)) {
             finish()
             return
         }
@@ -66,6 +67,9 @@ class NotePickerActivity : ComponentActivity() {
         scope.cancel()
         super.onDestroy()
     }
+
+    private fun isNoteWidget(id: Int): Boolean =
+        AppWidgetManager.getInstance(this).getAppWidgetInfo(id)?.provider?.className == NoteWidgetReceiver::class.java.name
 
     private fun result() = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
 
