@@ -19,4 +19,6 @@
     <string name="widget_daily_description">Today\'s daily note, where you left it.</string>
     <string name="widget_daily_missing">No note for today yet. Tap to create.</string>
     <string name="widget_daily_guard">The Journal folder is an Unsynced folder</string>
+    <string name="theme_file_export_failed">Could not save the theme file</string>
+    <string name="theme_file_import_failed">Could not read the theme file</string>
 </resources>

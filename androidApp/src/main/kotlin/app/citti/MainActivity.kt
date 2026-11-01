@@ -169,7 +169,9 @@ class MainActivity : ComponentActivity() {
             val text = themeEditor?.exportText()
             if (uri != null && text != null) {
                 container.appScope.launch(Dispatchers.IO) {
-                    runCatching { contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray()) } }
+                    val written =
+                        runCatching { contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray()) } }.isSuccess
+                    if (!written) toastOnMain(R.string.theme_file_export_failed)
                 }
             }
         }
@@ -182,11 +184,21 @@ class MainActivity : ComponentActivity() {
                     val text =
                         runCatching {
                             contentResolver.openInputStream(uri)?.use { it.readCapped(MAX_THEME_FILE_BYTES + 1).toString(Charsets.UTF_8) }
-                        }.getOrNull().orEmpty()
-                    themeEditor?.importText(text)
+                        }.getOrNull()
+                    // A read that failed is an I/O problem, not "Not a citti theme file"; so is an editor that was left meanwhile.
+                    val editor = themeEditor
+                    if (text == null || editor == null) toastOnMain(R.string.theme_file_import_failed) else editor.importText(text)
                 }
             }
         }
+
+    private fun toastOnMain(message: Int) {
+        runOnUiThread {
+            android.widget.Toast
+                .makeText(this, message, android.widget.Toast.LENGTH_LONG)
+                .show()
+        }
+    }
 
     private fun askNotificationPermissionOnce() {
         val prefs = getSharedPreferences("prompts", MODE_PRIVATE)
@@ -208,8 +220,10 @@ class MainActivity : ComponentActivity() {
         val initial = allowingDiskReads { container.appearanceSettings.current() }
         val systemDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         window.setBackgroundDrawable(ColorDrawable(initial.background(systemDark).toArgb()))
+        val debuggable = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
         setContent {
-            val appearance by container.appearanceSettings.flow().collectAsState(initial)
+            val appearanceFlow = remember { container.appearanceSettings.flow() }
+            val appearance by appearanceFlow.collectAsState(initial)
             val dark = appearance.isDark(isSystemInDarkTheme())
             val windowBg = appearance.background(isSystemInDarkTheme()).toArgb()
             // The bar icons follow the resolved theme, not the phone's.
@@ -223,13 +237,26 @@ class MainActivity : ComponentActivity() {
             CittiTheme(appearance) {
                 val signedIn by container.signedIn.collectAsState()
                 // E2E tests cannot read colors: the resolved theme is written out as "<family>:<light|dark>:<accent>".
+                // Debug builds only: a release build gives TalkBack no such node.
                 val themeState =
-                    listOf(appearance.baseTheme().name, if (dark) "dark" else "light", appearance.accent.name).joinToString(":").lowercase()
+                    if (debuggable) {
+                        listOf(
+                            appearance.baseTheme().name,
+                            if (dark) "dark" else "light",
+                            appearance.accent.name,
+                        ).joinToString(":").lowercase()
+                    } else {
+                        null
+                    }
                 Box(
-                    Modifier
-                        .fillMaxSize()
-                        .testTag(TestTags.THEME_STATE)
-                        .semantics { stateDescription = themeState },
+                    if (themeState == null) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier
+                            .fillMaxSize()
+                            .testTag(TestTags.THEME_STATE)
+                            .semantics { stateDescription = themeState }
+                    },
                 ) {
                     when (signedIn) {
                         null -> {
