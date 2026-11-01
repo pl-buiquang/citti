@@ -30,9 +30,25 @@ val appVersionCode =
         major * 10_000 + minor * 100 + patch
     }
 
+// Short commit sha shown in Settings; "unknown" when git is unavailable (a source archive).
+val gitSha: String =
+    runCatching {
+        providers
+            .exec {
+                commandLine("git", "rev-parse", "--short", "HEAD")
+                isIgnoreExitValue = true
+            }.standardOutput.asText
+            .get()
+            .trim()
+    }.getOrDefault("").ifEmpty { "unknown" }
+
 android {
     namespace = "app.citti"
     compileSdk = 37
+
+    buildFeatures {
+        buildConfig = true
+    }
 
     defaultConfig {
         applicationId = "app.citti"
@@ -40,6 +56,7 @@ android {
         targetSdk = 36
         versionCode = appVersionCode
         versionName = appVersionName
+        buildConfigField("String", "GIT_SHA", "\"$gitSha\"")
 
         // E2E (androidTest): see androidApp/src/androidTest and `./gradlew e2e`.
         testInstrumentationRunner = "app.citti.e2e.E2eRunner"
