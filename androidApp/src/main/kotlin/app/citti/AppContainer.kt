@@ -370,7 +370,11 @@ class AppContainer(
     /** Wipes credentials and local data (core [signOut]) and drops the sync stack. */
     suspend fun signOut() {
         dropStack()
-        withContext(Dispatchers.IO) { signOut(credentialStore, database) }
+        withContext(Dispatchers.IO) {
+            signOut(credentialStore, database)
+            // Deleted rows leave their text in free pages of the file; VACUUM rewrites it without them.
+            runCatching { driver.execute(null, "VACUUM", 0) }
+        }
         clearImages()
         _signedIn.value = false
         widgets.updateAll()
