@@ -85,6 +85,16 @@ class DavClientTest {
         }
 
     @Test
+    fun aBodyOverTheCapIsRefusedAndOneAtTheCapIsRead() =
+        runTest {
+            server.putFile("big.json", ByteArray(10) { 1 })
+            val refused = assertIs<ApiResult.Failure>(client().get(path("big.json"), maxBytes = 9))
+            assertEquals(ApiError.Http(413), refused.error)
+            val body = assertIs<DavGet.Body>(assertIs<ApiResult.Success<DavGet>>(client().get(path("big.json"), maxBytes = 10)).value)
+            assertEquals(10, body.bytes.size)
+        }
+
+    @Test
     fun aLowercaseEtagHeaderIsRead() =
         runTest {
             server.headerCasing = HeaderCasing.LOWERCASE

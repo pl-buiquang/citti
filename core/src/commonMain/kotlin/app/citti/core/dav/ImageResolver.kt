@@ -152,7 +152,7 @@ class ImageResolver(
         val ordered = listOfNotNull(known) + list.filterIsInstance<ImageSource.Vault>().map { it.path }.filter { it != known }
         for (path in ordered) {
             if (path in misses) continue
-            when (val result = dav.get(path, if (path == known) ifNoneMatch else null)) {
+            when (val result = dav.get(path, if (path == known) ifNoneMatch else null, DAV_MAX_IMAGE_BYTES)) {
                 is ApiResult.Success -> {
                     winners[key] = path
                     return when (val v = result.value) {

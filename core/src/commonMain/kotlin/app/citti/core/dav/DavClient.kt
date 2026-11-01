@@ -5,19 +5,21 @@ import app.citti.core.api.ApiResult
 import app.citti.core.api.RequestStats
 import app.citti.core.log.SyncLog
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.ByteArrayContent
+import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.CancellationException
+import kotlinx.io.readByteArray
 import kotlin.time.TimeSource
 
 /**
@@ -74,6 +76,12 @@ sealed interface DavMkcol {
 /** Timeout of one `PUT`: camera photos run 3–8 MB. */
 const val DAV_PUT_TIMEOUT_MS = 60_000L
 
+/** The largest text file read over WebDAV: the Obsidian settings files and a Template. */
+const val DAV_MAX_TEXT_BYTES = 1 shl 20
+
+/** The largest Image read over WebDAV (a phone photo or a scan is a few MB). */
+const val DAV_MAX_IMAGE_BYTES = 50 shl 20
+
 private const val OC_ETAG = "OC-ETag"
 
 /**
@@ -88,11 +96,12 @@ class DavClient(
 ) {
     /**
      * `GET` of [path]; with [ifNoneMatch] a 304 gives [DavGet.NotModified]. No request while the root is unknown or
-     * not valid.
+     * not valid. A body over [maxBytes] is not read whole: the result is `ApiError.Http(413)`.
      */
     suspend fun get(
         path: VaultPath,
         ifNoneMatch: String? = null,
+        maxBytes: Int = DAV_MAX_TEXT_BYTES,
     ): ApiResult<DavGet> {
         val root = root()?.takeIf { it.isValid } ?: return ApiResult.Failure(ApiError.DavNotReady)
         return call("GET", { client.get(root.url(path)) { ifNoneMatch?.let { header(HttpHeaders.IfNoneMatch, it) } } }) { response ->
@@ -103,7 +112,12 @@ class DavClient(
 
                 in 200..299 -> {
                     val etag = response.headers[HttpHeaders.ETag]
-                    ApiResult.Success(DavGet.Body(response.body<ByteArray>(), etag, response.headers[HttpHeaders.ContentType]))
+                    val bytes = readCapped(response, maxBytes)
+                    if (bytes == null) {
+                        failure(TOO_LARGE)
+                    } else {
+                        ApiResult.Success(DavGet.Body(bytes, etag, response.headers[HttpHeaders.ContentType]))
+                    }
                 }
 
                 else -> {
@@ -181,6 +195,17 @@ class DavClient(
         }
     }
 
+    /** The body of [response], or null when it is longer than [max]; a longer body is never held whole. */
+    private suspend fun readCapped(
+        response: HttpResponse,
+        max: Int,
+    ): ByteArray? {
+        val declared = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+        if (declared != null && declared > max) return null
+        val bytes = response.bodyAsChannel().readRemaining(max + 1L).readByteArray()
+        return bytes.takeIf { it.size <= max }
+    }
+
     /** One request with the log line and the stats of [get]; a thrown error becomes [ApiError.Network]. */
     private suspend fun <T> call(
         verb: String,
@@ -200,6 +225,10 @@ class DavClient(
             log.warn("req $verb dav failed: ${e::class.simpleName}")
             ApiResult.Failure(ApiError.Network(e))
         }
+    }
+
+    private companion object {
+        const val TOO_LARGE = 413
     }
 
     private fun failure(code: Int): ApiResult.Failure =
