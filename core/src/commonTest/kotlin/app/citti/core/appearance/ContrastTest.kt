@@ -23,4 +23,11 @@ class ContrastTest {
 
     @Test
     fun symmetric() = assertEquals(contrastRatio(0xFF123456L, 0xFFABCDEFL), contrastRatio(0xFFABCDEFL, 0xFF123456L), 0.0)
+
+    @Test
+    fun compositeOverBlendsByAlpha() {
+        assertEquals(0xFF7F7F7FL, compositeOver(0x80000000L, 0xFFFFFFFFL))
+        assertEquals(0xFF123456L, compositeOver(0xFF123456L, 0xFFFFFFFFL))
+        assertEquals(0xFFFFFFFFL, compositeOver(0x00000000L, 0xFFFFFFFFL))
+    }
 }

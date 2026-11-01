@@ -16,6 +16,7 @@ import app.citti.core.appearance.MIN_BODY_CONTRAST
 import app.citti.core.appearance.MIN_TEXT_SCALE
 import app.citti.core.appearance.RoleOverrides
 import app.citti.core.appearance.ThemeFileCodec
+import app.citti.core.appearance.compositeOver
 import app.citti.core.appearance.contrastRatio
 import app.citti.ui.settings.AppearanceStore
 import app.citti.ui.theme.get
@@ -76,8 +77,11 @@ fun inkMutedContrast(
     dark: Boolean,
 ): Double {
     val c = resolveColors(custom.base.toFamily(), dark, custom, AccentSource.THEME, null)
-    val muted = c.inkMuted.toArgb().toLong()
-    return minOf(contrastRatio(muted, c.bg.toArgb().toLong()), contrastRatio(muted, c.surface.toArgb().toLong()))
+    // Custom colors may be translucent (#RRGGBBAA): composite over bg (surface) before measuring.
+    val bg = c.bg.toArgb().toLong() and 0xFFFFFFFFL
+    val surface = compositeOver(c.surface.toArgb().toLong() and 0xFFFFFFFFL, bg)
+    val muted = c.inkMuted.toArgb().toLong() and 0xFFFFFFFFL
+    return minOf(contrastRatio(compositeOver(muted, bg), bg), contrastRatio(compositeOver(muted, surface), surface))
 }
 
 fun isLowContrast(ratio: Double) = ratio < MIN_BODY_CONTRAST

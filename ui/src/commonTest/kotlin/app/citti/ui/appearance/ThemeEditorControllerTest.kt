@@ -175,6 +175,21 @@ class ThemeEditorControllerTest {
     }
 
     @Test
+    fun translucentInkMutedIsCompositedOverTheBackground() {
+        // Opaque black on a white bg is fine; the same black at 10 % alpha is nearly invisible.
+        val base =
+            CustomTheme(
+                BaseTheme.SIGNAL,
+                light = mapOf(ColorToken.BG to 0xFFFFFFFFL, ColorToken.SURFACE to 0xFFFFFFFFL, ColorToken.INK_MUTED to 0xFF000000L),
+            )
+        assertFalse(isLowContrast(inkMutedContrast(base, dark = false)))
+        val faint = base.copy(light = base.light + (ColorToken.INK_MUTED to 0x1A000000L))
+        val ratio = inkMutedContrast(faint, dark = false)
+        assertTrue(isLowContrast(ratio), "ratio $ratio")
+        assertTrue(ratio < 1.5)
+    }
+
+    @Test
     fun backClosesTheSheetThenTheDialogs() =
         runTest(UnconfinedTestDispatcher()) {
             val e = editor()
