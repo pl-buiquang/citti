@@ -123,6 +123,22 @@ class WidgetRobot(
         check(device.wait(Until.gone(By.text(WidgetStrings.PICKER_TITLE)), TIMEOUT.inWholeMilliseconds)) { "The Note picker stayed open" }
     }
 
+    /**
+     * The color of the widget background in a screenshot of the launcher: a pixel on the row of [text], to the right of
+     * it (the widgets fill their rows with `bg`). Null when [text] is not on screen.
+     */
+    fun backgroundNextTo(text: String): Int? {
+        val bounds = device.findObject(By.text(text))?.visibleBounds ?: return null
+        val shot = instrumentation.uiAutomation.takeScreenshot() ?: return null
+        val x = (bounds.right + BG_PROBE_PX).coerceAtMost(shot.width - 1)
+        return shot.getPixel(x, bounds.centerY().coerceIn(0, shot.height - 1)).also { shot.recycle() }
+    }
+
+    /** Lets the launcher and the widget host settle for [ms] (UiAutomator's idle wait, not a sleep). */
+    fun settle(ms: Long = POLL_MS) {
+        device.waitForIdle(ms)
+    }
+
     /** Every text and content description on the launcher, in tree order: what a failure message shows. */
     fun texts(): List<String> =
         device
@@ -160,6 +176,7 @@ class WidgetRobot(
         const val FALLBACK_LAUNCHER = "com.google.android.apps.nexuslauncher"
         const val DRAG_SPEED = 600
         const val POLL_MS = 250L
+        const val BG_PROBE_PX = 120
         val TIMEOUT = 10.seconds
     }
 }
