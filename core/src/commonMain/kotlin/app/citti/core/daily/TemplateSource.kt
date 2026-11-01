@@ -4,6 +4,7 @@ import app.citti.core.api.ApiError
 import app.citti.core.api.ApiResult
 import app.citti.core.api.ListResult
 import app.citti.core.api.NotesApi
+import app.citti.core.api.logText
 import app.citti.core.dav.DavClient
 import app.citti.core.dav.DavGet
 import app.citti.core.dav.VaultPath
@@ -116,7 +117,7 @@ class TemplateSource(
         val (folder, title) = noteOf(path)
         when (val list = api.listNotes(excludeContent = true, category = folder)) {
             is ApiResult.Failure -> {
-                log.warn("template list failed path=$path")
+                log.warn("template list failed ${list.error.logText()}")
                 if (list.error is ApiError.Network) return null
             }
 
