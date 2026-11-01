@@ -17,6 +17,7 @@ object AndroidSyncLog : SyncLog {
         msg: String,
         cause: Throwable?,
     ) {
-        Log.e(SyncLog.TAG, msg, cause)
+        // Only the exception type: its message can name the server host or a path.
+        Log.e(SyncLog.TAG, if (cause == null) msg else "$msg cause=${cause::class.simpleName}")
     }
 }
