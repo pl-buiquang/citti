@@ -54,6 +54,13 @@ class WidgetIntentsTest {
         var original: Intent? = null
         running.onActivity { original = it.intent }
         running.onActivity { it.startActivity(view(uri, it).apply { flags = 0 }) }
+        // The link reaches onNewIntent through the system server, after startActivity returns and the UI is idle:
+        // restoring the intent before that leaves the link's intent set, and close() then never sees DESTROYED.
+        e2e.compose.waitUntil(TIMEOUT_MILLIS) {
+            var delivered = false
+            running.onActivity { delivered = it.intent.dataString == uri }
+            delivered
+        }
         e2e.compose.waitForIdle()
         running.onActivity { it.intent = original }
     }
@@ -160,6 +167,7 @@ class WidgetIntentsTest {
     }
 
     private companion object {
+        const val TIMEOUT_MILLIS = 10_000L
         val OCT_31: Instant = DailyNotesTest.OCT_31
     }
 }
