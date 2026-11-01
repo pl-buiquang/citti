@@ -865,8 +865,10 @@ class MainActivity : ComponentActivity() {
             backend = LoginFlowBackend(container.loginFlow),
             openUrl = ::openInBrowser,
             onSignedIn = {
-                container.onSignedIn(it)
+                // Before the flip: once signedIn is true the composition builds the new session's controllers, and
+                // dropping them afterwards cancels the first sync (the List stays on "Syncing" for good).
                 endSession()
+                container.onSignedIn(it)
             },
         )
 
