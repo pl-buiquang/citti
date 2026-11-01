@@ -163,7 +163,7 @@ object ThemeFileCodec {
     }
 
     fun decode(text: String): DecodeResult {
-        if (text.length > MAX_THEME_FILE_BYTES) return DecodeResult.NotAThemeFile("file too large")
+        if (text.encodeToByteArray().size > MAX_THEME_FILE_BYTES) return DecodeResult.NotAThemeFile("file too large")
         val root =
             try {
                 Json.parseToJsonElement(text)

@@ -143,6 +143,18 @@ class ThemeFileCodecTest {
     }
 
     @Test
+    fun capIsMeasuredInUtf8Bytes() {
+        // 3-byte chars: 30 000 chars is under the cap in chars but 90 000 bytes. A reader truncated at cap + 1 bytes
+        // hands over a text shorter than the cap in chars; it must still be reported as too large.
+        val bytes = "\u20AC".repeat(MAX_THEME_FILE_BYTES).encodeToByteArray().copyOf(MAX_THEME_FILE_BYTES + 1)
+        val multibyte = bytes.decodeToString()
+        assertTrue(multibyte.length < MAX_THEME_FILE_BYTES)
+        val result = assertIs<DecodeResult.NotAThemeFile>(ThemeFileCodec.decode(multibyte))
+        assertEquals("file too large", result.message)
+        assertIs<DecodeResult.NotAThemeFile>(ThemeFileCodec.decode(" ".repeat(MAX_THEME_FILE_BYTES + 1)))
+    }
+
+    @Test
     fun emptyOverridesIsValid() {
         assertEquals(CustomTheme(BaseTheme.PAPER), ok(file()))
         assertEquals(0, ok(file()).overrideCount)
