@@ -109,7 +109,7 @@ private fun ColorSheet(
     val current =
         resolveColors(custom.base.toFamily(), editDark, custom, AccentSource.THEME, null).get(token).toArgb().toLong() and 0xFFFFFFFFL
     val base = notesColors(custom.base.toFamily(), editDark).get(token).toArgb().toLong() and 0xFFFFFFFFL
-    val alpha = token in ALPHA_TOKENS
+    val alpha = token in ALPHA_TOKENS || hasAlpha(current)
     var hsv by remember(token, editDark) { mutableStateOf(argbToHsv(current)) }
     var hex by remember(token, editDark) { mutableStateOf(ThemeFileCodec.formatHex(current)) }
     val draft = hsvToArgb(hsv)
@@ -149,7 +149,7 @@ private fun ColorSheet(
             value = hex,
             onValueChange = { text ->
                 hex = text
-                ThemeFileCodec.parseHex(text.trim())?.takeIf { alpha || text.trim().length == 7 }?.let {
+                parseColorInput(text, alpha, current)?.let {
                     hsv = argbToHsv(it)
                     actions.onSetColor(token, editDark, it)
                 }
@@ -173,6 +173,25 @@ private fun ColorSheet(
             )
         }
         CittiButton(stringResource(Res.string.theme_sheet_done), actions.onCloseSheet, Modifier.testTag(TestTags.THEME_SHEET_DONE))
+    }
+}
+
+internal fun hasAlpha(argb: Long) = (argb shr 24 and 0xFF) != 0xFFL
+
+/**
+ * The ARGB a hex field text stands for, or null when it is not valid. A 6-digit value keeps the alpha of [current] (a
+ * translucent token stays translucent); an 8-digit value is accepted only when the token [allowsAlpha].
+ */
+internal fun parseColorInput(
+    text: String,
+    allowsAlpha: Boolean,
+    current: Long,
+): Long? {
+    val trimmed = text.trim()
+    val parsed = ThemeFileCodec.parseHex(trimmed) ?: return null
+    return when (trimmed.length) {
+        7 -> (parsed and 0xFFFFFFL) or (current and 0xFF000000L)
+        else -> parsed.takeIf { allowsAlpha }
     }
 }
 
