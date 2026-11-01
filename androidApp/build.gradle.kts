@@ -43,6 +43,8 @@ android {
 
         // E2E (androidTest): see androidApp/src/androidTest and `./gradlew e2e`.
         testInstrumentationRunner = "app.citti.e2e.E2eRunner"
+        // Only read when the test APK is shrunk, i.e. with `-Pe2e.minified`.
+        testProguardFiles("proguard-e2e-test.pro")
         // Orchestrator runs each test in its own process on wiped app data (prefs, DB, Keystore-backed blob).
         testInstrumentationRunnerArguments["clearPackageData"] = "true"
         // Failure screenshots and request logs (E2eRule) go to the test storage, pulled into
@@ -52,12 +54,18 @@ android {
         (findProperty("e2e.class") as String?)?.let { testInstrumentationRunnerArguments["class"] = it }
         // Widget flows need a launcher that can pin widgets (ATD cannot): `-Pe2e.widgets` runs only the
         // @WidgetFlow classes, on the api36Google device; the plain run leaves them out.
-        if (findProperty("e2e.widgets") != null) {
+        // `-Pe2e.minified` runs only the @Smoke flows, against the minified e2eMinified build (R8 on).
+        if (findProperty("e2e.minified") != null) {
+            testInstrumentationRunnerArguments["annotation"] = "app.citti.e2e.Smoke"
+        } else if (findProperty("e2e.widgets") != null) {
             testInstrumentationRunnerArguments["annotation"] = "app.citti.e2e.WidgetFlow"
         } else {
             testInstrumentationRunnerArguments["notAnnotation"] = "app.citti.e2e.WidgetFlow"
         }
     }
+
+    // The tests run against e2eMinified (release shrinking, debug signing) when `-Pe2e.minified` is set.
+    if (findProperty("e2e.minified") != null) testBuildType = "e2eMinified"
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
@@ -100,6 +108,14 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
+        // Release shrinking with the debug key, so the instrumented smoke can run against what R8 produces.
+        // Its extra keep rules (the test seams) apply here only: the release output is unchanged.
+        create("e2eMinified") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+            proguardFiles("proguard-e2e.pro")
         }
     }
 }

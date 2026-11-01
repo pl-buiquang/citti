@@ -38,7 +38,7 @@ The spec lives in the vault, `~/Nextcloud/Notes/projects/citti/`:
 - Build: `./gradlew assembleDebug` (APK in `androidApp/build/outputs/apk/debug/`)
 - Test and lint: `./gradlew spotlessCheck check`; fix formatting with `./gradlew spotlessApply`
 - JVM tests only: `./gradlew :core:jvmTest`
-- E2E tests: `./gradlew e2e` (managed emulator, AOSP ATD API 36, against `FakeNotesServer` and the Fixture Vault in `core-testing`; not part of `check`). One flow: `./gradlew e2e -Pe2e.class=app.citti.e2e.flows.SearchTest`. CI: the `e2e` job of `ci.yml`, run by hand (`workflow_dispatch`).
+- E2E tests: `./gradlew e2e` (managed emulator, AOSP ATD API 36, against `FakeNotesServer` and the Fixture Vault in `core-testing`; not part of `check`). One flow: `./gradlew e2e -Pe2e.class=app.citti.e2e.flows.SearchTest`. Smoke on the minified (R8) build: `./gradlew e2e -Pe2e.minified`. CI: the `e2e` job of `ci.yml`, run by hand (`workflow_dispatch`).
 - Release build: `./gradlew assembleRelease`. It is signed when `keystore.properties` or the `CITTI_*` env vars are set (see `keystore.properties.example`), unsigned otherwise. Tagging `X.Y.Z` publishes a signed GitHub release (`.github/workflows/release.yml`).
 - Install on a device or emulator: `adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk`
 - Needs JDK 17 and the Android SDK (`sdk.dir` in `local.properties`, which is gitignored)
