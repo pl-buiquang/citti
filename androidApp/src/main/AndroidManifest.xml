@@ -28,11 +28,11 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Public on purpose (M7a): the widgets and adb open a Note by id, or today's Daily note. M9 audits it. -->
+            <!-- Other apps and adb open a Note by id, or today's Daily note. Not BROWSABLE: a web page cannot start it. The
+                 widgets use explicit intents and do not need this filter. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="citti" android:host="note" />
                 <data android:scheme="citti" android:host="daily" />
             </intent-filter>
