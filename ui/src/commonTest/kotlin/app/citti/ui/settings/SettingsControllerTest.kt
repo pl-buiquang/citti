@@ -154,6 +154,9 @@ class FakeAppearanceStore(
 
     override fun setCustom(custom: CustomTheme?) = state.update { it.copy(custom = custom) }
 
+    /** Each call is one emission of [state]. */
+    override fun setCustomAndSelect(custom: CustomTheme) = state.update { it.copy(theme = ThemeChoice.CUSTOM, custom = custom) }
+
     override fun updateCustom(
         seedBase: BaseTheme,
         change: (CustomTheme) -> CustomTheme,

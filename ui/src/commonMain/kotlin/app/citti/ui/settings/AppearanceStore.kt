@@ -24,6 +24,9 @@ interface AppearanceStore {
     /** Replaces the Custom theme slot (null empties it). */
     fun setCustom(custom: CustomTheme?)
 
+    /** Stores [custom] and selects Custom in one write (one emission, one widget refresh). */
+    fun setCustomAndSelect(custom: CustomTheme)
+
     /** Read-modify-write of the Custom theme in one step; an empty slot starts from [seedBase]. */
     fun updateCustom(
         seedBase: BaseTheme,
@@ -48,6 +51,8 @@ class CoreAppearanceStore(
     override fun setAccent(accent: AccentSource) = settings.setAccent(accent)
 
     override fun setCustom(custom: CustomTheme?) = settings.setCustom(custom)
+
+    override fun setCustomAndSelect(custom: CustomTheme) = settings.setCustomAndSelect(custom)
 
     override fun updateCustom(
         seedBase: BaseTheme,

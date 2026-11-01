@@ -105,4 +105,15 @@ class AppearanceSettingsTest {
         assertNull(db.settingQueries.selectSetting("ui.main-mode").executeAsOneOrNull())
         assertNull(db.settingQueries.selectSetting("daily.folder").executeAsOneOrNull())
     }
+
+    @Test
+    fun setCustomAndSelectIsOneWrite() {
+        settings.setTheme(ThemeChoice.PAPER)
+        var n = 0
+        settings.onChanged = { n++ }
+        val custom = CustomTheme(BaseTheme.INDEX, light = mapOf(ColorToken.BG to 0xFF101010L))
+        settings.setCustomAndSelect(custom)
+        assertEquals(1, n)
+        assertEquals(Appearance(ThemeChoice.CUSTOM, custom = custom), settings.current())
+    }
 }

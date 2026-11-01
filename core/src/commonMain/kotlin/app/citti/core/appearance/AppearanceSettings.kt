@@ -65,6 +65,13 @@ class AppearanceSettings(
 
     fun setCustom(custom: CustomTheme?) = write { storeCustom(custom) }
 
+    /** Stores [custom] and selects Custom in one transaction, with one [onChanged]. */
+    fun setCustomAndSelect(custom: CustomTheme) =
+        write {
+            storeCustom(custom)
+            queries.upsertSetting(KEY_APPEARANCE_THEME, ThemeChoice.CUSTOM.name)
+        }
+
     /** Read-modify-write of the Custom theme in one transaction; an empty slot starts from [seedBase]. */
     fun updateCustom(
         seedBase: BaseTheme = BaseTheme.SIGNAL,

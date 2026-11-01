@@ -11,6 +11,8 @@ import app.citti.core.appearance.FontRole
 import app.citti.core.appearance.ThemeChoice
 import app.citti.ui.settings.FakeAppearanceStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -222,5 +224,18 @@ class ThemeEditorControllerTest {
                 store.state.value.custom!!
                     .overrideCount,
             )
+        }
+
+    @Test
+    fun importEmitsOneAppearanceWithTheThemeAndCustomTogether() =
+        runTest(UnconfinedTestDispatcher()) {
+            store.state.value = Appearance(ThemeChoice.INDEX, custom = CustomTheme(BaseTheme.SIGNAL))
+            val seen = mutableListOf<Appearance>()
+            backgroundScope.launch { store.appearance().toList(seen) }
+            val e = editor()
+            e.importText("""{"schema":1,"base":"paper","overrides":{}}""")
+            assertEquals(2, seen.size, "initial value plus one write")
+            assertEquals(ThemeChoice.CUSTOM, seen.last().theme)
+            assertEquals(BaseTheme.PAPER, seen.last().custom!!.base)
         }
 }

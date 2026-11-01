@@ -248,8 +248,7 @@ class ThemeEditorController(
     fun dismissImportError() = local.update { it.copy(importError = false) }
 
     private fun apply(theme: CustomTheme) {
-        store.setCustom(theme)
-        store.setTheme(app.citti.core.appearance.ThemeChoice.CUSTOM)
+        store.setCustomAndSelect(theme)
         local.update { it.copy(pendingImport = null, importError = false, keptOverrides = 0) }
     }
 
