@@ -69,7 +69,11 @@ class NotePickerActivity : ComponentActivity() {
     }
 
     private fun isNoteWidget(id: Int): Boolean =
-        AppWidgetManager.getInstance(this).getAppWidgetInfo(id)?.provider?.className == NoteWidgetReceiver::class.java.name
+        AppWidgetManager
+            .getInstance(this)
+            .getAppWidgetInfo(id)
+            ?.provider
+            ?.className == NoteWidgetReceiver::class.java.name
 
     private fun result() = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
 

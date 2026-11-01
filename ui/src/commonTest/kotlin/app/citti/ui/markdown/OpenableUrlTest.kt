@@ -14,7 +14,14 @@ class OpenableUrlTest {
 
     @Test
     fun otherSchemesAndRelativeTextStayInert() {
-        listOf("javascript:alert(1)", "intent://x#Intent;end", "file:///sdcard/a", "content://app.citti.files/a", "citti://daily", "a.pdf", "")
-            .forEach { assertFalse(isOpenableUrl(it), it) }
+        listOf(
+            "javascript:alert(1)",
+            "intent://x#Intent;end",
+            "file:///sdcard/a",
+            "content://app.citti.files/a",
+            "citti://daily",
+            "a.pdf",
+            "",
+        ).forEach { assertFalse(isOpenableUrl(it), it) }
     }
 }
