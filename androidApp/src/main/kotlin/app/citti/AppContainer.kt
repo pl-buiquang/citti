@@ -382,6 +382,7 @@ class AppContainer(
             signOut(credentialStore, database)
             // Deleted rows leave their text in free pages of the file; VACUUM rewrites it without them.
             runCatching { driver.execute(null, "VACUUM", 0) }
+            clearCameraShots(appContext.cacheDir)
         }
         clearImages()
         _signedIn.value = false

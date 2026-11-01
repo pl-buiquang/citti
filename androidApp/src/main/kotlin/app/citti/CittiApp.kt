@@ -1,6 +1,7 @@
 package app.citti
 
 import android.app.Application
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -15,6 +16,7 @@ open class CittiApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        container.appScope.launch(Dispatchers.IO) { clearCameraShots(cacheDir) }
         // Periodic sync runs only while signed in: apply() on start or sign-in, cancel otherwise.
         // It is also re-applied whenever Settings changes the interval or the network constraint.
         container.appScope.launch {
