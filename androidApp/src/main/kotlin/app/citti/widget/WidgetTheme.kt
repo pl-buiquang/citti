@@ -146,7 +146,7 @@ internal fun WidgetThemeHost(
     content: @Composable () -> Unit,
 ) {
     val settings = context.container().appearanceSettings
-    val appearance by settings.flow().collectAsState(initial = remember { settings.current() })
+    val appearance by remember(settings) { settings.flow() }.collectAsState(initial = remember { settings.current() })
     val palette = remember(appearance) { WidgetPalette.of(appearance, context) }
     CompositionLocalProvider(LocalWidgetPalette provides palette, content = content)
 }
