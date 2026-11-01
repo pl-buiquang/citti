@@ -61,6 +61,10 @@ object TestTags {
     const val CALENDAR_TODAY = "calendar.today"
     const val CALENDAR_ENTRIES = "calendar.entries"
 
+    /** The Daily note bar at the bottom of the Note screen: previous and next Daily note. */
+    const val DAILY_PREVIOUS = "note.dailyPrevious"
+    const val DAILY_NEXT = "note.dailyNext"
+
     const val SETTINGS_HOME = "settings.home"
     const val APPEARANCE_EDIT_CUSTOM = "appearance.edit-custom"
     const val THEME_EDITOR = "appearance.editor"

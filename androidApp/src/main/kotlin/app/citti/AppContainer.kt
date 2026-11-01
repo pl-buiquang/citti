@@ -18,11 +18,13 @@ import app.citti.core.auth.signOut
 import app.citti.core.daily.DailyEntry
 import app.citti.core.daily.DailyGuard
 import app.citti.core.daily.DailyIndex
+import app.citti.core.daily.DailyNeighbor
 import app.citti.core.daily.DailyNotes
 import app.citti.core.daily.ImportReport
 import app.citti.core.daily.LocaleDetector
 import app.citti.core.daily.ObsidianDailyImport
 import app.citti.core.daily.TemplateSource
+import app.citti.core.daily.neighborsOf
 import app.citti.core.dav.DavClient
 import app.citti.core.dav.DavSetup
 import app.citti.core.dav.ImageResolver
@@ -62,6 +64,8 @@ import app.citti.ui.image.VaultImageFetcherFactory
 import app.citti.ui.image.VaultImageKeyer
 import app.citti.ui.image.seedImageCache
 import app.citti.ui.note.CoreNoteMenu
+import app.citti.ui.note.DailyLink
+import app.citti.ui.note.DailyNav
 import app.citti.ui.note.NoteGateway
 import app.citti.ui.note.NoteMenuGateway
 import app.citti.ui.settings.AccountInfo
@@ -97,6 +101,8 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -468,6 +474,32 @@ class AppContainer(
 
     /** The ⋮ menu of one open Note for its [app.citti.ui.note.NoteController]. */
     fun noteMenu(localId: Long): NoteMenuGateway = CoreNoteMenu(localId, ::noteActions, exclusions, Dispatchers.IO)
+
+    /** The Daily notes around the Note of [folder] and [title], empty days skipped; null while it is not a Daily note. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun dailyNav(
+        folder: String,
+        title: String,
+    ): Flow<DailyNav?> =
+        dailySettings
+            .configFlow()
+            .flatMapLatest { config ->
+                val date = dailyNotes()?.dateOf(folder, title, config)
+                if (date == null) {
+                    flowOf(null)
+                } else {
+                    dailyIndex.flow(config).map { entries ->
+                        val around = entries.neighborsOf(date)
+
+                        fun link(n: DailyNeighbor) =
+                            database.noteQueries
+                                .selectByLocalId(n.localId)
+                                .executeAsOneOrNull()
+                                ?.let { DailyLink(n.localId, it.title) }
+                        DailyNav(around.previous?.let(::link), around.next?.let(::link))
+                    }
+                }
+            }.flowOn(Dispatchers.IO)
 
     /** The data of one open Note for its [app.citti.ui.note.NoteController]. */
     fun noteGateway(localId: Long): NoteGateway =

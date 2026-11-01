@@ -65,6 +65,19 @@ class NoteRobot(
         assertPreviewMode()
     }
 
+    /** The Daily note bar: tap the previous / next Daily note, titled [title]. */
+    fun openPreviousDaily(title: String) {
+        waitFor(hasTestTag(TestTags.DAILY_PREVIOUS) and hasText("‹ $title")).performClick()
+    }
+
+    fun openNextDaily(title: String) {
+        waitFor(hasTestTag(TestTags.DAILY_NEXT) and hasText("$title ›")).performClick()
+    }
+
+    fun assertNoNextDaily() {
+        waitGone(hasTestTag(TestTags.DAILY_NEXT))
+    }
+
     /** Preview: a double tap on the block containing [text]. */
     fun doubleTapBlock(text: String) {
         scrollTo(TestTags.NOTE_PREVIEW, hasText(text, substring = true)).performTouchInput { doubleClick() }

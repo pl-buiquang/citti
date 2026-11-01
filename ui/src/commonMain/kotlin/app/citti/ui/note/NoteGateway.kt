@@ -6,6 +6,18 @@ import app.citti.core.note.NoteEditor
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
+/** A Daily note next to the open one. */
+data class DailyLink(
+    val localId: Long,
+    val title: String,
+)
+
+/** The Daily notes around the open Daily note; a side is null at the end of the Journal. */
+data class DailyNav(
+    val previous: DailyLink?,
+    val next: DailyLink?,
+)
+
 /**
  * What [NoteController] needs from the data layer for one Note: the row as a flow, the editor writes and the link
  * lookups. The functions that touch the database suspend and run off the main thread in the implementation, so the

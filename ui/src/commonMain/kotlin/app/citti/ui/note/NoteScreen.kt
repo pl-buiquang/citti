@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -36,6 +37,7 @@ import app.citti.ui.TestTags
 import app.citti.ui.components.Banner
 import app.citti.ui.components.BannerKind
 import app.citti.ui.components.CittiIcon
+import app.citti.ui.components.CittiTextButton
 import app.citti.ui.components.Gutter
 import app.citti.ui.components.IconButton
 import app.citti.ui.components.ImageSourceSheet
@@ -60,6 +62,8 @@ import app.citti.ui.resources.banner_auth_failed
 import app.citti.ui.resources.banner_sign_in_again
 import app.citti.ui.resources.conflict_banner
 import app.citti.ui.resources.conflict_copy_of
+import app.citti.ui.resources.daily_next
+import app.citti.ui.resources.daily_previous
 import app.citti.ui.resources.note_downloading
 import app.citti.ui.resources.note_edit
 import app.citti.ui.resources.note_menu
@@ -107,6 +111,8 @@ class NoteActions(
     val onDismissNotice: () -> Unit = {},
     /** The source line at the top of the screen, once scrolling settles: the Reading position. */
     val onViewLine: (Int) -> Unit = {},
+    /** The Daily note bar: open the previous or next Daily note. */
+    val onOpenDaily: (DailyLink) -> Unit = {},
 )
 
 private const val VIEW_LINE_MS = 300L
@@ -251,6 +257,46 @@ private fun NoteColumn(
         }
         if (state.uploading) UploadChip(actions.onCancelUpload)
         if (!state.preview && !state.loading && focused) FormatToolbar(pressed, actions.onToolbar)
+        val nav = state.dailyNav
+        // Hidden while the editor is focused (the keyboard and the format toolbar take the bottom).
+        if (nav != null && !state.loading && !focused) DailyBar(nav, actions.onOpenDaily)
+    }
+}
+
+/** The Daily note's bottom bar: the Daily notes before and after, empty days skipped. A side is blank at the end. */
+@Composable
+private fun DailyBar(
+    nav: DailyNav,
+    onOpen: (DailyLink) -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(CittiTheme.colors.bg)
+            .padding(horizontal = NotesSpacing.space2),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val previous = nav.previous
+        if (previous != null) {
+            val description = stringResource(Res.string.daily_previous, previous.title)
+            CittiTextButton(
+                "‹ ${previous.title}",
+                { onOpen(previous) },
+                Modifier.testTag(TestTags.DAILY_PREVIOUS).semantics { contentDescription = description },
+            )
+        } else {
+            Box(Modifier)
+        }
+        val next = nav.next
+        if (next != null) {
+            val description = stringResource(Res.string.daily_next, next.title)
+            CittiTextButton(
+                "${next.title} ›",
+                { onOpen(next) },
+                Modifier.testTag(TestTags.DAILY_NEXT).semantics { contentDescription = description },
+            )
+        }
     }
 }
 

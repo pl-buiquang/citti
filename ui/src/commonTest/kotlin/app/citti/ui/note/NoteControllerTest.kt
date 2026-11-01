@@ -40,6 +40,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -248,6 +249,7 @@ class NoteControllerTest {
         menu: ((FakeGateway) -> NoteMenuGateway)? = null,
         creation: NoteCreation? = null,
         droppedDaily: suspend (String, String) -> DroppedDaily? = { _, _ -> null },
+        dailyNav: (String, String) -> Flow<DailyNav?> = { _, _ -> flowOf(null) },
         setup: FakeGateway.() -> Unit = {},
     ): Fixture {
         val gateway =
@@ -273,10 +275,35 @@ class NoteControllerTest {
                 menuGateway = menu?.invoke(gateway),
                 creation = creation,
                 droppedDaily = droppedDaily,
+                dailyNav = dailyNav,
             )
         runCurrent()
         return Fixture(this, gateway, navigator, snacks, controller)
     }
+
+    @Test
+    fun aDailyNoteShowsItsNeighborsAndOpeningOneReplacesTheEntry() =
+        runTest {
+            val nav = DailyNav(DailyLink(8, "2026-10-29"), DailyLink(9, "2026-10-31"))
+            val seen = mutableListOf<Pair<String, String>>()
+            val f =
+                open(dailyNav = { folder, title ->
+                    seen += folder to title
+                    flowOf(nav)
+                })
+            assertEquals(listOf("work" to "Title"), seen)
+            assertEquals(nav, f.controller.state.value.dailyNav)
+            f.controller.openDaily(nav.next!!)
+            assertEquals(Route.Note(9), f.navigator.top)
+            assertEquals(listOf(Route.List(), Route.Note(9)), f.navigator.stack.value)
+        }
+
+    @Test
+    fun aNoteThatIsNotADailyNoteHasNoBar() =
+        runTest {
+            val f = open()
+            assertNull(f.controller.state.value.dailyNav)
+        }
 
     @Test
     fun aSaveNamesTheTextItWasBasedOn() =

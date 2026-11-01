@@ -20,6 +20,31 @@ data class DailyEntry(
     val excerpt: String?,
 )
 
+/** A Daily note next to another one, on [date]. */
+data class DailyNeighbor(
+    val date: LocalDate,
+    val localId: Long,
+)
+
+/** The Daily notes right before and after a date: the nearest dates that have a note, so empty days are skipped. */
+data class DailyNeighbors(
+    val previous: DailyNeighbor?,
+    val next: DailyNeighbor?,
+)
+
+fun Map<LocalDate, DailyEntry>.neighborsOf(date: LocalDate): DailyNeighbors {
+    var previous: LocalDate? = null
+    var next: LocalDate? = null
+    for (d in keys) {
+        if (d < date && (previous == null || d > previous)) previous = d
+        if (d > date && (next == null || d < next)) next = d
+    }
+    return DailyNeighbors(
+        previous?.let { DailyNeighbor(it, getValue(it).localId) },
+        next?.let { DailyNeighbor(it, getValue(it).localId) },
+    )
+}
+
 /**
  * The Daily notes of the Journal folder by date, for the Calendar: every Note of the folder whose title is a Daily
  * note ([dailyDate]), Hidden ones included (CLAUDE.md), DELETED ones not. Parsed on [dispatcher].

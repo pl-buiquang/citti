@@ -34,6 +34,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -45,6 +46,8 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -100,6 +103,8 @@ data class NoteUiState(
     val notice: NoteNotice? = null,
     /** `Route.Note.startLine` as a source offset, until the first scroll: the Preview scrolls to its block. */
     val startOffset: Int? = null,
+    /** The previous and next Daily note, when this Note is a Daily note. */
+    val dailyNav: DailyNav? = null,
 )
 
 /**
@@ -111,7 +116,7 @@ data class NoteUiState(
  * [leaveScope] outlives the entry, so the last 500 ms are saved after the entry is gone. [notify] shows a [Snack] on a
  * host that outlives the screen.
  */
-@OptIn(FlowPreview::class)
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class NoteController(
     private val scope: CoroutineScope,
     private val leaveScope: CoroutineScope,
@@ -133,6 +138,8 @@ class NoteController(
     creation: NoteCreation? = null,
     /** The Daily wording of the Dropped snackbar for a dropped title and folder; null: the generic one. */
     private val droppedDaily: suspend (folder: String, title: String) -> DroppedDaily? = { _, _ -> null },
+    /** The Daily notes around the Note of this [folder] and [title]; null while it is not a Daily note. */
+    private val dailyNav: (folder: String, title: String) -> Flow<DailyNav?> = { _, _ -> flowOf(null) },
 ) {
     private val localId = route.localId
 
@@ -171,6 +178,7 @@ class NoteController(
         val deleted: Boolean = false,
         /** The source offset of `Route.Note.startLine`, cleared by the first [onViewLine]. */
         val startOffset: Int? = null,
+        val dailyNav: DailyNav? = null,
     )
 
     private val model = MutableStateFlow(Model())
@@ -214,6 +222,7 @@ class NoteController(
                 dialog = m.dialog,
                 notice = r.notice,
                 startOffset = m.startOffset,
+                dailyNav = m.dailyNav,
             )
         }.stateIn(scope, SharingStarted.Eagerly, NoteUiState())
 
@@ -223,6 +232,13 @@ class NoteController(
     init {
         scope.launch { gateway.dropped().collect { droppedAs.value = it } }
         scope.launch { gateway.observe().collect(::onRow) }
+        scope.launch {
+            model
+                .map { it.row?.let { row -> row.folder to row.title } }
+                .distinctUntilChanged()
+                .flatMapLatest { place -> if (place == null) flowOf(null) else dailyNav(place.first, place.second) }
+                .collect { nav -> model.update { it.copy(dailyNav = nav) } }
+        }
         scope.launch { editor.edits.collect { model.update { if (it.ready) it.copy(unsaved = true) else it } } }
         scope.launch { editor.edits.debounce(saveDelayMs).collect { saveNow() } }
         scope.launch {
@@ -872,6 +888,12 @@ class NoteController(
     /** A tap on an Image in Preview mode opens the Image viewer. */
     fun onImage(link: String) {
         navigator.push(Route.ImageViewer(localId, link))
+    }
+
+    /** The Daily note bar's previous / next: this entry becomes that Note, so Back still leaves the Daily notes. */
+    fun openDaily(link: DailyLink) {
+        val top = navigator.top
+        if (top is Route.Note && top.localId == localId) navigator.replaceTop(Route.Note(link.localId))
     }
 
     /** The banner's Open: the Conflict copy, or the original of a copy. */
