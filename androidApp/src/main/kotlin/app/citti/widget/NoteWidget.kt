@@ -71,7 +71,7 @@ class NoteWidget : GlanceAppWidget() {
         val prefs = getAppWidgetState<Preferences>(context, id)
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
         val state = loadNoteState(context, prefs[NOTE_WIDGET_LOCAL_ID], appWidgetId)
-        provideContent { NoteContent(state) }
+        provideContent { WidgetThemeHost(context) { NoteContent(state) } }
     }
 }
 

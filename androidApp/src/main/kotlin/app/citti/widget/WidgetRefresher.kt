@@ -10,6 +10,8 @@ import app.citti.core.api.ApiError
 import app.citti.core.sync.SyncOutcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -44,6 +46,18 @@ class WidgetRefresher(
             NoteWidget().updateAll(context)
             DailyNoteWidget().updateAll(context)
         }
+
+    private var appearanceJob: Job? = null
+
+    /** The Appearance changed: one redraw of all widgets per [APPEARANCE_DEBOUNCE_MS], however many edits came in. */
+    fun appearanceChanged() {
+        appearanceJob?.cancel()
+        appearanceJob =
+            scope.launch {
+                delay(APPEARANCE_DEBOUNCE_MS)
+                updateAll()
+            }
+    }
 
     /** The Note widgets bound to [localId], and the Daily note widgets when [localId] is today's Daily note. */
     fun updateNote(localId: Long) =
@@ -80,3 +94,6 @@ class WidgetRefresher(
         }
     }
 }
+
+/** A burst of edits in the theme editor redraws the widgets once. */
+internal const val APPEARANCE_DEBOUNCE_MS = 500L

@@ -64,7 +64,7 @@ class DailyNoteWidget : GlanceAppWidget() {
     ) {
         DayScheduler.schedule(context)
         val state = loadDailyState(context)
-        provideContent { DailyNoteContent(state) }
+        provideContent { WidgetThemeHost(context) { DailyNoteContent(state) } }
     }
 }
 
@@ -131,7 +131,7 @@ fun DailyNoteContent(state: DailyNoteState) {
         ) {
             TodayIcon()
             Spacer(GlanceModifier.width(NotesSpacing.space3))
-            Text(date, style = WidgetText.header, maxLines = 1)
+            Text(WidgetText.label(date), style = WidgetText.header, maxLines = 1)
         }
         when (state) {
             is DailyNoteState.Ready -> NoteBody(state.window, open)

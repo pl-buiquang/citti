@@ -150,7 +150,11 @@ class AppContainer(
     val uiSettings: UiSettings by lazy { UiSettings(database) }
 
     /** The Appearance (theme, Mode, Accent source, Custom theme); device-local. */
-    val appearanceSettings: AppearanceSettings by lazy { AppearanceSettings(database) }
+    val appearanceSettings: AppearanceSettings by lazy {
+        AppearanceSettings(
+            database,
+        ).also { it.onChanged = { widgets.appearanceChanged() } }
+    }
 
     val appearanceStore: AppearanceStore by lazy { CoreAppearanceStore(appearanceSettings) }
 

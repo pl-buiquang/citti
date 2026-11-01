@@ -54,7 +54,7 @@ class FavoritesWidget : GlanceAppWidget() {
     ) {
         DayScheduler.schedule(context)
         val state = loadFavoritesState(context)
-        provideContent { FavoritesContent(state) }
+        provideContent { WidgetThemeHost(context) { FavoritesContent(state) } }
     }
 }
 
@@ -114,7 +114,7 @@ fun FavoritesContent(state: FavoritesState) {
         ) {
             Text("★", style = WidgetText.star)
             Spacer(GlanceModifier.width(NotesSpacing.space2))
-            Text(context.getString(R.string.widget_favorites_name), style = WidgetText.header)
+            Text(WidgetText.label(context.getString(R.string.widget_favorites_name)), style = WidgetText.header)
         }
         val loaded = state as FavoritesState.Loaded
         val rows = loaded.rows
