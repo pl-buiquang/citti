@@ -79,7 +79,7 @@ fun Doc.withToggled(box: Int): Doc {
             is Block.Quote -> b.copy(blocks = b.blocks.map(::block))
             else -> b
         }
-    return Doc(blocks.map(::block))
+    return copy(blocks = blocks.map(::block))
 }
 
 /** Index of the block that holds source [offset], or the last one that starts before it. */

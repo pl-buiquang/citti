@@ -40,6 +40,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -95,8 +96,16 @@ fun MarkdownPreview(
     val styles = remember(colors, links, onLink) { InlineStyles(colors, links, onLink) }
     val scope = PreviewScope(styles, readonly, onTask, images)
     LazyColumn(modifier.fillMaxSize().testTag(TestTags.NOTE_PREVIEW), state = listState) {
-        itemsIndexed(doc.blocks, key = { index, block -> "$index:${block.start}" }) { _, block ->
-            Box(Modifier.fillMaxWidth().padding(horizontal = CittiTheme.shape.gutter)) { scope.Block(block, muted = false) }
+        itemsIndexed(doc.blocks, key = { index, block -> "$index:${block.start}" }) { index, block ->
+            // Each extra blank line of the source is one more body line of space.
+            val gap =
+                with(LocalDensity.current) {
+                    CittiTheme.typography.body.lineHeight
+                        .toDp()
+                } * doc.gapBefore(index)
+            Box(Modifier.fillMaxWidth().padding(start = CittiTheme.shape.gutter, end = CittiTheme.shape.gutter, top = gap)) {
+                scope.Block(block, muted = false)
+            }
         }
     }
 }

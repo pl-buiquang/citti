@@ -32,7 +32,25 @@ object ObsidianMarkdown {
         val masked = mask(text)
         val tree = MarkdownParser(GFMFlavourDescriptor()).buildMarkdownTreeFromString(masked.substring(bodyStart))
         Converter(text, bodyStart).blocks(tree.children, 0, blocks)
-        return Doc(blocks)
+        return Doc(blocks, gaps(text, blocks))
+    }
+
+    /** The blank lines beyond one between two top-level text blocks: `\n` count in the text between them, minus 2. */
+    private fun gaps(
+        text: String,
+        blocks: List<Block>,
+    ): List<Int> {
+        fun Block.flows() = this is Block.Heading || (this is Block.Paragraph && depth == 0) || (this is Block.ImageBlock && depth == 0)
+        var any = false
+        val out =
+            blocks.mapIndexed { i, b ->
+                val prev = blocks.getOrNull(i - 1)
+                if (prev == null || !prev.flows() || !b.flows() || b.start < prev.end) return@mapIndexed 0
+                val between = text.substring(prev.end, b.start)
+                if (between.isNotBlank()) return@mapIndexed 0
+                (between.count { it == '\n' } - 2).coerceAtLeast(0).also { if (it > 0) any = true }
+            }
+        return if (any) out else emptyList()
     }
 
     // ---- frontmatter ----

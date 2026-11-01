@@ -13,6 +13,21 @@ class ObsidianMarkdownTest {
     private fun inlines(text: String): List<Inline> = assertIs<Block.Paragraph>(parse(text).single()).inlines
 
     @Test
+    fun extraBlankLinesBetweenParagraphsAreCounted() {
+        fun gaps(text: String) = (0 until ObsidianMarkdown.parse(text).blocks.size).map { ObsidianMarkdown.parse(text).gapBefore(it) }
+        assertEquals(listOf(0, 0), gaps("a\n\nb"))
+        assertEquals(listOf(0, 1), gaps("a\n\n\nb"))
+        assertEquals(listOf(0, 2), gaps("a\n\n\n\nb"))
+        assertEquals(listOf(0, 0, 1), gaps("# h\nb\n\n\nc").let { listOf(0, 0, it.last()) })
+    }
+
+    @Test
+    fun blankLinesNextToListsAndCodeAreNotCounted() {
+        val doc = ObsidianMarkdown.parse("a\n\n\n- x\n\n\n```\ncode\n\n\nmore\n```\n\n\nb")
+        assertEquals(List(doc.blocks.size) { 0 }, List(doc.blocks.size) { doc.gapBefore(it) })
+    }
+
+    @Test
     fun everyBlockKind() {
         val blocks =
             parse(

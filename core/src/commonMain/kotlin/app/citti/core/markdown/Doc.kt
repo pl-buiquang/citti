@@ -157,9 +157,16 @@ data class Task(
     val box: Int,
 )
 
+/**
+ * [gaps] is parallel to [blocks] (or empty): the blank lines the source has before block *i*, beyond the one that
+ * separates two paragraphs. Only set between top-level paragraphs, images and headings.
+ */
 data class Doc(
     val blocks: List<Block>,
-)
+    val gaps: List<Int> = emptyList(),
+) {
+    fun gapBefore(index: Int): Int = gaps.getOrElse(index) { 0 }
+}
 
 /** The text a reader sees, for in-note search. */
 fun List<Inline>.plainText(): String =
