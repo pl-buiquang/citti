@@ -65,6 +65,9 @@ class DailyWidgetTest {
         assertTrue(!widget.hasText(WidgetStrings.DAILY_MISSING))
     }
 
+    @Ignore(
+        "Flaky on api36Google: passes alone, but in the full widget run ActivityScenario fails to close the Activity after the widget tap (Current state was null, last stage STARTED). Same cause as the other ignored widget-tap flows.",
+    )
     @Test
     fun anExistingNoteShowsFromItsReadingPositionAndATapOpensItThere() {
         setViewLine(e2e.setup.localId("2026-10-30"), 2)
