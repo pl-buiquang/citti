@@ -691,7 +691,7 @@ class MainActivity : ComponentActivity() {
                     onOpenSettings = { navigator.push(Route.Settings) },
                     onDismissNotice = controller::dismissNotice,
                     onViewLine = controller::onViewLine,
-                    onOpenDaily = controller::openDaily,
+                    onOpenNeighbor = controller::openNeighbor,
                 ),
             images = images,
             folders = pickerFolders,
@@ -814,7 +814,7 @@ class MainActivity : ComponentActivity() {
         menuGateway = container.noteMenu(route.localId),
         creation = noteCreation,
         droppedDaily = { folder, title -> dailyGateway.droppedDaily(folder, title, calendarLabels) },
-        dailyNav = container::dailyNav,
+        noteNav = { id, folder, title -> container.noteNav(id, folder, title, titleCollator) },
     )
 
     private fun newScope() = CoroutineScope(SupervisorJob(container.appScope.coroutineContext[Job]) + Dispatchers.Default)

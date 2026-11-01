@@ -112,6 +112,8 @@ fun CittiTextButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** A long label is cut with an ellipsis after this many lines. */
+    maxLines: Int = Int.MAX_VALUE,
 ) {
     Box(
         modifier
@@ -120,7 +122,12 @@ fun CittiTextButton(
             .padding(horizontal = NotesSpacing.space3),
         contentAlignment = Alignment.Center,
     ) {
-        BasicText(label, style = CittiTheme.typography.ui.copy(color = CittiTheme.colors.accentInk))
+        BasicText(
+            label,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            style = CittiTheme.typography.ui.copy(color = CittiTheme.colors.accentInk),
+        )
     }
 }
 

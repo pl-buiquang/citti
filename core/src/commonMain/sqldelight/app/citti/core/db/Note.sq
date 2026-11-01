@@ -225,6 +225,13 @@ SELECT local_id, title, category, excerpt, favorite, modified, sync_state, confl
 FROM note
 WHERE category = :category AND sync_state != 'DELETED' AND hidden = 0;
 
+-- The Notes next to an open Note: the same Folder, and the same visibility (a Hidden Note steps among the Hidden ones
+-- of its Folder, a visible one among the visible ones). Kotlin orders them like Tree mode (siblingsAround).
+selectSiblings:
+SELECT local_id, title, modified
+FROM note
+WHERE category = :category AND sync_state != 'DELETED' AND hidden = :hidden;
+
 -- The Notes of the Journal folder, for the Calendar and Date locale detection. No hidden filter, on purpose (CLAUDE.md:
 -- the Calendar sees Hidden notes, and a Hidden Journal folder still holds the Daily notes). first_line is the text
 -- before the first line feed (NULL without content), so detection doesn't load whole notes.

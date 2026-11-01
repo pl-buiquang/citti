@@ -104,7 +104,7 @@ data class NoteUiState(
     /** `Route.Note.startLine` as a source offset, until the first scroll: the Preview scrolls to its block. */
     val startOffset: Int? = null,
     /** The previous and next Daily note, when this Note is a Daily note. */
-    val dailyNav: DailyNav? = null,
+    val noteNav: NoteNav? = null,
 )
 
 /**
@@ -138,8 +138,8 @@ class NoteController(
     creation: NoteCreation? = null,
     /** The Daily wording of the Dropped snackbar for a dropped title and folder; null: the generic one. */
     private val droppedDaily: suspend (folder: String, title: String) -> DroppedDaily? = { _, _ -> null },
-    /** The Daily notes around the Note of this [folder] and [title]; null while it is not a Daily note. */
-    private val dailyNav: (folder: String, title: String) -> Flow<DailyNav?> = { _, _ -> flowOf(null) },
+    /** The Notes before and after the Note [localId] of this [folder] and [title] (a Daily note's days, else its Folder). */
+    private val noteNav: (localId: Long, folder: String, title: String) -> Flow<NoteNav?> = { _, _, _ -> flowOf(null) },
 ) {
     private val localId = route.localId
 
@@ -178,7 +178,7 @@ class NoteController(
         val deleted: Boolean = false,
         /** The source offset of `Route.Note.startLine`, cleared by the first [onViewLine]. */
         val startOffset: Int? = null,
-        val dailyNav: DailyNav? = null,
+        val noteNav: NoteNav? = null,
     )
 
     private val model = MutableStateFlow(Model())
@@ -222,7 +222,7 @@ class NoteController(
                 dialog = m.dialog,
                 notice = r.notice,
                 startOffset = m.startOffset,
-                dailyNav = m.dailyNav,
+                noteNav = m.noteNav,
             )
         }.stateIn(scope, SharingStarted.Eagerly, NoteUiState())
 
@@ -236,8 +236,8 @@ class NoteController(
             model
                 .map { it.row?.let { row -> row.folder to row.title } }
                 .distinctUntilChanged()
-                .flatMapLatest { place -> if (place == null) flowOf(null) else dailyNav(place.first, place.second) }
-                .collect { nav -> model.update { it.copy(dailyNav = nav) } }
+                .flatMapLatest { place -> if (place == null) flowOf(null) else noteNav(localId, place.first, place.second) }
+                .collect { nav -> model.update { it.copy(noteNav = nav) } }
         }
         scope.launch { editor.edits.collect { model.update { if (it.ready) it.copy(unsaved = true) else it } } }
         scope.launch { editor.edits.debounce(saveDelayMs).collect { saveNow() } }
@@ -890,8 +890,8 @@ class NoteController(
         navigator.push(Route.ImageViewer(localId, link))
     }
 
-    /** The Daily note bar's previous / next: this entry becomes that Note, so Back still leaves the Daily notes. */
-    fun openDaily(link: DailyLink) {
+    /** The bar's previous / next: this entry becomes that Note, so Back still leaves the Daily notes. */
+    fun openNeighbor(link: NeighborLink) {
         val top = navigator.top
         if (top is Route.Note && top.localId == localId) navigator.replaceTop(Route.Note(link.localId))
     }

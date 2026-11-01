@@ -62,8 +62,8 @@ import app.citti.ui.resources.banner_auth_failed
 import app.citti.ui.resources.banner_sign_in_again
 import app.citti.ui.resources.conflict_banner
 import app.citti.ui.resources.conflict_copy_of
-import app.citti.ui.resources.daily_next
-import app.citti.ui.resources.daily_previous
+import app.citti.ui.resources.neighbor_next
+import app.citti.ui.resources.neighbor_previous
 import app.citti.ui.resources.note_downloading
 import app.citti.ui.resources.note_edit
 import app.citti.ui.resources.note_menu
@@ -112,7 +112,7 @@ class NoteActions(
     /** The source line at the top of the screen, once scrolling settles: the Reading position. */
     val onViewLine: (Int) -> Unit = {},
     /** The Daily note bar: open the previous or next Daily note. */
-    val onOpenDaily: (DailyLink) -> Unit = {},
+    val onOpenNeighbor: (NeighborLink) -> Unit = {},
 )
 
 private const val VIEW_LINE_MS = 300L
@@ -257,17 +257,17 @@ private fun NoteColumn(
         }
         if (state.uploading) UploadChip(actions.onCancelUpload)
         if (!state.preview && !state.loading && focused) FormatToolbar(pressed, actions.onToolbar)
-        val nav = state.dailyNav
+        val nav = state.noteNav
         // Hidden while the editor is focused (the keyboard and the format toolbar take the bottom).
-        if (nav != null && !state.loading && !focused) DailyBar(nav, actions.onOpenDaily)
+        if (nav != null && !state.loading && !focused) NeighborBar(nav, actions.onOpenNeighbor)
     }
 }
 
-/** The Daily note's bottom bar: the Daily notes before and after, empty days skipped. A side is blank at the end. */
+/** The bottom bar: the Notes before and after (a Daily note's days, else its Folder's order). A side is blank at the end. */
 @Composable
-private fun DailyBar(
-    nav: DailyNav,
-    onOpen: (DailyLink) -> Unit,
+private fun NeighborBar(
+    nav: NoteNav,
+    onOpen: (NeighborLink) -> Unit,
 ) {
     Row(
         Modifier
@@ -279,22 +279,24 @@ private fun DailyBar(
     ) {
         val previous = nav.previous
         if (previous != null) {
-            val description = stringResource(Res.string.daily_previous, previous.title)
+            val description = stringResource(Res.string.neighbor_previous, previous.title)
             CittiTextButton(
                 "‹ ${previous.title}",
                 { onOpen(previous) },
-                Modifier.testTag(TestTags.DAILY_PREVIOUS).semantics { contentDescription = description },
+                Modifier.weight(1f, fill = false).testTag(TestTags.NEIGHBOR_PREVIOUS).semantics { contentDescription = description },
+                maxLines = 1,
             )
         } else {
             Box(Modifier)
         }
         val next = nav.next
         if (next != null) {
-            val description = stringResource(Res.string.daily_next, next.title)
+            val description = stringResource(Res.string.neighbor_next, next.title)
             CittiTextButton(
                 "${next.title} ›",
                 { onOpen(next) },
-                Modifier.testTag(TestTags.DAILY_NEXT).semantics { contentDescription = description },
+                Modifier.weight(1f, fill = false).testTag(TestTags.NEIGHBOR_NEXT).semantics { contentDescription = description },
+                maxLines = 1,
             )
         }
     }

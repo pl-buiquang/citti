@@ -64,4 +64,20 @@ class PreviewTest {
         note.doubleTapEditor()
         note.assertPreviewMode()
     }
+
+    @Test
+    fun theBarStepsThroughTheNotesOfTheFolder() {
+        // The Vault root, alphabetical: Ideas, Inbox, links, long, ...
+        list.openNote("Inbox")
+        note.assertTitle("Inbox")
+        note.openPreviousNeighbor("Ideas")
+        note.assertTitle("Ideas")
+        note.openNextNeighbor("Inbox")
+        note.assertTitle("Inbox")
+        note.openNextNeighbor("links")
+        note.assertTitle("links")
+        // Back leaves the Folder: each step replaced the screen.
+        note.pressBack()
+        list.assertRow("Ideas")
+    }
 }

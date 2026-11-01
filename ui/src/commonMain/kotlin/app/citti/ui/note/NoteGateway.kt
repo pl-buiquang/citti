@@ -7,15 +7,15 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
 /** A Daily note next to the open one. */
-data class DailyLink(
+data class NeighborLink(
     val localId: Long,
     val title: String,
 )
 
 /** The Daily notes around the open Daily note; a side is null at the end of the Journal. */
-data class DailyNav(
-    val previous: DailyLink?,
-    val next: DailyLink?,
+data class NoteNav(
+    val previous: NeighborLink?,
+    val next: NeighborLink?,
 )
 
 /**

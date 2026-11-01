@@ -66,16 +66,16 @@ class NoteRobot(
     }
 
     /** The Daily note bar: tap the previous / next Daily note, titled [title]. */
-    fun openPreviousDaily(title: String) {
-        waitFor(hasTestTag(TestTags.DAILY_PREVIOUS) and hasText("‹ $title")).performClick()
+    fun openPreviousNeighbor(title: String) {
+        waitFor(hasTestTag(TestTags.NEIGHBOR_PREVIOUS) and hasText("‹ $title")).performClick()
     }
 
-    fun openNextDaily(title: String) {
-        waitFor(hasTestTag(TestTags.DAILY_NEXT) and hasText("$title ›")).performClick()
+    fun openNextNeighbor(title: String) {
+        waitFor(hasTestTag(TestTags.NEIGHBOR_NEXT) and hasText("$title ›")).performClick()
     }
 
-    fun assertNoNextDaily() {
-        waitGone(hasTestTag(TestTags.DAILY_NEXT))
+    fun assertNoNextNeighbor() {
+        waitGone(hasTestTag(TestTags.NEIGHBOR_NEXT))
     }
 
     /** Preview: a double tap on the block containing [text]. */

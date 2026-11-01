@@ -38,6 +38,8 @@ import app.citti.core.note.LinkResolver
 import app.citti.core.note.NoteActions
 import app.citti.core.note.NoteCreator
 import app.citti.core.note.NoteEditor
+import app.citti.core.note.Sibling
+import app.citti.core.note.siblingsAround
 import app.citti.core.search.NoteSearch
 import app.citti.core.settings.DailySettings
 import app.citti.core.settings.ExclusionKind
@@ -64,10 +66,10 @@ import app.citti.ui.image.VaultImageFetcherFactory
 import app.citti.ui.image.VaultImageKeyer
 import app.citti.ui.image.seedImageCache
 import app.citti.ui.note.CoreNoteMenu
-import app.citti.ui.note.DailyLink
-import app.citti.ui.note.DailyNav
+import app.citti.ui.note.NeighborLink
 import app.citti.ui.note.NoteGateway
 import app.citti.ui.note.NoteMenuGateway
+import app.citti.ui.note.NoteNav
 import app.citti.ui.settings.AccountInfo
 import app.citti.ui.settings.AppearanceStore
 import app.citti.ui.settings.CoreAppearanceStore
@@ -475,18 +477,24 @@ class AppContainer(
     /** The ⋮ menu of one open Note for its [app.citti.ui.note.NoteController]. */
     fun noteMenu(localId: Long): NoteMenuGateway = CoreNoteMenu(localId, ::noteActions, exclusions, Dispatchers.IO)
 
-    /** The Daily notes around the Note of [folder] and [title], empty days skipped; null while it is not a Daily note. */
+    /**
+     * The Notes around the Note [localId] of [folder] and [title], for the bar at the bottom of its screen: the
+     * Daily notes before and after a Daily note (empty days skipped), else the Notes before and after it in its Folder,
+     * ordered as Tree mode does ([collator] and the Tree sort setting).
+     */
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun dailyNav(
+    fun noteNav(
+        localId: Long,
         folder: String,
         title: String,
-    ): Flow<DailyNav?> =
+        collator: Comparator<String>,
+    ): Flow<NoteNav?> =
         dailySettings
             .configFlow()
             .flatMapLatest { config ->
                 val date = dailyNotes()?.dateOf(folder, title, config)
                 if (date == null) {
-                    flowOf(null)
+                    siblingNav(localId, folder, collator)
                 } else {
                     dailyIndex.flow(config).map { entries ->
                         val around = entries.neighborsOf(date)
@@ -495,11 +503,39 @@ class AppContainer(
                             database.noteQueries
                                 .selectByLocalId(n.localId)
                                 .executeAsOneOrNull()
-                                ?.let { DailyLink(n.localId, it.title) }
-                        DailyNav(around.previous?.let(::link), around.next?.let(::link))
+                                ?.let { NeighborLink(n.localId, it.title) }
+                        NoteNav(around.previous?.let(::link), around.next?.let(::link))
                     }
                 }
             }.flowOn(Dispatchers.IO)
+
+    private fun siblingNav(
+        localId: Long,
+        folder: String,
+        collator: Comparator<String>,
+    ): Flow<NoteNav?> =
+        flow {
+            val hidden =
+                database.noteQueries
+                    .selectByLocalId(localId)
+                    .executeAsOneOrNull()
+                    ?.hidden ?: return@flow emit(null)
+            emitAll(
+                combine(
+                    database.noteQueries
+                        .selectSiblings(folder, hidden)
+                        .asFlow()
+                        .mapToList(Dispatchers.IO),
+                    uiSettings.treeSortFlow(),
+                ) { rows, sort ->
+                    val around = siblingsAround(rows.map { Sibling(it.local_id, it.title, it.modified) }, localId, sort, collator)
+                    NoteNav(
+                        around.previous?.let { NeighborLink(it.localId, it.title) },
+                        around.next?.let { NeighborLink(it.localId, it.title) },
+                    )
+                },
+            )
+        }
 
     /** The data of one open Note for its [app.citti.ui.note.NoteController]. */
     fun noteGateway(localId: Long): NoteGateway =

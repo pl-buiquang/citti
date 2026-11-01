@@ -61,9 +61,9 @@ object TestTags {
     const val CALENDAR_TODAY = "calendar.today"
     const val CALENDAR_ENTRIES = "calendar.entries"
 
-    /** The Daily note bar at the bottom of the Note screen: previous and next Daily note. */
-    const val DAILY_PREVIOUS = "note.dailyPrevious"
-    const val DAILY_NEXT = "note.dailyNext"
+    /** The bar at the bottom of the Note screen: the previous and next Daily note, else the previous and next Note of the Folder. */
+    const val NEIGHBOR_PREVIOUS = "note.neighborPrevious"
+    const val NEIGHBOR_NEXT = "note.neighborNext"
 
     const val SETTINGS_HOME = "settings.home"
     const val APPEARANCE_EDIT_CUSTOM = "appearance.edit-custom"

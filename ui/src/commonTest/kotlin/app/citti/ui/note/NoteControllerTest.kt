@@ -249,7 +249,7 @@ class NoteControllerTest {
         menu: ((FakeGateway) -> NoteMenuGateway)? = null,
         creation: NoteCreation? = null,
         droppedDaily: suspend (String, String) -> DroppedDaily? = { _, _ -> null },
-        dailyNav: (String, String) -> Flow<DailyNav?> = { _, _ -> flowOf(null) },
+        noteNav: (Long, String, String) -> Flow<NoteNav?> = { _, _, _ -> flowOf(null) },
         setup: FakeGateway.() -> Unit = {},
     ): Fixture {
         val gateway =
@@ -275,7 +275,7 @@ class NoteControllerTest {
                 menuGateway = menu?.invoke(gateway),
                 creation = creation,
                 droppedDaily = droppedDaily,
-                dailyNav = dailyNav,
+                noteNav = noteNav,
             )
         runCurrent()
         return Fixture(this, gateway, navigator, snacks, controller)
@@ -284,16 +284,16 @@ class NoteControllerTest {
     @Test
     fun aDailyNoteShowsItsNeighborsAndOpeningOneReplacesTheEntry() =
         runTest {
-            val nav = DailyNav(DailyLink(8, "2026-10-29"), DailyLink(9, "2026-10-31"))
+            val nav = NoteNav(NeighborLink(8, "2026-10-29"), NeighborLink(9, "2026-10-31"))
             val seen = mutableListOf<Pair<String, String>>()
             val f =
-                open(dailyNav = { folder, title ->
+                open(noteNav = { id, folder, title ->
                     seen += folder to title
                     flowOf(nav)
                 })
             assertEquals(listOf("work" to "Title"), seen)
-            assertEquals(nav, f.controller.state.value.dailyNav)
-            f.controller.openDaily(nav.next!!)
+            assertEquals(nav, f.controller.state.value.noteNav)
+            f.controller.openNeighbor(nav.next!!)
             assertEquals(Route.Note(9), f.navigator.top)
             assertEquals(listOf(Route.List(), Route.Note(9)), f.navigator.stack.value)
         }
@@ -302,7 +302,7 @@ class NoteControllerTest {
     fun aNoteThatIsNotADailyNoteHasNoBar() =
         runTest {
             val f = open()
-            assertNull(f.controller.state.value.dailyNav)
+            assertNull(f.controller.state.value.noteNav)
         }
 
     @Test

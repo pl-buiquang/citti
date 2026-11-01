@@ -51,13 +51,13 @@ class CalendarTest {
         val calendar = list.showCalendar()
         calendar.tapDay("30 October")
         note.assertTitle("2026-10-30")
-        note.assertNoNextDaily()
-        note.openPreviousDaily("2026-10-29")
+        note.assertNoNextNeighbor()
+        note.openPreviousNeighbor("2026-10-29")
         note.assertTitle("2026-10-29")
         // The days between 2026-09-15 and 2026-10-29 have no note: the bar skips them.
-        note.openPreviousDaily("2026-09-15")
+        note.openPreviousNeighbor("2026-09-15")
         note.assertTitle("2026-09-15")
-        note.openNextDaily("2026-10-29")
+        note.openNextNeighbor("2026-10-29")
         note.assertTitle("2026-10-29")
         // Back leaves the Daily notes: the entry was replaced, not stacked.
         note.pressBack()
