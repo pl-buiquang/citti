@@ -17,6 +17,23 @@ const val DEFAULT_IMAGE_CACHE_MB = 500
 /** `setting` key of the folder Images are uploaded to; absent means the attachment folder of Obsidian. */
 const val KEY_IMAGES_UPLOAD_FOLDER = "images.upload-folder"
 
+/** `setting` key of [RemoteImages]. */
+const val KEY_IMAGES_REMOTE = "images.remote"
+
+/** Whether Preview fetches the `http(s)` Images of a Note on its own. Ask shows a placeholder that loads on a tap. */
+enum class RemoteImages(
+    val id: String,
+) {
+    ASK("ask"),
+    ALWAYS("always"),
+    ;
+
+    companion object {
+        /** The choice stored as [id]; anything else is [ASK]. */
+        fun of(id: String?): RemoteImages = entries.firstOrNull { it.id == id } ?: ASK
+    }
+}
+
 /** The sizes Settings › Images offers, in megabytes. */
 val IMAGE_CACHE_CHOICES_MB = listOf(250, DEFAULT_IMAGE_CACHE_MB, 1000, 2000)
 
@@ -40,6 +57,19 @@ class ImageSettings(
             .asFlow()
             .mapToOneOrNull(dispatcher)
             .map(::parse)
+
+    fun remoteImages(): RemoteImages = RemoteImages.of(queries.selectSetting(KEY_IMAGES_REMOTE).executeAsOneOrNull())
+
+    fun remoteImagesFlow(): Flow<RemoteImages> =
+        queries
+            .selectSetting(KEY_IMAGES_REMOTE)
+            .asFlow()
+            .mapToOneOrNull(dispatcher)
+            .map(RemoteImages::of)
+
+    fun setRemoteImages(choice: RemoteImages) {
+        queries.upsertSetting(KEY_IMAGES_REMOTE, choice.id)
+    }
 
     /** The upload folder set by the user (a Vault path), or null to follow Obsidian. */
     fun uploadFolder(): String? = parseFolder(queries.selectSetting(KEY_IMAGES_UPLOAD_FOLDER).executeAsOneOrNull())

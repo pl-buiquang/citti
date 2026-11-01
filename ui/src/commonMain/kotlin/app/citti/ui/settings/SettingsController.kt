@@ -16,6 +16,7 @@ import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.FolderResult
 import app.citti.core.settings.FormatResult
 import app.citti.core.settings.ImageSettings
+import app.citti.core.settings.RemoteImages
 import app.citti.core.settings.SyncNetwork
 import app.citti.core.settings.SyncSettingsRepository
 import app.citti.core.settings.normalizeFolderPath
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -53,6 +55,8 @@ interface SettingsStore {
     fun setNetwork(network: SyncNetwork)
 
     fun setImageCacheMb(mb: Int)
+
+    fun setRemoteImages(choice: RemoteImages)
 
     /** Returns [AddResult.Added] with the stored path, or why the folder was refused. */
     fun addExclusion(
@@ -82,6 +86,8 @@ class CoreSettingsStore(
     }
 
     override fun setImageCacheMb(mb: Int) = images.setCacheMb(mb)
+
+    override fun setRemoteImages(choice: RemoteImages) = images.setRemoteImages(choice)
 
     override fun addExclusion(
         kind: ExclusionKind,
@@ -190,6 +196,7 @@ data class SettingsUiState(
     val imageCacheBytes: Long = 0,
     val daily: DailyUiState = DailyUiState(),
     val appearance: Appearance = Appearance(),
+    val remoteImages: RemoteImages = RemoteImages.ASK,
 ) {
     val syncing: Boolean get() = status is SyncStatus.Running
 
@@ -245,6 +252,7 @@ class SettingsController(
     private val appearance: AppearanceStore,
     private val phoneLanguage: String,
     private val now: () -> LocalDateTime,
+    remoteImages: Flow<RemoteImages> = flowOf(RemoteImages.ASK),
 ) {
     private val local = MutableStateFlow(Local())
 
@@ -267,8 +275,8 @@ class SettingsController(
             combine(interval, network, status) { i, n, s -> Triple(i, n, s) },
             combine(unsynced, hidden, knownFolders, imageCacheMb) { u, h, k, m -> Lists(u, h, k, m) },
             local,
-            combine(dailyState, appearance.appearance()) { d, a -> d to a },
-        ) { (i, n, s), lists, l, (d, a) ->
+            combine(dailyState, appearance.appearance(), remoteImages) { d, a, r -> Triple(d, a, r) },
+        ) { (i, n, s), lists, l, (d, a, r) ->
             SettingsUiState(
                 account,
                 l.page,
@@ -284,6 +292,7 @@ class SettingsController(
                 l.imageBytes,
                 d,
                 a,
+                r,
             )
         }.stateIn(scope, SharingStarted.Eagerly, SettingsUiState(account))
 
@@ -332,6 +341,9 @@ class SettingsController(
 
     /** A choice of Settings › Images: stored, and applied to the cache the next time the app starts. */
     fun setImageCacheMb(mb: Int) = store.setImageCacheMb(mb)
+
+    /** A choice of Settings › Images › Remote images. */
+    fun setRemoteImages(choice: RemoteImages) = store.setRemoteImages(choice)
 
     fun askClearImages() = local.update { it.copy(confirm = SettingsConfirm.ClearImages) }
 

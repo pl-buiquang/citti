@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +38,7 @@ import app.citti.ui.resources.Res
 import app.citti.ui.resources.image_missing
 import app.citti.ui.resources.image_offline
 import app.citti.ui.resources.image_open
+import app.citti.ui.resources.image_remote_tap
 import app.citti.ui.theme.CittiTheme
 import app.citti.ui.theme.NotesSize
 import app.citti.ui.theme.NotesSpacing
@@ -58,7 +63,14 @@ fun VaultImage(
     val name = imageFileName(image.src)
     val description = image.alt.ifEmpty { name }
     val shape = RoundedCornerShape(CittiTheme.shape.media)
-    val model = env.model(image.src)
+    val choice = env.choice(image.src)
+    var allowed by rememberSaveable(image.src) { mutableStateOf(false) }
+    val model =
+        when (choice) {
+            is ImageChoice.Load -> choice.model
+            is ImageChoice.AskRemote -> if (allowed) choice.url else null
+            ImageChoice.Unsupported -> null
+        }
     val width = image.width?.dp
     val sized =
         modifier
@@ -66,6 +78,10 @@ fun VaultImage(
             .then(if (width != null) Modifier.widthIn(max = width) else Modifier)
             .fillMaxWidth()
     if (model == null) {
+        if (choice is ImageChoice.AskRemote) {
+            RemoteImageBox(remoteHost(choice.url), description, sized, shape) { allowed = true }
+            return
+        }
         UnavailableBox(name, image.alt, ImageUnavailable.Reason.Unsupported, sized, shape)
         return
     }
@@ -90,6 +106,34 @@ fun VaultImage(
             )
         },
     )
+}
+
+/** A web Image that is not fetched yet: its host and a tap to load it. */
+@Composable
+private fun RemoteImageBox(
+    host: String,
+    description: String,
+    modifier: Modifier,
+    shape: RoundedCornerShape,
+    onLoad: () -> Unit,
+) {
+    val hint = stringResource(Res.string.image_remote_tap)
+    Row(
+        modifier
+            .heightIn(min = NotesSize.touchMin)
+            .border(Dp.Hairline, CittiTheme.colors.line, shape)
+            .clickable(onClickLabel = hint, role = Role.Button, onClick = onLoad)
+            .padding(NotesSpacing.space3)
+            .semantics { contentDescription = "$description, $host, $hint" },
+        horizontalArrangement = Arrangement.spacedBy(NotesSpacing.space3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(CittiIcon.Image, color = CittiTheme.colors.inkMuted)
+        Column {
+            BasicText(host, maxLines = 1, overflow = TextOverflow.Ellipsis, style = CittiTheme.typography.meta.colored(muted = true))
+            BasicText(hint, maxLines = 1, overflow = TextOverflow.Ellipsis, style = CittiTheme.typography.meta.colored(muted = false))
+        }
+    }
 }
 
 @Composable

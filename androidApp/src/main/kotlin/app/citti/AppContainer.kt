@@ -45,6 +45,7 @@ import app.citti.core.settings.DailySettings
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.ImageSettings
+import app.citti.core.settings.RemoteImages
 import app.citti.core.settings.SyncSettingsRepository
 import app.citti.core.settings.UiSettings
 import app.citti.core.sync.AfterEditPush
@@ -93,6 +94,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -106,6 +108,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -167,6 +170,11 @@ class AppContainer(
     val appearanceStore: AppearanceStore by lazy { CoreAppearanceStore(appearanceSettings) }
 
     val imageSettings: ImageSettings by lazy { ImageSettings(database) }
+
+    /** Settings › Images › Remote images; Ask until the stored choice is read. */
+    val remoteImages: StateFlow<RemoteImages> by lazy {
+        imageSettings.remoteImagesFlow().stateIn(appScope, SharingStarted.Eagerly, RemoteImages.ASK)
+    }
 
     val dailySettings: DailySettings by lazy { DailySettings(database, exclusions) }
 

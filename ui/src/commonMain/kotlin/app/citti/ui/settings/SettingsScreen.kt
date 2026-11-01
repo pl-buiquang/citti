@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.IMAGE_CACHE_CHOICES_MB
+import app.citti.core.settings.RemoteImages
 import app.citti.core.settings.SYNC_INTERVAL_CHOICES
 import app.citti.core.settings.SyncNetwork
 import app.citti.ui.TestTags
@@ -69,6 +70,10 @@ import app.citti.ui.resources.settings_image_cache_clear_confirm
 import app.citti.ui.resources.settings_image_cache_clear_title
 import app.citti.ui.resources.settings_image_cache_size
 import app.citti.ui.resources.settings_image_cache_used
+import app.citti.ui.resources.settings_image_remote
+import app.citti.ui.resources.settings_image_remote_always
+import app.citti.ui.resources.settings_image_remote_ask
+import app.citti.ui.resources.settings_image_remote_help
 import app.citti.ui.resources.settings_images
 import app.citti.ui.resources.settings_interval
 import app.citti.ui.resources.settings_interval_hours
@@ -111,6 +116,7 @@ class SettingsActions(
     val onInterval: (Int) -> Unit,
     val onNetwork: (SyncNetwork) -> Unit,
     val onImageCacheMb: (Int) -> Unit,
+    val onRemoteImages: (RemoteImages) -> Unit,
     val onAskClearImages: () -> Unit,
     val onSyncNow: () -> Unit,
     val onOpenPicker: (ExclusionKind) -> Unit,
@@ -229,6 +235,16 @@ private fun SettingsHome(
                 ),
                 style = CittiTheme.typography.meta.colored(muted = true),
             )
+            BasicText(stringResource(Res.string.settings_image_remote), style = CittiTheme.typography.meta.colored(muted = true))
+            OptionRow(
+                stringResource(Res.string.settings_image_remote_ask),
+                selected = state.remoteImages == RemoteImages.ASK,
+            ) { actions.onRemoteImages(RemoteImages.ASK) }
+            OptionRow(
+                stringResource(Res.string.settings_image_remote_always),
+                selected = state.remoteImages == RemoteImages.ALWAYS,
+            ) { actions.onRemoteImages(RemoteImages.ALWAYS) }
+            BasicText(stringResource(Res.string.settings_image_remote_help), style = CittiTheme.typography.meta.colored(muted = true))
             CittiButton(stringResource(Res.string.settings_image_cache_clear), actions.onAskClearImages, kind = ButtonKind.Quiet)
 
             AppearanceSection(state.appearance, actions.appearance)

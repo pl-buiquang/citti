@@ -190,6 +190,11 @@
     <string name="image_missing">Image not found</string>
     <string name="image_offline">Image not available offline</string>
     <string name="image_open">Open image</string>
+    <string name="image_remote_tap">Tap to load image</string>
+    <string name="settings_image_remote">Remote images</string>
+    <string name="settings_image_remote_ask">Ask before loading</string>
+    <string name="settings_image_remote_always">Always load</string>
+    <string name="settings_image_remote_help">Images from other websites reveal your address to their server.</string>
     <string name="image_viewer_close">Close</string>
     <string name="settings_images">Images</string>
     <string name="settings_image_cache_size">Image cache size</string>

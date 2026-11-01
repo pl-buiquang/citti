@@ -43,6 +43,7 @@ import androidx.compose.ui.semantics.stateDescription
 import app.citti.core.appearance.MAX_THEME_FILE_BYTES
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.MainMode
+import app.citti.core.settings.RemoteImages
 import app.citti.ui.TestTags
 import app.citti.ui.appearance.AppearanceActions
 import app.citti.ui.appearance.ThemeEditorController
@@ -662,7 +663,8 @@ class MainActivity : ComponentActivity() {
         BackHandler(enabled = state.menuOpen || state.dialog != null, onBack = { controller.back() })
         BackHandler(enabled = state.imageSheet, onBack = controller::dismissImageSheet)
         val picker = rememberImagePicker(container.config::nowMillis, controller::onImagePicked)
-        val images = remember(state.folder) { imageEnv(state.folder, controller::onImage) }
+        val remote by container.remoteImages.collectAsState()
+        val images = remember(state.folder, remote) { imageEnv(state.folder, remote, controller::onImage) }
         NoteScreen(
             state = state,
             editor = controller.editor,
@@ -708,8 +710,9 @@ class MainActivity : ComponentActivity() {
     /** The Images of a Note in [folder]; null while signed out (the Preview then shows the file names). */
     private fun imageEnv(
         folder: String,
+        remote: RemoteImages = RemoteImages.ASK,
         onOpen: (String) -> Unit = {},
-    ): ImageEnv? = container.imageResolver()?.let { ImageEnv(container.imageLoader, it, folder, onOpen) }
+    ): ImageEnv? = container.imageResolver()?.let { ImageEnv(container.imageLoader, it, folder, onOpen, remote) }
 
     @Composable
     private fun ImageViewerRoute(
@@ -747,6 +750,7 @@ class MainActivity : ComponentActivity() {
                     onInterval = controller::setInterval,
                     onNetwork = controller::setNetwork,
                     onImageCacheMb = controller::setImageCacheMb,
+                    onRemoteImages = controller::setRemoteImages,
                     onAskClearImages = controller::askClearImages,
                     onSyncNow = controller::syncNow,
                     onOpenPicker = controller::openPicker,
@@ -852,6 +856,7 @@ class MainActivity : ComponentActivity() {
                     .now()
                     .toLocalDateTime(TimeZone.of(container.config.timeZone().id))
             },
+            remoteImages = container.remoteImages,
         )
 
     private fun newLoginController() =

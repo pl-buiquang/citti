@@ -102,6 +102,20 @@ class SettingsTest {
         }
 
     @Test
+    fun remoteImagesAskByDefaultAndRoundTrip() =
+        runTest {
+            val repo = ImageSettings(db, Dispatchers.Unconfined)
+            assertEquals(RemoteImages.ASK, repo.remoteImages())
+            repo.setRemoteImages(RemoteImages.ALWAYS)
+            assertEquals(RemoteImages.ALWAYS, repo.remoteImages())
+            assertEquals(RemoteImages.ALWAYS, repo.remoteImagesFlow().first())
+            assertEquals("always", db.settingQueries.selectSetting(KEY_IMAGES_REMOTE).executeAsOne())
+            // An unknown stored value reads as Ask.
+            db.settingQueries.upsertSetting(KEY_IMAGES_REMOTE, "yes")
+            assertEquals(RemoteImages.ASK, repo.remoteImages())
+        }
+
+    @Test
     fun uploadFolderFollowsObsidianUntilSetAndResets() =
         runTest {
             val repo = ImageSettings(db, Dispatchers.Unconfined)

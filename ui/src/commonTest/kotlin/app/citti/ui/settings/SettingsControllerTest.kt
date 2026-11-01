@@ -16,6 +16,7 @@ import app.citti.core.settings.DailyConfig
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.FolderResult
 import app.citti.core.settings.FormatResult
+import app.citti.core.settings.RemoteImages
 import app.citti.core.settings.SyncNetwork
 import app.citti.core.sync.SyncTrigger
 import app.citti.ui.components.FolderPickerState
@@ -43,6 +44,11 @@ private class FakeStore(
     val unsynced = MutableStateFlow(emptyList<String>())
     val hidden = MutableStateFlow(emptyList<String>())
     val imageMb = MutableStateFlow(500)
+    val remoteImages = MutableStateFlow(RemoteImages.ASK)
+
+    override fun setRemoteImages(choice: RemoteImages) {
+        remoteImages.value = choice
+    }
 
     override fun setImageCacheMb(mb: Int) {
         imageMb.value = mb
@@ -213,7 +219,19 @@ class SettingsControllerTest {
             appearance = appearance,
             phoneLanguage = "de",
             now = { LocalDateTime(2026, 10, 31, 9, 30) },
+            remoteImages = store.remoteImages,
         )
+
+    @Test
+    fun remoteImagesAreAskedByDefaultAndTheChoiceIsStored() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val controller = controller(store)
+            assertEquals(RemoteImages.ASK, controller.state.value.remoteImages)
+            controller.setRemoteImages(RemoteImages.ALWAYS)
+            assertEquals(RemoteImages.ALWAYS, store.remoteImages.value)
+            assertEquals(RemoteImages.ALWAYS, controller.state.value.remoteImages)
+        }
 
     @Test
     fun addingHiddenFolderStoresItAndSyncsManually() =
