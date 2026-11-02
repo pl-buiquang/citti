@@ -532,6 +532,23 @@ class NoteQueriesTest {
     }
 
     @Test
+    fun favoriteWidgetRowsDropNotesUnderAnUnsyncedFolderBeforeThePullDeletesThem() {
+        server(1, favorite = true, category = "keep")
+        server(2, favorite = true, category = "old")
+        server(3, favorite = true, category = "old/sub")
+        server(4, favorite = true, category = "older")
+        db.settingQueries.insertExclusion("old", "UNSYNCED")
+        assertEquals(
+            setOf("t1", "t4"),
+            notes
+                .selectFavoriteWidgetRows()
+                .executeAsList()
+                .map { it.title }
+                .toSet(),
+        )
+    }
+
+    @Test
     fun noteWidgetReturnsAHiddenNoteAndNothingForADeletedOne() {
         server(1, category = "secret", hidden = true)
         server(2)

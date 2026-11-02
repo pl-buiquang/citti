@@ -342,6 +342,12 @@ selectFavoriteWidgetRows:
 SELECT local_id, title, category
 FROM note
 WHERE sync_state != 'DELETED' AND hidden = 0 AND favorite = 1
+  -- A Note under an Unsynced folder leaves the widget at once; the pull deletes the row later.
+  AND NOT EXISTS (
+    SELECT 1 FROM folder_exclusion e
+    WHERE e.kind = 'UNSYNCED'
+      AND (note.category = e.prefix OR substr(note.category, 1, length(e.prefix) + 1) = e.prefix || '/')
+  )
 ORDER BY modified DESC;
 
 -- Note and Daily note widgets. No hidden filter: a Note picked through Search can live in a Hidden folder.

@@ -54,8 +54,16 @@ class FolderSyncTest {
             config,
         )
     private val folderSync = FolderSync(db, api, exclusions)
+    private var folderChanges = 0
     private val engine =
-        SyncEngine(PushSync(api, db) { clock }, PullSync(api, db), db, sleep = {}, folderSync = folderSync) { clock }
+        SyncEngine(
+            PushSync(api, db) { clock },
+            PullSync(api, db),
+            db,
+            sleep = {},
+            folderSync = folderSync,
+            onFolderChanged = { folderChanges++ },
+        ) { clock }
 
     private fun storedEtag(folder: String) =
         db.syncStateQueries
@@ -268,6 +276,17 @@ class FolderSyncTest {
             assertIs<FolderRefresh.Refreshed>(engine.refreshFolder("journal"))
             collector.cancelAndJoin()
             assertTrue(seen.none { it is SyncStatus.Running })
+        }
+
+    @Test
+    fun aRefreshThatChangedNotesTellsTheWidgetsAndANotModifiedOneDoesNot() =
+        runTest {
+            server.addNote("A", "a", category = "journal")
+            assertIs<FolderRefresh.Refreshed>(engine.refreshFolder("journal"))
+            assertEquals(1, folderChanges)
+
+            assertEquals(FolderRefresh.NotModified, engine.refreshFolder("journal"))
+            assertEquals(1, folderChanges)
         }
 
     @Test

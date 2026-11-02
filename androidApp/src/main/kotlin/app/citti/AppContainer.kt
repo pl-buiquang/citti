@@ -591,6 +591,7 @@ class AppContainer(
                         api.stats,
                         dav = davSetup,
                         folderSync = FolderSync(database, api, exclusions, AndroidSyncLog),
+                        onFolderChanged = { widgets.updateAll() },
                         now = now,
                     )
                 }

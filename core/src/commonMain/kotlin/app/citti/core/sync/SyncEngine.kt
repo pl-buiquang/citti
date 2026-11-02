@@ -141,6 +141,8 @@ class SyncEngine(
     private val dav: DavSetup? = null,
     /** Needed by [refreshFolder] and [fetchContent] only. */
     private val folderSync: FolderSync? = null,
+    /** Called after [refreshFolder] stored or deleted Notes, outside the mutex (the widgets redraw from it). */
+    private val onFolderChanged: () -> Unit = {},
     private val now: () -> Long,
 ) {
     private val settings = db.settingQueries
@@ -259,6 +261,7 @@ class SyncEngine(
             } finally {
                 mutex.unlock()
             }
+        if (result is FolderRefresh.Refreshed && result.upserted + result.deleted > 0) onFolderChanged()
         // A push after an edit that found the mutex taken by this refresh would otherwise wait for the next Sync.
         if (pushRequested) {
             pushRequested = false
