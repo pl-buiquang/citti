@@ -24,6 +24,7 @@ class PeriodicNotesTest {
                 extra = {
                     E2e.server.addNote("2026-octobre", "# Octobre\n", category = "journal")
                     E2e.server.addNote("2026-W44", "# Semaine 44\n", category = "journal")
+                    E2e.server.addNote("2026-août", "# Août\n", category = "journal")
                 },
             ),
         )
@@ -47,6 +48,17 @@ class PeriodicNotesTest {
         note.assertTitle("2026")
         server.awaitRequest(Endpoint.CREATE)
         server.assertNote("2026", category = "journal")
+    }
+
+    @Test
+    fun theBarOfAMonthNoteStepsOverTheMonthsNotTheDays() {
+        val calendar = list.showCalendar()
+        calendar.tapMonth()
+        note.assertTitle("2026-octobre")
+        note.assertNoNextNeighbor()
+        // September and July have no note: the bar skips them, and the Daily notes and weeks around.
+        note.openPreviousNeighbor("2026-août")
+        note.assertTitle("2026-août")
     }
 
     @Test

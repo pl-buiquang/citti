@@ -23,6 +23,8 @@ import app.citti.core.daily.DailyNotes
 import app.citti.core.daily.ImportReport
 import app.citti.core.daily.LocaleDetector
 import app.citti.core.daily.ObsidianDailyImport
+import app.citti.core.daily.PeriodIndex
+import app.citti.core.daily.PeriodKind
 import app.citti.core.daily.TemplateSource
 import app.citti.core.daily.neighborsOf
 import app.citti.core.dav.DavClient
@@ -209,6 +211,9 @@ class AppContainer(
 
     /** The Daily notes of the Journal folder by date, for the Calendar; works offline from the local DB. */
     val dailyIndex: DailyIndex by lazy { DailyIndex(database, localeDetector) }
+
+    /** The Week, Month, Quarter and Year notes of the Journal folder by period, for the bar at the bottom of a note. */
+    val periodIndex: PeriodIndex by lazy { PeriodIndex(database, localeDetector) }
 
     /** The Calendar's Daily notes by date, following the Journal folder, Date format and Date locale settings. */
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -502,8 +507,9 @@ class AppContainer(
 
     /**
      * The Notes around the Note [localId] of [folder] and [title], for the bar at the bottom of its screen: the
-     * Daily notes before and after a Daily note (empty days skipped), else the Notes before and after it in its Folder,
-     * ordered as Tree mode does ([collator] and the Tree sort setting).
+     * Daily notes before and after a Daily note (empty days skipped), the Notes of the same kind before and after a
+     * Periodic note (the weeks around a Week note…), else the Notes before and after it in its Folder, ordered as Tree
+     * mode does ([collator] and the Tree sort setting).
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun noteNav(
@@ -515,22 +521,33 @@ class AppContainer(
         dailySettings
             .configFlow()
             .flatMapLatest { config ->
-                val date = dailyNotes()?.dateOf(folder, title, config)
-                if (date == null) {
-                    siblingNav(localId, folder, collator)
-                } else {
-                    dailyIndex.flow(config).map { entries ->
-                        val around = entries.neighborsOf(date)
+                val period = dailyNotes()?.periodOf(folder, title, config)
+                when (period?.kind) {
+                    null -> {
+                        siblingNav(localId, folder, collator)
+                    }
 
-                        fun link(n: DailyNeighbor) =
-                            database.noteQueries
-                                .selectByLocalId(n.localId)
-                                .executeAsOneOrNull()
-                                ?.let { NeighborLink(n.localId, it.title) }
-                        NoteNav(around.previous?.let(::link), around.next?.let(::link))
+                    PeriodKind.DAY -> {
+                        dailyIndex.flow(config).map { entries ->
+                            val around = entries.neighborsOf(period.start)
+                            NoteNav(around.previous?.let { link(it.localId) }, around.next?.let { link(it.localId) })
+                        }
+                    }
+
+                    else -> {
+                        periodIndex.flow(config).map { entries ->
+                            val around = entries.neighborsOf(period)
+                            NoteNav(around.previous?.let { link(it.localId) }, around.next?.let { link(it.localId) })
+                        }
                     }
                 }
             }.flowOn(Dispatchers.IO)
+
+    private fun link(localId: Long): NeighborLink? =
+        database.noteQueries
+            .selectByLocalId(localId)
+            .executeAsOneOrNull()
+            ?.let { NeighborLink(localId, it.title) }
 
     private fun siblingNav(
         localId: Long,

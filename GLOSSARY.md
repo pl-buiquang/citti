@@ -34,8 +34,12 @@ _Avoid_: Internal link, backlink
 The note for one calendar date, kept in the Journal folder and named after that date.
 _Avoid_: Journal entry, diary page
 
+**Periodic note**:
+A Week note, Month note, Quarter note or Year note: the note for a whole week, month, quarter or year, kept in the Journal folder next to the Daily notes. Each kind has its own title format and Template.
+_Avoid_: Weekly, monthly, summary note
+
 **Journal folder**:
-The folder that holds the Daily notes.
+The folder that holds the Daily notes and the Periodic notes.
 _Avoid_: Diary folder
 
 **Template**:
@@ -43,7 +47,7 @@ A note whose text, with its placeholders filled in, becomes the starting text of
 _Avoid_: Snippet, boilerplate
 
 **Calendar**:
-The third main view, next to List and Tree mode, that shows which days have a Daily note and opens or creates one.
+The third main view, next to List and Tree mode, that shows which days have a Daily note and opens or creates one. Its month, year and (when shown) quarter, its week numbers and a long press on a day open or create the Periodic notes.
 _Avoid_: Agenda, date picker
 
 **Today button**:
@@ -51,7 +55,7 @@ The button next to New note that opens or creates today's Daily note.
 _Avoid_: Daily button, journal button
 
 **Date format**:
-The pattern, in Moment.js tokens, that turns a date into a Daily note's title.
+The pattern, in Moment.js tokens, that turns a date into a Daily note's title. A Periodic note has a title format of its own.
 _Avoid_: Date pattern, file name format
 
 **Date locale**:
