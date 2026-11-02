@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import app.citti.core.markdown.Task
 import app.citti.core.markdown.ToolbarAction
+import app.citti.core.settings.ToolbarLayout
 import app.citti.ui.TestTags
 import app.citti.ui.components.Banner
 import app.citti.ui.components.BannerKind
@@ -132,6 +133,8 @@ fun NoteScreen(
     previewListState: LazyListState,
     actions: NoteActions,
     images: ImageEnv? = null,
+    /** The buttons of the format toolbar, in order (Settings › Editor). */
+    toolbar: List<ToolbarAction> = ToolbarLayout.DEFAULT.visible,
     /** The Folders the Move picker lists. */
     folders: Flow<PickerFolders>? = null,
     /** Note info's last modified (epoch seconds), as an absolute date and time. */
@@ -200,7 +203,7 @@ fun NoteScreen(
             .background(CittiTheme.colors.bg)
             .safeDrawingPadding(),
     ) {
-        NoteColumn(state, editor, previewListState, actions, images, focused, pressed, toggle, switchMode)
+        NoteColumn(state, editor, previewListState, actions, images, toolbar, focused, pressed, toggle, switchMode)
         if (state.menuOpen) NoteMenu(state.menu, state.favorite, actions.onMenuItem, actions.onDismissMenu)
         actions.dialogs?.let { NoteDialogHost(state.dialog, state.title, folders, dateTime, it) }
         if (state.imageSheet) ImageSourceSheet(onPick = actions.onPickImage, onDismiss = actions.onDismissImageSheet)
@@ -214,6 +217,7 @@ private fun NoteColumn(
     previewListState: LazyListState,
     actions: NoteActions,
     images: ImageEnv?,
+    toolbar: List<ToolbarAction>,
     focused: Boolean,
     pressed: Set<ToolbarAction>,
     toggle: () -> Unit,
@@ -257,7 +261,7 @@ private fun NoteColumn(
             }
         }
         if (state.uploading) UploadChip(actions.onCancelUpload)
-        if (!state.preview && !state.loading && focused) FormatToolbar(pressed, actions.onToolbar)
+        if (!state.preview && !state.loading && focused && toolbar.isNotEmpty()) FormatToolbar(toolbar, pressed, actions.onToolbar)
         val nav = state.noteNav
         // Hidden while the editor is focused (the keyboard and the format toolbar take the bottom).
         if (nav != null && !state.loading && !focused) NeighborBar(nav, actions.onOpenNeighbor)

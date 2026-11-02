@@ -8,6 +8,7 @@ import app.citti.core.appearance.ModeChoice
 import app.citti.core.appearance.ThemeChoice
 import app.citti.core.daily.IMPORT_FOLDER
 import app.citti.core.daily.ImportReport
+import app.citti.core.markdown.ToolbarAction
 import app.citti.core.note.InvalidNameException
 import app.citti.core.note.NameError
 import app.citti.core.note.Suggestion
@@ -18,6 +19,7 @@ import app.citti.core.settings.FolderResult
 import app.citti.core.settings.FormatResult
 import app.citti.core.settings.RemoteImages
 import app.citti.core.settings.SyncNetwork
+import app.citti.core.settings.ToolbarLayout
 import app.citti.core.sync.SyncTrigger
 import app.citti.ui.components.FolderPickerState
 import app.citti.ui.image.ImageCache
@@ -45,6 +47,11 @@ private class FakeStore(
     val hidden = MutableStateFlow(emptyList<String>())
     val imageMb = MutableStateFlow(500)
     val remoteImages = MutableStateFlow(RemoteImages.ASK)
+    val toolbar = MutableStateFlow(ToolbarLayout.DEFAULT)
+
+    override fun setToolbar(layout: ToolbarLayout) {
+        toolbar.value = layout
+    }
 
     override fun setRemoteImages(choice: RemoteImages) {
         remoteImages.value = choice
@@ -220,6 +227,7 @@ class SettingsControllerTest {
             phoneLanguage = "de",
             now = { LocalDateTime(2026, 10, 31, 9, 30) },
             remoteImages = store.remoteImages,
+            toolbar = store.toolbar,
         )
 
     @Test
@@ -231,6 +239,23 @@ class SettingsControllerTest {
             controller.setRemoteImages(RemoteImages.ALWAYS)
             assertEquals(RemoteImages.ALWAYS, store.remoteImages.value)
             assertEquals(RemoteImages.ALWAYS, controller.state.value.remoteImages)
+        }
+
+    @Test
+    fun theToolbarButtonsCanBeHiddenAndReordered() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val c = controller(store)
+            assertEquals(ToolbarAction.entries.toList(), c.state.value.toolbar.visible)
+            c.toggleToolbarButton(ToolbarAction.Checkbox)
+            c.moveToolbarButton(ToolbarAction.Strike, up = true)
+            assertEquals(store.toolbar.value, c.state.value.toolbar)
+            assertEquals(
+                listOf(ToolbarAction.Bold, ToolbarAction.Strike, ToolbarAction.Italic),
+                c.state.value.toolbar.visible
+                    .take(3),
+            )
+            assertFalse(ToolbarAction.Checkbox in c.state.value.toolbar.visible)
         }
 
     @Test

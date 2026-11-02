@@ -200,6 +200,11 @@
     <string name="settings_image_remote_help">Images from other websites reveal your address to their server.</string>
     <string name="image_viewer_close">Close</string>
     <string name="settings_images">Images</string>
+    <string name="settings_editor">Editor</string>
+    <string name="settings_editor_toolbar">Format toolbar</string>
+    <string name="settings_editor_toolbar_help">Tick the buttons to show above the keyboard, and move them to reorder.</string>
+    <string name="settings_toolbar_move_up">Move up</string>
+    <string name="settings_toolbar_move_down">Move down</string>
     <string name="settings_image_cache_size">Image cache size</string>
     <string name="settings_image_cache_used">In use: %1$s</string>
     <string name="settings_image_cache_clear">Clear image cache</string>

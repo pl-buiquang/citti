@@ -7,10 +7,12 @@ import app.citti.core.appearance.ThemeChoice
 import app.citti.core.daily.DateLocales
 import app.citti.core.daily.ImportReport
 import app.citti.core.daily.MomentFormat
+import app.citti.core.markdown.ToolbarAction
 import app.citti.core.note.NameError
 import app.citti.core.note.Suggestion
 import app.citti.core.settings.AddResult
 import app.citti.core.settings.DailyConfig
+import app.citti.core.settings.EditorSettings
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.FolderResult
@@ -19,6 +21,7 @@ import app.citti.core.settings.ImageSettings
 import app.citti.core.settings.RemoteImages
 import app.citti.core.settings.SyncNetwork
 import app.citti.core.settings.SyncSettingsRepository
+import app.citti.core.settings.ToolbarLayout
 import app.citti.core.settings.normalizeFolderPath
 import app.citti.core.sync.SyncStatus
 import app.citti.core.sync.SyncTrigger
@@ -58,6 +61,8 @@ interface SettingsStore {
 
     fun setRemoteImages(choice: RemoteImages)
 
+    fun setToolbar(layout: ToolbarLayout)
+
     /** Returns [AddResult.Added] with the stored path, or why the folder was refused. */
     fun addExclusion(
         kind: ExclusionKind,
@@ -78,6 +83,7 @@ class CoreSettingsStore(
     private val sync: SyncSettingsRepository,
     private val exclusions: ExclusionRepository,
     private val images: ImageSettings,
+    private val editor: EditorSettings,
 ) : SettingsStore {
     override fun setIntervalMinutes(minutes: Int) = sync.setIntervalMinutes(minutes)
 
@@ -88,6 +94,8 @@ class CoreSettingsStore(
     override fun setImageCacheMb(mb: Int) = images.setCacheMb(mb)
 
     override fun setRemoteImages(choice: RemoteImages) = images.setRemoteImages(choice)
+
+    override fun setToolbar(layout: ToolbarLayout) = editor.setToolbar(layout)
 
     override fun addExclusion(
         kind: ExclusionKind,
@@ -107,7 +115,7 @@ class CoreSettingsStore(
 }
 
 /** The pages the Settings menu opens, in menu order. */
-enum class SettingsSection { ACCOUNT, SYNC, EXCLUSIONS, IMAGES, APPEARANCE, DAILY }
+enum class SettingsSection { ACCOUNT, SYNC, EXCLUSIONS, IMAGES, APPEARANCE, EDITOR, DAILY }
 
 /** Where Settings is: the menu, a section page, the folder picker for one list, or a picker of Settings › Daily notes. */
 sealed interface SettingsPage {
@@ -206,6 +214,7 @@ data class SettingsUiState(
     val daily: DailyUiState = DailyUiState(),
     val appearance: Appearance = Appearance(),
     val remoteImages: RemoteImages = RemoteImages.ASK,
+    val toolbar: ToolbarLayout = ToolbarLayout.DEFAULT,
 ) {
     val syncing: Boolean get() = status is SyncStatus.Running
 
@@ -262,6 +271,7 @@ class SettingsController(
     private val phoneLanguage: String,
     private val now: () -> LocalDateTime,
     remoteImages: Flow<RemoteImages> = flowOf(RemoteImages.ASK),
+    toolbar: Flow<ToolbarLayout> = flowOf(ToolbarLayout.DEFAULT),
 ) {
     private val local = MutableStateFlow(Local())
 
@@ -284,8 +294,12 @@ class SettingsController(
             combine(interval, network, status) { i, n, s -> Triple(i, n, s) },
             combine(unsynced, hidden, knownFolders, imageCacheMb) { u, h, k, m -> Lists(u, h, k, m) },
             local,
-            combine(dailyState, appearance.appearance(), remoteImages) { d, a, r -> Triple(d, a, r) },
-        ) { (i, n, s), lists, l, (d, a, r) ->
+            combine(
+                dailyState,
+                appearance.appearance(),
+                combine(remoteImages, toolbar) { r, t -> r to t },
+            ) { d, a, rt -> Triple(d, a, rt) },
+        ) { (i, n, s), lists, l, (d, a, rt) ->
             SettingsUiState(
                 account,
                 l.page,
@@ -301,7 +315,8 @@ class SettingsController(
                 l.imageBytes,
                 d,
                 a,
-                r,
+                rt.first,
+                rt.second,
             )
         }.stateIn(scope, SharingStarted.Eagerly, SettingsUiState(account))
 
@@ -353,6 +368,15 @@ class SettingsController(
 
     /** A choice of Settings › Images › Remote images. */
     fun setRemoteImages(choice: RemoteImages) = store.setRemoteImages(choice)
+
+    // ---- Settings › Editor ----
+
+    fun toggleToolbarButton(action: ToolbarAction) = store.setToolbar(state.value.toolbar.toggle(action))
+
+    fun moveToolbarButton(
+        action: ToolbarAction,
+        up: Boolean,
+    ) = store.setToolbar(state.value.toolbar.move(action, up))
 
     fun askClearImages() = local.update { it.copy(confirm = SettingsConfirm.ClearImages) }
 

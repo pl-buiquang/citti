@@ -32,6 +32,7 @@ import app.citti.core.dav.ImageUploader
 import app.citti.core.dav.ObsidianConfig
 import app.citti.core.dav.UploadResult
 import app.citti.core.db.CittiDatabase
+import app.citti.core.markdown.ToolbarAction
 import app.citti.core.note.ExcerptBackfill
 import app.citti.core.note.FolderCount
 import app.citti.core.note.LinkResolver
@@ -42,11 +43,13 @@ import app.citti.core.note.Sibling
 import app.citti.core.note.siblingsAround
 import app.citti.core.search.NoteSearch
 import app.citti.core.settings.DailySettings
+import app.citti.core.settings.EditorSettings
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.ImageSettings
 import app.citti.core.settings.RemoteImages
 import app.citti.core.settings.SyncSettingsRepository
+import app.citti.core.settings.ToolbarLayout
 import app.citti.core.settings.UiSettings
 import app.citti.core.sync.AfterEditPush
 import app.citti.core.sync.FolderSync
@@ -171,6 +174,13 @@ class AppContainer(
 
     val imageSettings: ImageSettings by lazy { ImageSettings(database) }
 
+    val editorSettings: EditorSettings by lazy { EditorSettings(database) }
+
+    /** The visible buttons of the format toolbar, in order; all of them until the stored layout is read. */
+    val toolbar: StateFlow<List<ToolbarAction>> by lazy {
+        editorSettings.toolbarFlow().map { it.visible }.stateIn(appScope, SharingStarted.Eagerly, ToolbarLayout.DEFAULT.visible)
+    }
+
     /** Settings › Images › Remote images; Ask until the stored choice is read. */
     val remoteImages: StateFlow<RemoteImages> by lazy {
         imageSettings.remoteImagesFlow().stateIn(appScope, SharingStarted.Eagerly, RemoteImages.ASK)
@@ -204,7 +214,7 @@ class AppContainer(
     @OptIn(ExperimentalCoroutinesApi::class)
     fun dailyEntries(): Flow<Map<LocalDate, DailyEntry>> = dailySettings.configFlow().flatMapLatest(dailyIndex::flow)
 
-    val settingsStore: CoreSettingsStore by lazy { CoreSettingsStore(syncSettings, exclusions, imageSettings) }
+    val settingsStore: CoreSettingsStore by lazy { CoreSettingsStore(syncSettings, exclusions, imageSettings, editorSettings) }
 
     // The Image cache lives in the cache dir (the system may empty it). Its limit is read when the app starts.
     private val imageDiskCache: DiskCache by lazy {

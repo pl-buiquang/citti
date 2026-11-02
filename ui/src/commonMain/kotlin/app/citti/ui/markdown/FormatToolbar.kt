@@ -49,6 +49,7 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun FormatToolbar(
+    buttons: List<ToolbarAction>,
     pressed: Set<ToolbarAction>,
     onAction: (ToolbarAction) -> Unit,
     modifier: Modifier = Modifier,
@@ -65,7 +66,7 @@ fun FormatToolbar(
                 Modifier.horizontalScroll(rememberScrollState()).widthIn(min = maxWidth),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                ToolbarAction.entries.forEach { action ->
+                buttons.forEach { action ->
                     val on = action in pressed
                     val label = stringResource(action.label())
                     Box(
@@ -73,7 +74,7 @@ fun FormatToolbar(
                             .sizeIn(minWidth = NotesSize.touchMin, minHeight = NotesSize.touchMin)
                             .background(if (on) colors.accent else colors.surface)
                             .clickable(role = Role.Button) { onAction(action) }
-                            .let { if (action == ToolbarAction.Image) it.testTag(TestTags.TOOLBAR_IMAGE) else it }
+                            .testTag(if (action == ToolbarAction.Image) TestTags.TOOLBAR_IMAGE else TestTags.toolbar(action))
                             .semantics {
                                 contentDescription = label
                                 role = Role.Button
@@ -96,7 +97,7 @@ fun FormatToolbar(
     }
 }
 
-private fun ToolbarAction.mark() =
+internal fun ToolbarAction.mark() =
     when (this) {
         ToolbarAction.Bold -> "**"
         ToolbarAction.Italic -> "_"
@@ -108,7 +109,7 @@ private fun ToolbarAction.mark() =
         ToolbarAction.Image -> "![]"
     }
 
-private fun ToolbarAction.label() =
+internal fun ToolbarAction.label() =
     when (this) {
         ToolbarAction.Bold -> Res.string.toolbar_bold
         ToolbarAction.Italic -> Res.string.toolbar_italic

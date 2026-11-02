@@ -31,6 +31,8 @@ object Strings {
     const val NOTE_PREVIEW = "Preview"
     const val NOTE_UNDO = "Undo"
     const val TOOLBAR_BOLD = "Bold"
+    const val TOOLBAR_STRIKE = "Strikethrough"
+    const val TOOLBAR_CHECKBOX = "Checkbox"
     const val SAVE_OFFLINE = "Offline (will sync)"
     const val BADGE_PENDING = "Pending"
     const val BADGE_CONFLICT = "Conflict"

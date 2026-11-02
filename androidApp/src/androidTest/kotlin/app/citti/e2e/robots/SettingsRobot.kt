@@ -80,6 +80,14 @@ class SettingsRobot(
         assertFalse(exists(hasTestTag(TestTags.settingsRemove(kind, path))), "$path is listed as $kind")
     }
 
+    // ---- Editor ----
+
+    /** Settings › Editor: tap the row of a Format toolbar button, which shows or hides it. */
+    fun toggleToolbarButton(label: String) {
+        openSettingsSection(SettingsSection.EDITOR)
+        waitFor(hasText(label) and hasClickAction()).performClick()
+    }
+
     // ---- Daily notes ----
 
     // The report dialog merges its content: its tag is in the unmerged tree only.

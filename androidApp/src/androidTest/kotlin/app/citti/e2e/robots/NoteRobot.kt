@@ -60,19 +60,17 @@ class NoteRobot(
         waitFor(hasTestTag(TestTags.NOTE_PREVIEW))
     }
 
-    /** The software keyboard is closed (polled: the IME hides a moment after the request). */
+    /** The software keyboard is closed (waited for: the IME hides a moment after the request). */
     fun assertKeyboardHidden() {
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        repeat(20) {
+        waitUntil("the keyboard to hide") {
             val dump =
                 ParcelFileDescriptor
                     .AutoCloseInputStream(automation.executeShellCommand("dumpsys input_method"))
                     .bufferedReader()
                     .readText()
-            if (!dump.contains("mInputShown=true")) return
-            Thread.sleep(250)
+            !dump.contains("mInputShown=true")
         }
-        throw AssertionError("The keyboard is still shown")
     }
 
     /** Preview mode; a Note opens in it by default, so this only switches when the Edit mode is up. */
@@ -195,6 +193,18 @@ class NoteRobot(
     /** A Format toolbar button (Bold, Italic, Heading, List, Checkbox, Link). */
     fun tapToolbar(label: String) {
         waitFor(hasContentDescription(label) and hasClickAction()).performClick()
+    }
+
+    /** A Format toolbar button is there, or not (the editor must have the focus). */
+    fun assertToolbarButton(
+        label: String,
+        shown: Boolean,
+    ) {
+        if (shown) {
+            waitFor(hasContentDescription(label) and hasClickAction())
+        } else {
+            waitGone(hasContentDescription(label) and hasClickAction())
+        }
     }
 
     fun undo() {

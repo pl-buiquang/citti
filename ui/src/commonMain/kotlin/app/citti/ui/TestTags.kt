@@ -1,5 +1,6 @@
 package app.citti.ui
 
+import app.citti.core.markdown.ToolbarAction
 import app.citti.core.settings.ExclusionKind
 import app.citti.ui.settings.SettingsSection
 
@@ -47,6 +48,11 @@ object TestTags {
 
     /** Insert image: the toolbar button, the source sheet and its rows, the upload chip. */
     const val TOOLBAR_IMAGE = "toolbar.image"
+
+    fun toolbar(action: ToolbarAction): String = "toolbar.${action.name.lowercase()}"
+
+    fun settingsToolbarRow(action: ToolbarAction): String = "settings.toolbar.${action.name.lowercase()}"
+
     const val IMAGE_SHEET = "image.sheet"
     const val IMAGE_CAMERA = "image.camera"
     const val IMAGE_GALLERY = "image.gallery"

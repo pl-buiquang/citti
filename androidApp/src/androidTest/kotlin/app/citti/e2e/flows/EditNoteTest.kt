@@ -50,6 +50,28 @@ class EditNoteTest {
     }
 
     @Test
+    fun strikethroughFromTheToolbar() {
+        list.openNote("todo")
+        note.select("milk")
+        note.tapToolbar(Strings.TOOLBAR_STRIKE)
+        note.assertText("Buy ~~milk~~")
+        server.awaitRequest(Endpoint.UPDATE) { "~~milk~~" in it.body }
+    }
+
+    @Test
+    fun aHiddenToolbarButtonIsGoneFromTheEditor() {
+        list.assertRow("todo")
+        list.openSettings().apply {
+            toggleToolbarButton(Strings.TOOLBAR_CHECKBOX)
+            leave()
+        }
+        list.openNote("todo")
+        note.select("milk")
+        note.assertToolbarButton(Strings.TOOLBAR_BOLD, shown = true)
+        note.assertToolbarButton(Strings.TOOLBAR_CHECKBOX, shown = false)
+    }
+
+    @Test
     fun longNoteOpens() {
         list.openNote("long")
         note.assertTitle("long")

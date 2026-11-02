@@ -105,6 +105,7 @@ abstract class Robot(
             SettingsSection.EXCLUSIONS -> "Exclusions"
             SettingsSection.IMAGES -> "Images"
             SettingsSection.APPEARANCE -> "Appearance"
+            SettingsSection.EDITOR -> "Editor"
             SettingsSection.DAILY -> "Daily notes"
         }
 

@@ -669,10 +669,12 @@ class MainActivity : ComponentActivity() {
         BackHandler(enabled = state.imageSheet, onBack = controller::dismissImageSheet)
         val picker = rememberImagePicker(container.config::nowMillis, controller::onImagePicked)
         val remote by container.remoteImages.collectAsState()
+        val toolbar by container.toolbar.collectAsState()
         val images = remember(state.folder, remote) { imageEnv(state.folder, remote, controller::onImage) }
         NoteScreen(
             state = state,
             editor = controller.editor,
+            toolbar = toolbar,
             previewListState = rememberLazyListState(),
             actions =
                 NoteActions(
@@ -772,6 +774,8 @@ class MainActivity : ComponentActivity() {
                     onNetwork = controller::setNetwork,
                     onImageCacheMb = controller::setImageCacheMb,
                     onRemoteImages = controller::setRemoteImages,
+                    onToolbarToggle = controller::toggleToolbarButton,
+                    onToolbarMove = controller::moveToolbarButton,
                     onAskClearImages = controller::askClearImages,
                     onSyncNow = controller::syncNow,
                     onOpenSection = controller::openSection,
@@ -879,6 +883,7 @@ class MainActivity : ComponentActivity() {
                     .toLocalDateTime(TimeZone.of(container.config.timeZone().id))
             },
             remoteImages = container.remoteImages,
+            toolbar = container.editorSettings.toolbarFlow(),
         )
 
     private fun newLoginController() =

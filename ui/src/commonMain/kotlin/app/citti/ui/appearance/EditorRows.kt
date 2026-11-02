@@ -126,7 +126,7 @@ internal fun StepperRow(
 }
 
 @Composable
-private fun StepButton(
+internal fun StepButton(
     glyph: String,
     label: String,
     enabled: Boolean,

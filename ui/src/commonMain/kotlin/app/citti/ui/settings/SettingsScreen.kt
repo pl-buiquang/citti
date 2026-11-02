@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
+import app.citti.core.markdown.ToolbarAction
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.IMAGE_CACHE_CHOICES_MB
 import app.citti.core.settings.RemoteImages
@@ -34,6 +35,7 @@ import app.citti.core.settings.SyncNetwork
 import app.citti.ui.TestTags
 import app.citti.ui.appearance.AppearanceActions
 import app.citti.ui.appearance.AppearanceSection
+import app.citti.ui.appearance.StepButton
 import app.citti.ui.appearance.ThemeEditorActions
 import app.citti.ui.appearance.ThemeEditorPage
 import app.citti.ui.appearance.ThemeEditorState
@@ -48,6 +50,8 @@ import app.citti.ui.components.CittiTextField
 import app.citti.ui.components.CittiTopBar
 import app.citti.ui.components.PickerFolders
 import app.citti.ui.components.colored
+import app.citti.ui.markdown.label
+import app.citti.ui.markdown.mark
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.exclusion_journal_refused
 import app.citti.ui.resources.settings_account
@@ -60,6 +64,9 @@ import app.citti.ui.resources.settings_confirm_unsynced_body
 import app.citti.ui.resources.settings_confirm_unsynced_pending
 import app.citti.ui.resources.settings_confirm_unsynced_title
 import app.citti.ui.resources.settings_daily
+import app.citti.ui.resources.settings_editor
+import app.citti.ui.resources.settings_editor_toolbar
+import app.citti.ui.resources.settings_editor_toolbar_help
 import app.citti.ui.resources.settings_exclusions
 import app.citti.ui.resources.settings_folder_add
 import app.citti.ui.resources.settings_folder_blank
@@ -100,6 +107,8 @@ import app.citti.ui.resources.settings_sign_out_title
 import app.citti.ui.resources.settings_sync
 import app.citti.ui.resources.settings_sync_now
 import app.citti.ui.resources.settings_title
+import app.citti.ui.resources.settings_toolbar_move_down
+import app.citti.ui.resources.settings_toolbar_move_up
 import app.citti.ui.resources.settings_unsynced_help
 import app.citti.ui.resources.settings_unsynced_title
 import app.citti.ui.resources.settings_user
@@ -121,6 +130,8 @@ class SettingsActions(
     val onNetwork: (SyncNetwork) -> Unit,
     val onImageCacheMb: (Int) -> Unit,
     val onRemoteImages: (RemoteImages) -> Unit,
+    val onToolbarToggle: (ToolbarAction) -> Unit = {},
+    val onToolbarMove: (ToolbarAction, Boolean) -> Unit = { _, _ -> },
     val onAskClearImages: () -> Unit,
     val onSyncNow: () -> Unit,
     val onOpenSection: (SettingsSection) -> Unit,
@@ -211,6 +222,7 @@ private fun SettingsSection.title(): StringResource =
         SettingsSection.EXCLUSIONS -> Res.string.settings_exclusions
         SettingsSection.IMAGES -> Res.string.settings_images
         SettingsSection.APPEARANCE -> Res.string.settings_appearance
+        SettingsSection.EDITOR -> Res.string.settings_editor
         SettingsSection.DAILY -> Res.string.settings_daily
     }
 
@@ -269,6 +281,7 @@ private fun SettingsSectionPage(
         SettingsSection.EXCLUSIONS -> ExclusionsPage(state, actions)
         SettingsSection.IMAGES -> ImagesPage(state, actions)
         SettingsSection.APPEARANCE -> SectionPage(section, actions) { AppearanceSection(state.appearance, actions.appearance) }
+        SettingsSection.EDITOR -> EditorPage(state, actions)
         SettingsSection.DAILY -> SectionPage(section, actions) { DailyNotesSection(state.daily, actions.daily) }
     }
 }
@@ -328,6 +341,34 @@ private fun ExclusionsPage(
     state.daily.conflict?.let { DailyGuardBanner(it) }
     FolderList(ExclusionKind.UNSYNCED, Res.string.settings_unsynced_title, Res.string.settings_unsynced_help, state, actions)
     FolderList(ExclusionKind.HIDDEN, Res.string.settings_hidden_title, Res.string.settings_hidden_help, state, actions)
+}
+
+@Composable
+private fun EditorPage(
+    state: SettingsUiState,
+    actions: SettingsActions,
+) = SectionPage(SettingsSection.EDITOR, actions) {
+    val layout = state.toolbar
+    BasicText(stringResource(Res.string.settings_editor_toolbar), style = CittiTheme.typography.rowTitle.colored())
+    Help(Res.string.settings_editor_toolbar_help)
+    val up = stringResource(Res.string.settings_toolbar_move_up)
+    val down = stringResource(Res.string.settings_toolbar_move_down)
+    layout.order.forEachIndexed { index, action ->
+        Row(
+            Modifier.fillMaxWidth().testTag(TestTags.settingsToolbarRow(action)),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NotesSpacing.space2),
+        ) {
+            OptionRow(
+                stringResource(action.label()),
+                selected = action !in layout.hidden,
+                modifier = Modifier.weight(1f),
+                detail = action.mark(),
+            ) { actions.onToolbarToggle(action) }
+            StepButton("↑", up, enabled = index > 0) { actions.onToolbarMove(action, true) }
+            StepButton("↓", down, enabled = index < layout.order.lastIndex) { actions.onToolbarMove(action, false) }
+        }
+    }
 }
 
 @Composable
