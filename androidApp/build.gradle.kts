@@ -76,8 +76,11 @@ android {
             testInstrumentationRunnerArguments["annotation"] = "app.citti.e2e.Smoke"
         } else if (findProperty("e2e.widgets") != null) {
             testInstrumentationRunnerArguments["annotation"] = "app.citti.e2e.WidgetFlow"
+        } else if (findProperty("e2e.screenshots") != null) {
+            // The README screenshots: saved to the test storage as screenshots/<name>.png.
+            testInstrumentationRunnerArguments["annotation"] = "app.citti.e2e.ScreenshotFlow"
         } else {
-            testInstrumentationRunnerArguments["notAnnotation"] = "app.citti.e2e.WidgetFlow"
+            testInstrumentationRunnerArguments["notAnnotation"] = "app.citti.e2e.WidgetFlow,app.citti.e2e.ScreenshotFlow"
         }
     }
 

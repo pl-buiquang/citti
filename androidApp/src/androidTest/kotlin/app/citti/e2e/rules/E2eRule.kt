@@ -57,10 +57,14 @@ class FailureScreenshot : TestWatcher() {
         description: Description,
     ) {
         val name = "${description.testClass.simpleName}-${description.methodName}"
-        runCatching {
-            InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { shot ->
-                TestStorage().openOutputFile("e2e/$name.png").use { shot.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            }
-        }.onFailure { Log.e("FailureScreenshot", "could not save the screenshot", it) }
+        runCatching { saveScreenshot("e2e/$name.png") }
+            .onFailure { Log.e("FailureScreenshot", "could not save the screenshot", it) }
+    }
+}
+
+/** Saves a screenshot of the device to the test storage, as [path] (pulled with the other additional output). */
+fun saveScreenshot(path: String) {
+    InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { shot ->
+        TestStorage().openOutputFile(path).use { shot.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 }
