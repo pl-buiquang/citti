@@ -5,6 +5,8 @@ import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOneOrNull
 import app.citti.core.daily.DateLocales
 import app.citti.core.daily.MomentFormat
+import app.citti.core.daily.Period
+import app.citti.core.daily.PeriodKind
 import app.citti.core.db.CittiDatabase
 import app.citti.core.db.SettingQueries
 import app.citti.core.note.InvalidNameException
@@ -42,6 +44,18 @@ const val KEY_DAILY_LOCALE_DETECTED = "daily.locale-detected"
 /** `setting` key of the first day of the Calendar week; unset follows the phone locale. */
 const val KEY_DAILY_WEEK_START = "daily.week-start"
 
+/** `setting` key of the [kind]'s title format ([PeriodKind.periodic] kinds only), a Moment format. */
+fun periodFormatKey(kind: PeriodKind): String = "$DAILY_PREFIX${kind.name.lowercase()}-format"
+
+/** `setting` key of the [kind]'s Template ([PeriodKind.periodic] kinds only): a Vault path, or `""` for none. */
+fun periodTemplateKey(kind: PeriodKind): String = "$DAILY_PREFIX${kind.name.lowercase()}-template"
+
+/** `setting` key set to `1` when the Calendar shows the week numbers. */
+const val KEY_DAILY_SHOW_WEEKS = "daily.show-weeks"
+
+/** `setting` key set to `1` when the Calendar shows the quarter chip. */
+const val KEY_DAILY_SHOW_QUARTER = "daily.show-quarter"
+
 /** `setting` key of the cached Template text, JSON `{"path":…, "etag":…, "text":…}`. */
 const val KEY_DAILY_TEMPLATE_CACHE = "daily.template-cache"
 
@@ -58,6 +72,18 @@ val WEEK_START_CHOICES = listOf(DayOfWeek.MONDAY, DayOfWeek.SUNDAY, DayOfWeek.SA
 /** The dates a Date format must give back when parsed (`parse(format(d)) == d`). */
 internal val FORMAT_CHECK_DATES = listOf(LocalDate(2026, 1, 5), LocalDate(2026, 10, 31), LocalDate(2026, 12, 31))
 
+/** The dates a Periodic note format is checked on: year ends, and the days whose week belongs to another year. */
+internal val PERIOD_CHECK_DATES =
+    listOf(LocalDate(2026, 1, 5), LocalDate(2026, 10, 31), LocalDate(2026, 12, 31), LocalDate(2027, 1, 1), LocalDate(2024, 12, 30))
+
+/** A Periodic note's settings: the [format] of its title and its [template] (a Vault path, or `""` for none). */
+data class PeriodConfig(
+    val format: String,
+    val template: String = "",
+)
+
+private val DEFAULT_PERIODS = PeriodKind.periodic.associateWith { PeriodConfig(it.defaultFormat) }
+
 /** A snapshot of the Daily notes settings: what the rest of the app reads. */
 data class DailyConfig(
     val folder: String = DEFAULT_DAILY_FOLDER,
@@ -69,7 +95,19 @@ data class DailyConfig(
     val localeDetected: String? = null,
     /** The first day of the Calendar week, or null to follow the phone locale. */
     val weekStart: DayOfWeek? = null,
-)
+    /** The format and Template of each Periodic note kind ([PeriodKind.periodic]). */
+    val periods: Map<PeriodKind, PeriodConfig> = DEFAULT_PERIODS,
+    /** The Calendar shows the week numbers, which open the Week note. */
+    val showWeeks: Boolean = false,
+    /** The Calendar shows the quarter chip, which opens the Quarter note. */
+    val showQuarter: Boolean = false,
+) {
+    /** The title format of [kind]'s notes. */
+    fun formatOf(kind: PeriodKind): String = if (kind == PeriodKind.DAY) format else periods.getValue(kind).format
+
+    /** The Template path of [kind]'s notes, `""` for none. */
+    fun templateOf(kind: PeriodKind): String = if (kind == PeriodKind.DAY) template else periods.getValue(kind).template
+}
 
 /** The Template text cached for [path], with the ETag it was fetched with. */
 @Serializable
@@ -107,6 +145,29 @@ sealed interface FormatResult {
     data class InvalidTitle(
         val error: NameError,
     ) : FormatResult
+}
+
+/** What [DailySettings.setPeriodFormat] did. */
+sealed interface PeriodFormatResult {
+    data class Saved(
+        val format: String,
+    ) : PeriodFormatResult
+
+    /** The format contains `/` or `\`: titles are flat names. */
+    data object Slash : PeriodFormatResult
+
+    /** A period written in the format isn't a valid Note title ([NameError.UnsafeCharacter] for `:`, for example). */
+    data class InvalidTitle(
+        val error: NameError,
+    ) : PeriodFormatResult
+
+    /** Two neighbouring periods (or the same one a year apart) get the same title: the format misses a date part. */
+    data object Ambiguous : PeriodFormatResult
+
+    /** The format writes the same title as another kind's format does for the same date ([with]). */
+    data class Collision(
+        val with: PeriodKind,
+    ) : PeriodFormatResult
 }
 
 /**
@@ -204,6 +265,66 @@ class DailySettings(
     }
 
     /**
+     * Sets the title format of [kind]'s notes ([PeriodKind.periodic] kinds); blank resets it to the kind's default.
+     * Refuses `/` and `\`, a format that writes an invalid Note title, one that gives neighbouring periods the same
+     * title, and one that gives the same title as another kind's format for the same date (week `YYYY` and year
+     * `YYYY` would be one note).
+     */
+    fun setPeriodFormat(
+        kind: PeriodKind,
+        format: String,
+    ): PeriodFormatResult {
+        require(kind != PeriodKind.DAY) { "The Date format is set with setFormat" }
+        val wanted = format.ifBlank { kind.defaultFormat }
+        if (wanted.any { it == '/' || it == '\\' }) return PeriodFormatResult.Slash
+        val config = config()
+        val locale = DateLocales.forCode(config.locale ?: config.localeDetected)
+
+        fun title(
+            fmt: String,
+            period: Period,
+        ) = MomentFormat.format(period.start, LocalTime(0, 0), fmt, locale)
+
+        val periods = PERIOD_CHECK_DATES.map { Period.of(kind, it) }
+        periods
+            .firstNotNullOfOrNull { NameRules.validateTitle(title(wanted, it)) }
+            ?.let { return PeriodFormatResult.InvalidTitle(it) }
+        val ambiguous =
+            periods.any { p ->
+                val own = title(wanted, p)
+                own == title(wanted, p.next()) || own == title(wanted, p.nextYear())
+            }
+        if (ambiguous) return PeriodFormatResult.Ambiguous
+        PeriodKind.entries.filter { it != kind }.forEach { other ->
+            val clash =
+                PERIOD_CHECK_DATES.any { date ->
+                    title(wanted, Period.of(kind, date)) == title(config.formatOf(other), Period.of(other, date))
+                }
+            if (clash) return PeriodFormatResult.Collision(other)
+        }
+        if (format.isBlank()) queries.deleteSetting(periodFormatKey(kind)) else queries.upsertSetting(periodFormatKey(kind), wanted)
+        return PeriodFormatResult.Saved(wanted)
+    }
+
+    /** Sets the Template of [kind]'s notes ([PeriodKind.periodic] kinds): a Vault path (`.md` added), or blank for none. */
+    fun setPeriodTemplate(
+        kind: PeriodKind,
+        path: String,
+    ) {
+        require(kind != PeriodKind.DAY) { "The Daily Template is set with setTemplate" }
+        queries.upsertSetting(periodTemplateKey(kind), normalizeTemplatePath(path))
+    }
+
+    fun setShowWeeks(show: Boolean) = setFlag(KEY_DAILY_SHOW_WEEKS, show)
+
+    fun setShowQuarter(show: Boolean) = setFlag(KEY_DAILY_SHOW_QUARTER, show)
+
+    private fun setFlag(
+        key: String,
+        on: Boolean,
+    ) = if (on) queries.upsertSetting(key, "1") else queries.deleteSetting(key)
+
+    /**
      * The manual Date locale: a code of [DateLocales.all], or null for automatic. A manual choice is also stored as
      * the detected one, so detection stops; automatic clears both, so detection runs again.
      */
@@ -259,6 +380,12 @@ class DailySettings(
             locale = values[KEY_DAILY_LOCALE]?.takeIf(::isLocaleCode),
             localeDetected = values[KEY_DAILY_LOCALE_DETECTED]?.takeIf(::isLocaleCode),
             weekStart = values[KEY_DAILY_WEEK_START]?.let { raw -> WEEK_START_CHOICES.firstOrNull { it.name == raw } },
+            periods =
+                PeriodKind.periodic.associateWith {
+                    PeriodConfig(values[periodFormatKey(it)] ?: it.defaultFormat, values[periodTemplateKey(it)].orEmpty())
+                },
+            showWeeks = values[KEY_DAILY_SHOW_WEEKS] != null,
+            showQuarter = values[KEY_DAILY_SHOW_QUARTER] != null,
         )
 
     private fun isLocaleCode(code: String) = DateLocales.all.any { it.code == code }
