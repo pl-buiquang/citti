@@ -9,11 +9,12 @@ import kotlinx.datetime.number
  * Moment.js date formatting and strict parsing, for Daily note titles and Template dates (Obsidian formats dates with
  * Moment).
  *
- * The tokens are `YYYY YY MMMM MMM MM M DD D dddd ddd d ww w WW W Q HH mm ss`, longest first. `[literal]` and a
- * backslash before a token are escapes, as in Moment; every other character is kept as is. `ww`/`w` follow the
- * [DateLocale]'s week rule, `WW`/`W` are ISO weeks, and the year tokens are calendar years (`YYYY`, not `gggg`), so
- * `2027-01-01` in fr gives `2027-W53`, exactly like Moment. `Q` is the quarter 1–4 and `d` the weekday number with
- * 0 = Sunday.
+ * The tokens are `YYYY YY GGGG GG gggg gg MMMM MMM MM M DD D dddd ddd d ww w WW W Q HH mm ss`, longest first.
+ * `[literal]` and a backslash before a token are escapes, as in Moment; every other character is kept as is.
+ * `ww`/`w` follow the [DateLocale]'s week rule, `WW`/`W` are ISO weeks, and `YYYY`/`YY` are calendar years, so
+ * `2027-01-01` in fr gives `2027-W53` with `YYYY-[W]WW`, exactly like Moment. The week-year tokens give the year the
+ * week belongs to (`GGGG`/`GG` for the ISO weeks, `gggg`/`gg` for the locale's weeks): `2027-01-01` gives `2026-W53`
+ * with `GGGG-[W]WW`. `Q` is the quarter 1–4 and `d` the weekday number with 0 = Sunday.
  */
 object MomentFormat {
     /** [date] and [time] in [pattern], with [locale]'s names and week rule. */
@@ -74,12 +75,21 @@ object MomentFormat {
 
     /**
      * True when [pattern] writes something that depends on the Date locale: a month or weekday name, or the locale
-     * week (`ww`, `w`). A pattern without them gives the same text in every Date locale.
+     * week (`ww`, `w`, `gggg`, `gg`). A pattern without them gives the same text in every Date locale.
      */
     fun usesLocale(pattern: String): Boolean = parts(pattern).any { it is Part.Field && it.token in localeTokens }
 
     private val localeTokens =
-        setOf(Token.MONTH_NAME, Token.MONTH_SHORT, Token.WEEKDAY_NAME, Token.WEEKDAY_SHORT, Token.WEEK_2, Token.WEEK)
+        setOf(
+            Token.MONTH_NAME,
+            Token.MONTH_SHORT,
+            Token.WEEKDAY_NAME,
+            Token.WEEKDAY_SHORT,
+            Token.WEEK_2,
+            Token.WEEK,
+            Token.WEEK_YEAR,
+            Token.WEEK_YEAR_2,
+        )
 
     /** Moment's `weekOfYear(mom, dow, doy)`, ported as is: the week number and the year that week belongs to. */
     internal fun weekOfYear(
@@ -150,6 +160,10 @@ object MomentFormat {
             Token.WEEK -> weekOfYear(date, locale.dow, locale.doy).week.toString()
             Token.ISO_WEEK_2 -> weekOfYear(date, ISO_DOW, ISO_DOY).week.pad(2)
             Token.ISO_WEEK -> weekOfYear(date, ISO_DOW, ISO_DOY).week.toString()
+            Token.ISO_WEEK_YEAR -> weekOfYear(date, ISO_DOW, ISO_DOY).year.pad(4)
+            Token.ISO_WEEK_YEAR_2 -> (weekOfYear(date, ISO_DOW, ISO_DOY).year % 100).pad(2)
+            Token.WEEK_YEAR -> weekOfYear(date, locale.dow, locale.doy).year.pad(4)
+            Token.WEEK_YEAR_2 -> (weekOfYear(date, locale.dow, locale.doy).year % 100).pad(2)
             Token.QUARTER -> ((month - 1) / 3 + 1).toString()
             Token.HOUR_2 -> time.hour.pad(2)
             Token.MINUTE_2 -> time.minute.pad(2)
@@ -188,6 +202,10 @@ object MomentFormat {
     ) {
         YEAR("YYYY"),
         YEAR_2("YY"),
+        ISO_WEEK_YEAR("GGGG"),
+        ISO_WEEK_YEAR_2("GG"),
+        WEEK_YEAR("gggg"),
+        WEEK_YEAR_2("gg"),
         MONTH_NAME("MMMM"),
         MONTH_SHORT("MMM"),
         MONTH_2("MM"),
@@ -285,7 +303,7 @@ object MomentFormat {
         locale: DateLocale,
     ): String =
         when (token) {
-            Token.YEAR -> """\d{4}"""
+            Token.YEAR, Token.ISO_WEEK_YEAR, Token.WEEK_YEAR -> """\d{4}"""
 
             Token.MONTH_NAME -> alternatives(locale.months)
 
@@ -301,8 +319,8 @@ object MomentFormat {
 
             Token.MONTH, Token.DAY, Token.WEEK, Token.ISO_WEEK -> """\d{1,2}"""
 
-            Token.YEAR_2, Token.MONTH_2, Token.DAY_2, Token.WEEK_2, Token.ISO_WEEK_2, Token.HOUR_2, Token.MINUTE_2,
-            Token.SECOND_2,
+            Token.YEAR_2, Token.ISO_WEEK_YEAR_2, Token.WEEK_YEAR_2, Token.MONTH_2, Token.DAY_2, Token.WEEK_2,
+            Token.ISO_WEEK_2, Token.HOUR_2, Token.MINUTE_2, Token.SECOND_2,
             -> """\d{2}"""
         }
 

@@ -46,6 +46,30 @@ class MomentFormatTest {
         assertEquals("2027-W53", MomentFormat.format(LocalDate(2027, 1, 1), noon, "YYYY-[W]ww", DateLocales.fr))
 
     @Test
+    fun weekYearTokensGiveTheYearOfTheWeek() {
+        val fr = DateLocales.fr
+        assertEquals("2026-W53", MomentFormat.format(LocalDate(2027, 1, 1), noon, "GGGG-[W]WW", fr))
+        assertEquals("2025-W01", MomentFormat.format(LocalDate(2024, 12, 30), noon, "GGGG-[W]WW", fr))
+        assertEquals("2024-W52", MomentFormat.format(LocalDate(2024, 12, 29), noon, "GGGG-[W]WW", fr))
+        assertEquals("26-W53", MomentFormat.format(LocalDate(2027, 1, 1), noon, "GG-[W]WW", fr))
+        assertEquals("2026-W53", MomentFormat.format(LocalDate(2027, 1, 1), noon, "gggg-[W]ww", fr))
+        assertEquals("26-W53", MomentFormat.format(LocalDate(2027, 1, 1), noon, "gg-[W]ww", fr))
+    }
+
+    @Test
+    fun theLocaleWeekYearFollowsTheLocaleRule() {
+        // en weeks start on Sunday and week 1 holds 1 January: 2027-01-01 is week 1 of 2027, not week 53 of 2026.
+        assertEquals("2027-W01", MomentFormat.format(LocalDate(2027, 1, 1), noon, "gggg-[W]ww", DateLocales.en))
+        assertEquals("2026-W53", MomentFormat.format(LocalDate(2027, 1, 1), noon, "GGGG-[W]WW", DateLocales.en))
+    }
+
+    @Test
+    fun onlyTheLocaleWeekYearDependsOnTheLocale() {
+        assertEquals(false, MomentFormat.usesLocale("GGGG-[W]WW"))
+        assertEquals(true, MomentFormat.usesLocale("gggg-[W]ww"))
+    }
+
+    @Test
     fun bracketsAndBackslashesEscape() {
         val date = LocalDate(2026, 10, 31)
         assertEquals("Week 44 of YYYY", MomentFormat.format(date, noon, "[Week] ww [of YYYY]", DateLocales.en))
