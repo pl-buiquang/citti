@@ -271,6 +271,7 @@ class EditorState(
                 ToolbarAction.Image -> return false
                 ToolbarAction.Bold -> TextOps.bold(document, sel)
                 ToolbarAction.Italic -> TextOps.italic(document, sel)
+                ToolbarAction.Strike -> TextOps.strike(document, sel)
                 ToolbarAction.Heading -> TextOps.heading(document, sel)
                 ToolbarAction.List -> TextOps.list(document, sel)
                 ToolbarAction.Checkbox -> TextOps.checkbox(document, sel)

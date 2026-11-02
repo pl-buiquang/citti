@@ -88,6 +88,7 @@
     <string name="deleted_snackbar">This note was deleted. Your text was saved as “%1$s”</string>
     <string name="toolbar_bold">Bold</string>
     <string name="toolbar_italic">Italic</string>
+    <string name="toolbar_strike">Strikethrough</string>
     <string name="toolbar_heading">Heading</string>
     <string name="toolbar_list">List</string>
     <string name="toolbar_checkbox">Checkbox</string>

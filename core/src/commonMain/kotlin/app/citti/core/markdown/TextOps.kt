@@ -17,7 +17,7 @@ data class Edit(
 )
 
 /** The buttons of the format toolbar. [Image] opens the Image source sheet instead of editing the text. */
-enum class ToolbarAction { Bold, Italic, Heading, List, Checkbox, Link, Image }
+enum class ToolbarAction { Bold, Italic, Strike, Heading, List, Checkbox, Link, Image }
 
 /**
  * The formatting actions of the toolbar and the Enter key, as pure functions of the document and the selection.
@@ -34,6 +34,11 @@ object TextOps {
         sel: Selection,
     ): Edit = wrap(doc, sel, listOf("_", "*"))
 
+    fun strike(
+        doc: MarkdownDocument,
+        sel: Selection,
+    ): Edit = wrap(doc, sel, listOf("~~"))
+
     /** [delims]: the first is what gets inserted; all of them are recognised when unwrapping. */
     private fun wrap(
         doc: MarkdownDocument,
@@ -42,13 +47,13 @@ object TextOps {
     ): Edit {
         val text = doc.text()
         val insert = delims.first()
-        val bold = insert == "**"
+        val double = insert.length == 2
 
         // A single * or _ is not the half of a double one.
         fun isSingle(
             d: String,
             at: Int,
-        ) = bold || (text.getOrNull(at - 1) != d[0] && text.getOrNull(at + d.length) != d[0])
+        ) = double || (text.getOrNull(at - 1) != d[0] && text.getOrNull(at + d.length) != d[0])
 
         // The range to work on: the selection, or the word around the caret.
         var s = sel.start
@@ -288,6 +293,7 @@ object TextOps {
         fun inside(vararg kinds: SpanKind) = spans.any { it.kind in kinds && at >= it.start && at <= it.end }
         if (inside(SpanKind.Bold)) result += ToolbarAction.Bold
         if (inside(SpanKind.Italic)) result += ToolbarAction.Italic
+        if (inside(SpanKind.Strike)) result += ToolbarAction.Strike
         if (info.headingLevel > 0) result += ToolbarAction.Heading
         if (info.marker != null) result += ToolbarAction.List
         if (info.task != null) result += ToolbarAction.Checkbox

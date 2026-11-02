@@ -106,6 +106,16 @@ class EditorStateTest {
     }
 
     @Test
+    fun strikeIsOneUndoStep() {
+        open("word")
+        state.selectionChanged()
+        state.toolbar(ToolbarAction.Strike)
+        assertEquals("word~~~~", host.text)
+        state.undo()
+        assertEquals("word", host.text)
+    }
+
+    @Test
     fun theToolbarActionIsPressedAtTheCaret() {
         open("# title")
         state.selectionChanged()

@@ -55,6 +55,27 @@ class TextOpsTest {
     }
 
     @Test
+    fun strikeWrapsTheSelection() {
+        val (t, s) = run("a word b", Selection(2, 6), TextOps::strike)
+        assertEquals("a ~~word~~ b", t)
+        assertEquals(Selection(4, 8), s)
+    }
+
+    @Test
+    fun strikeUnwrapsFromInsideAndFromOutside() {
+        assertEquals("a word b", run("a ~~word~~ b", Selection(4, 8), TextOps::strike).first)
+        assertEquals("a word b", run("a ~~word~~ b", Selection(2, 10), TextOps::strike).first)
+        assertEquals("a word b", run("a ~~word~~ b", caret(6), TextOps::strike).first)
+    }
+
+    @Test
+    fun strikeWithNoSelectionInsertsFourTildes() {
+        val (t, s) = run("ab", caret(1), TextOps::strike)
+        assertEquals("a~~~~b", t)
+        assertEquals(caret(3), s)
+    }
+
+    @Test
     fun italicUsesUnderscoreAndRecognisesStar() {
         assertEquals("a _x_ b", run("a x b", Selection(2, 3), TextOps::italic).first)
         assertEquals("a x b", run("a _x_ b", Selection(3, 4), TextOps::italic).first)
@@ -187,6 +208,7 @@ class TextOpsTest {
         ) = TextOps.pressed(doc(text), caret(at))
         assertEquals(setOf(ToolbarAction.Bold), pressed("a **b** c", 5))
         assertEquals(setOf(ToolbarAction.Italic), pressed("a _b_ c", 3))
+        assertEquals(setOf(ToolbarAction.Strike), pressed("a ~~b~~ c", 4))
         assertEquals(setOf(ToolbarAction.Heading), pressed("## t", 4))
         assertEquals(setOf(ToolbarAction.List), pressed("- t", 3))
         assertEquals(setOf(ToolbarAction.List, ToolbarAction.Checkbox), pressed("- [ ] t", 7))
