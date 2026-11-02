@@ -78,15 +78,22 @@ class DailyNotes(
     fun titleFor(
         date: LocalDate,
         config: DailyConfig = settings.config(),
-    ): String = titleAt(date, now().time, config)
+    ): String = titleFor(Period.of(PeriodKind.DAY, date), config)
+
+    /** The title of [period]'s note, in its kind's format. */
+    fun titleFor(
+        period: Period,
+        config: DailyConfig = settings.config(),
+    ): String = titleAt(period, now().time, config)
 
     private fun titleAt(
-        date: LocalDate,
+        period: Period,
         time: LocalTime,
         config: DailyConfig,
     ): String {
-        val locale = if (MomentFormat.usesLocale(config.format)) locales.localeForRendering(config) else DateLocales.forCode(null)
-        return MomentFormat.format(date, time, config.format, locale)
+        val format = config.formatOf(period.kind)
+        val locale = if (MomentFormat.usesLocale(format)) locales.localeForRendering(config) else DateLocales.forCode(null)
+        return MomentFormat.format(period.start, time, format, locale)
     }
 
     /**
@@ -99,26 +106,51 @@ class DailyNotes(
         config: DailyConfig = settings.config(),
     ): LocalDate? = if (folder != config.folder) null else dailyDate(title, config.format, locales.readingLocales(config))
 
+    /**
+     * The Daily or Periodic note [title] of [folder] is, or null when it isn't one (another folder, or a title that
+     * isn't one of the formats exactly). The Daily format is tried first. Runs no detection.
+     */
+    fun periodOf(
+        folder: String,
+        title: String,
+        config: DailyConfig = settings.config(),
+    ): Period? {
+        if (folder != config.folder) return null
+        val reading = locales.readingLocales(config)
+        dailyDate(title, config.format, reading)?.let { return Period.of(PeriodKind.DAY, it) }
+        return PeriodTitles.match(title, config, reading)
+    }
+
     /** The local Daily note of [date], or null; no network, no detection. */
     fun localNote(
         date: LocalDate,
         config: DailyConfig = settings.config(),
+    ): Long? = localNote(Period.of(PeriodKind.DAY, date), config)
+
+    /** The local note of [period], or null; no network, no detection. */
+    fun localNote(
+        period: Period,
+        config: DailyConfig = settings.config(),
     ): Long? {
         val time = now().time
+        val format = config.formatOf(period.kind)
         return locales
             .readingLocales(config)
-            .map { MomentFormat.format(date, time, config.format, it) }
+            .map { MomentFormat.format(period.start, time, format, it) }
             .distinct()
             .firstNotNullOfOrNull { notes.selectExactByFolderAndTitle(config.folder, it).executeAsOneOrNull() }
     }
 
     /** Opens [date]'s Daily note, or renders the Template and creates it. */
-    suspend fun openOrCreate(date: LocalDate): DailyResult {
+    suspend fun openOrCreate(date: LocalDate): DailyResult = openOrCreate(Period.of(PeriodKind.DAY, date))
+
+    /** Opens [period]'s note (a Daily note or a Periodic note), or renders its Template and creates it. */
+    suspend fun openOrCreate(period: Period): DailyResult {
         if (guard.current() != null) return DailyResult.JournalUnsynced
         val config = settings.config()
         val folder = config.folder
         val time = now().time
-        val title = titleAt(date, time, config)
+        val title = titleAt(period, time, config)
         NameRules.validateTitle(title)?.let { return DailyResult.InvalidTitle(title, it) }
         when (val check = creator.check(folder, title)) {
             is NoteCreator.Check.Exists -> {
@@ -132,14 +164,14 @@ class DailyNotes(
                 Unit
             }
         }
-        val template = templates.load(config.template)
+        val template = templates.load(config.templateOf(period.kind))
         val locale = locales.localeForRendering(settings.config())
         val rendered =
             TemplateRenderer.render(
                 (template as? TemplateText.Found)?.text.orEmpty(),
-                date,
+                period.start,
                 time,
-                config.format,
+                config.formatOf(period.kind),
                 locale,
             )
         val localId = creator.create(folder, title, rendered)

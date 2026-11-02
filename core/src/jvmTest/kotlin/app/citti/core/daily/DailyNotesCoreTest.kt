@@ -370,6 +370,94 @@ class DailyNotesCoreTest {
             assertNull(daily.localNote(LocalDate(2026, 10, 12)))
         }
 
+    @Test
+    fun aPeriodicNoteIsCreatedEmptyWithTheTitleOfItsFormat() =
+        test {
+            phone = "fr"
+            val daily = dailyNotes()
+
+            val month = assertIs<DailyResult.Created>(daily.openOrCreate(Period.of(PeriodKind.MONTH, LocalDate(2026, 10, 31))))
+            val week = assertIs<DailyResult.Created>(daily.openOrCreate(Period.of(PeriodKind.WEEK, LocalDate(2027, 1, 1))))
+            val quarter = assertIs<DailyResult.Created>(daily.openOrCreate(Period.of(PeriodKind.QUARTER, LocalDate(2026, 10, 31))))
+            val year = assertIs<DailyResult.Created>(daily.openOrCreate(Period.of(PeriodKind.YEAR, LocalDate(2026, 10, 31))))
+
+            assertEquals(
+                listOf("2026-octobre", "2026-W53", "2026-Q4", "2026"),
+                listOf(month, week, quarter, year).map { row(it.localId).title },
+            )
+            listOf(month, week, quarter, year).forEach {
+                assertEquals("", row(it.localId).content)
+                assertEquals("journal", row(it.localId).category)
+                assertNull(it.templateMissing)
+            }
+        }
+
+    @Test
+    fun aPeriodicNoteRendersItsOwnTemplateFromTheStartOfThePeriod() =
+        test {
+            phone = "fr"
+            notes.insertNew("month", "templates", "# {{title}}\n{{date:MMMM YYYY}} W{{date:ww}}\n", seconds, null)
+            settings.setPeriodTemplate(PeriodKind.MONTH, "templates/month")
+
+            val created = assertIs<DailyResult.Created>(dailyNotes().openOrCreate(Period.of(PeriodKind.MONTH, LocalDate(2026, 10, 31))))
+
+            assertEquals("# 2026-octobre\noctobre 2026 W40\n", row(created.localId).content)
+        }
+
+    @Test
+    fun aMissingPeriodicTemplateSaysSo() =
+        test {
+            settings.setPeriodTemplate(PeriodKind.YEAR, "templates/year")
+
+            val created = assertIs<DailyResult.Created>(dailyNotes().openOrCreate(Period.of(PeriodKind.YEAR, LocalDate(2026, 10, 31))))
+
+            assertEquals("templates/year.md", created.templateMissing)
+        }
+
+    @Test
+    fun theServersPeriodicNoteOpensInsteadOfADuplicate() =
+        test {
+            val remote = server.addNote("2026-W44", "# Week 44\n", category = "journal")
+            val daily = dailyNotes()
+
+            val result = daily.openOrCreate(Period.of(PeriodKind.WEEK, LocalDate(2026, 10, 31)))
+
+            assertEquals(DailyResult.Opened(notes.selectByRemoteId(remote).executeAsOne().local_id), result)
+            advanceUntilIdle()
+            assertEquals(0, count(Endpoint.CREATE))
+        }
+
+    @Test
+    fun periodOfNamesTheDailyOrPeriodicNoteATitleIs() =
+        test {
+            phone = "fr"
+            val daily = dailyNotes()
+
+            assertEquals(Period.of(PeriodKind.DAY, LocalDate(2026, 10, 31)), daily.periodOf("journal", "2026-10-31"))
+            assertEquals(Period.of(PeriodKind.WEEK, LocalDate(2026, 10, 26)), daily.periodOf("journal", "2026-W44"))
+            assertEquals(Period.of(PeriodKind.MONTH, LocalDate(2026, 10, 1)), daily.periodOf("journal", "2026-octobre"))
+            assertEquals(Period.of(PeriodKind.QUARTER, LocalDate(2026, 10, 1)), daily.periodOf("journal", "2026-Q4"))
+            assertEquals(Period.of(PeriodKind.YEAR, LocalDate(2026, 1, 1)), daily.periodOf("journal", "2026"))
+            // The week of 2027-01-01 belongs to 2026.
+            assertEquals(Period.of(PeriodKind.WEEK, LocalDate(2026, 12, 28)), daily.periodOf("journal", "2026-W53"))
+            assertNull(daily.periodOf("journal", "2027-W53"))
+            assertNull(daily.periodOf("journal", "Ideas"))
+            assertNull(daily.periodOf("journal", "2026-W44 (conflict 2026-11-02)"))
+            assertNull(daily.periodOf("work", "2026-W44"))
+        }
+
+    @Test
+    fun aPeriodicNoteIsFoundLocally() =
+        test {
+            phone = "fr"
+            notes.insertNew("2026-octobre", "journal", "# Octobre\n", seconds, null)
+            val local = notes.lastInsertedLocalId().executeAsOne()
+            val daily = dailyNotes()
+
+            assertEquals(local, daily.localNote(Period.of(PeriodKind.MONTH, LocalDate(2026, 10, 12))))
+            assertNull(daily.localNote(Period.of(PeriodKind.MONTH, LocalDate(2026, 11, 12))))
+        }
+
     private companion object {
         /** The vault's templates/daily.md, byte for byte (two spaces after the title, a trailing blank line). */
         const val DAILY =
