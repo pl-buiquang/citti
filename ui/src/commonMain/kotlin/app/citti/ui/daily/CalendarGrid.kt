@@ -179,7 +179,6 @@ private fun PeriodTarget(
         } else {
             BasicText(
                 text,
-                Modifier.clearAndSetSemantics {},
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style =
@@ -217,8 +216,7 @@ private fun HeaderChip(
                 text,
                 Modifier
                     .border(Dp.Hairline, CittiTheme.colors.line, shape)
-                    .padding(horizontal = NotesSpacing.space3, vertical = NotesSpacing.space1)
-                    .let { if (description != null) it.clearAndSetSemantics {} else it },
+                    .padding(horizontal = NotesSpacing.space3, vertical = NotesSpacing.space1),
                 style = CittiTheme.typography.ui.colored(),
             )
         }
