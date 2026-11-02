@@ -8,6 +8,7 @@ import app.citti.core.appearance.ModeChoice
 import app.citti.core.appearance.ThemeChoice
 import app.citti.core.daily.IMPORT_FOLDER
 import app.citti.core.daily.ImportReport
+import app.citti.core.daily.PeriodKind
 import app.citti.core.markdown.ToolbarAction
 import app.citti.core.note.InvalidNameException
 import app.citti.core.note.NameError
@@ -17,6 +18,7 @@ import app.citti.core.settings.DailyConfig
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.FolderResult
 import app.citti.core.settings.FormatResult
+import app.citti.core.settings.PeriodFormatResult
 import app.citti.core.settings.RemoteImages
 import app.citti.core.settings.SyncNetwork
 import app.citti.core.settings.ToolbarLayout
@@ -143,6 +145,26 @@ private class FakeDailyStore : DailySettingsStore {
     override suspend fun setLocale(code: String?) = config.update { it.copy(locale = code, localeDetected = code) }
 
     override suspend fun setWeekStart(day: DayOfWeek?) = config.update { it.copy(weekStart = day) }
+
+    override suspend fun setPeriodFormat(
+        kind: PeriodKind,
+        format: String,
+    ): PeriodFormatResult {
+        if ('/' in format) return PeriodFormatResult.Slash
+        if ("Y" !in format) return PeriodFormatResult.Ambiguous
+        if (format == config.value.format) return PeriodFormatResult.Collision(PeriodKind.DAY)
+        config.update { it.copy(periods = it.periods + (kind to it.periods.getValue(kind).copy(format = format))) }
+        return PeriodFormatResult.Saved(format)
+    }
+
+    override suspend fun setPeriodTemplate(
+        kind: PeriodKind,
+        path: String,
+    ) = config.update { it.copy(periods = it.periods + (kind to it.periods.getValue(kind).copy(template = path))) }
+
+    override suspend fun setShowWeeks(show: Boolean) = config.update { it.copy(showWeeks = show) }
+
+    override suspend fun setShowQuarter(show: Boolean) = config.update { it.copy(showQuarter = show) }
 
     override suspend fun importFromObsidian(): ImportReport? {
         imports++
@@ -492,6 +514,121 @@ class SettingsControllerTest {
             c.onFormat("YYYY-MM")
             assertEquals(FormatResult.RoundTrip, c.state.value.daily.formatError)
             assertEquals("2026-10", c.state.value.daily.formatExample)
+        }
+
+    @Test
+    fun eachPeriodicNoteHasItsFormatWithATitleOfToday() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            val periods = c.state.value.daily.periods
+            assertEquals(PeriodKind.periodic, periods.keys.toList())
+            assertEquals("GGGG-[W]WW", periods.getValue(PeriodKind.WEEK).format)
+            // Saturday 31 October 2026, the phone speaking German.
+            assertEquals(
+                listOf("2026-W44", "2026-Oktober", "2026-Q4", "2026"),
+                PeriodKind.periodic.map { periods.getValue(it).example },
+            )
+        }
+
+    @Test
+    fun aPeriodicFormatIsSavedWhenValidElseTheErrorShowsAndTheSavedOneStays() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            c.onPeriodFormat(PeriodKind.MONTH, "MMMM YYYY")
+            assertEquals("MMMM YYYY", daily.config.value.formatOf(PeriodKind.MONTH))
+            assertEquals(
+                "Oktober 2026",
+                c.state.value.daily.periods
+                    .getValue(PeriodKind.MONTH)
+                    .example,
+            )
+            assertNull(
+                c.state.value.daily.periods
+                    .getValue(PeriodKind.MONTH)
+                    .formatError,
+            )
+
+            c.onPeriodFormat(PeriodKind.MONTH, "MMMM")
+            assertEquals(
+                PeriodFormatResult.Ambiguous,
+                c.state.value.daily.periods
+                    .getValue(PeriodKind.MONTH)
+                    .formatError,
+            )
+            assertEquals(
+                "MMMM",
+                c.state.value.daily.periods
+                    .getValue(PeriodKind.MONTH)
+                    .format,
+            )
+            assertEquals("MMMM YYYY", daily.config.value.formatOf(PeriodKind.MONTH))
+
+            c.onPeriodFormat(PeriodKind.YEAR, "YYYY/MM")
+            assertEquals(
+                PeriodFormatResult.Slash,
+                c.state.value.daily.periods
+                    .getValue(PeriodKind.YEAR)
+                    .formatError,
+            )
+            // Another kind's error is not shown on this one.
+            assertNull(
+                c.state.value.daily.periods
+                    .getValue(PeriodKind.WEEK)
+                    .formatError,
+            )
+
+            c.onPeriodFormat(PeriodKind.WEEK, "YYYY-MM-DD")
+            assertEquals(
+                PeriodFormatResult.Collision(PeriodKind.DAY),
+                c.state.value.daily.periods
+                    .getValue(PeriodKind.WEEK)
+                    .formatError,
+            )
+        }
+
+    @Test
+    fun theTemplatePickerChoosesTheTemplateOfThePeriodicNoteItWasOpenedFor() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            c.openTemplatePicker(PeriodKind.MONTH)
+            assertEquals(PeriodKind.MONTH, (c.state.value.page as SettingsPage.PickTemplate).kind)
+            c.chooseTemplate("templates/Weekly.md")
+            assertEquals("templates/Weekly.md", daily.config.value.templateOf(PeriodKind.MONTH))
+            assertEquals("templates/daily.md", daily.config.value.template)
+            assertEquals(SettingsPage.Section(SettingsSection.DAILY), c.state.value.page)
+            assertFalse(
+                c.state.value.daily.periods
+                    .getValue(PeriodKind.MONTH)
+                    .templateLocal,
+            )
+        }
+
+    @Test
+    fun theCalendarSwitchesAreStored() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            assertFalse(daily.config.value.showWeeks)
+            c.setShowWeeks(true)
+            c.setShowQuarter(true)
+            assertTrue(daily.config.value.showWeeks)
+            assertTrue(daily.config.value.showQuarter)
+            c.setShowWeeks(false)
+            assertFalse(daily.config.value.showWeeks)
+        }
+
+    @Test
+    fun theWeekHintShowsOnlyForIsoWeeksWithAnotherFirstDay() =
+        runTest(UnconfinedTestDispatcher()) {
+            val c = controller(FakeStore())
+            assertFalse(c.state.value.daily.weekStartHint)
+            c.setWeekStart(DayOfWeek.SUNDAY)
+            assertTrue(c.state.value.daily.weekStartHint)
+            c.onPeriodFormat(PeriodKind.WEEK, "YYYY-[Week]ww")
+            assertFalse(c.state.value.daily.weekStartHint)
+            c.onPeriodFormat(PeriodKind.WEEK, "YYYY-[Week]WW")
+            assertTrue(c.state.value.daily.weekStartHint)
+            c.setWeekStart(DayOfWeek.MONDAY)
+            assertFalse(c.state.value.daily.weekStartHint)
         }
 
     @Test

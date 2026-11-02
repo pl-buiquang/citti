@@ -170,12 +170,34 @@ fun SettingsScreen(
             .safeDrawingPadding(),
     ) {
         when (val page = state.page) {
-            SettingsPage.Home -> SettingsHome(appVersion, actions)
-            is SettingsPage.Section -> SettingsSectionPage(page.section, state, nowSeconds, actions)
-            is SettingsPage.PickFolder -> FolderPicker(page.kind, state, actions)
-            is SettingsPage.PickJournal -> JournalFolderPage(page, folders, actions.daily)
-            is SettingsPage.PickTemplate -> TemplatePickerPage(page, state.daily.config.template, actions.onBack, actions.daily)
-            SettingsPage.ThemeEditor -> ThemeEditorPage(editor, actions.editor)
+            SettingsPage.Home -> {
+                SettingsHome(appVersion, actions)
+            }
+
+            is SettingsPage.Section -> {
+                SettingsSectionPage(page.section, state, nowSeconds, actions)
+            }
+
+            is SettingsPage.PickFolder -> {
+                FolderPicker(page.kind, state, actions)
+            }
+
+            is SettingsPage.PickJournal -> {
+                JournalFolderPage(page, folders, actions.daily)
+            }
+
+            is SettingsPage.PickTemplate -> {
+                TemplatePickerPage(
+                    page,
+                    state.daily.config.templateOf(page.kind),
+                    actions.onBack,
+                    actions.daily,
+                )
+            }
+
+            SettingsPage.ThemeEditor -> {
+                ThemeEditorPage(editor, actions.editor)
+            }
         }
         state.confirm?.let { ConfirmDialog(it, actions) }
         state.daily.importReport?.let { ImportReportDialog(it, actions.daily.onDismissImportReport) }

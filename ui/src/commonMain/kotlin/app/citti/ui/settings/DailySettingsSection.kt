@@ -26,11 +26,14 @@ import app.citti.core.daily.IMPORT_FOLDER
 import app.citti.core.daily.IMPORT_FORMAT
 import app.citti.core.daily.IMPORT_TEMPLATE
 import app.citti.core.daily.ImportReport
+import app.citti.core.daily.PeriodKind
 import app.citti.core.daily.Refusal
 import app.citti.core.note.NameError
 import app.citti.core.settings.FormatResult
+import app.citti.core.settings.PeriodFormatResult
 import app.citti.core.settings.WEEK_START_CHOICES
 import app.citti.ui.TestTags
+import app.citti.ui.appearance.SwitchRow
 import app.citti.ui.components.Banner
 import app.citti.ui.components.BannerKind
 import app.citti.ui.components.ButtonKind
@@ -45,6 +48,8 @@ import app.citti.ui.components.colored
 import app.citti.ui.components.nameErrorText
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.choose
+import app.citti.ui.resources.format_error_ambiguous
+import app.citti.ui.resources.format_error_collision
 import app.citti.ui.resources.format_error_roundtrip
 import app.citti.ui.resources.format_error_slash
 import app.citti.ui.resources.guard_banner
@@ -68,18 +73,28 @@ import app.citti.ui.resources.locale_nl
 import app.citti.ui.resources.locale_pt
 import app.citti.ui.resources.monday
 import app.citti.ui.resources.saturday
-import app.citti.ui.resources.settings_daily
+import app.citti.ui.resources.settings_daily_note
 import app.citti.ui.resources.settings_date_format
 import app.citti.ui.resources.settings_date_format_example
 import app.citti.ui.resources.settings_date_locale
 import app.citti.ui.resources.settings_import_obsidian
 import app.citti.ui.resources.settings_journal_folder
+import app.citti.ui.resources.settings_month_note
+import app.citti.ui.resources.settings_period_format
+import app.citti.ui.resources.settings_quarter_note
+import app.citti.ui.resources.settings_show_quarter
+import app.citti.ui.resources.settings_show_weeks
 import app.citti.ui.resources.settings_template
 import app.citti.ui.resources.settings_template_none
 import app.citti.ui.resources.settings_template_search
 import app.citti.ui.resources.settings_template_unsynced
+import app.citti.ui.resources.settings_week_hint
+import app.citti.ui.resources.settings_week_note
 import app.citti.ui.resources.settings_week_start
+import app.citti.ui.resources.settings_year_note
 import app.citti.ui.resources.sunday
+import app.citti.ui.resources.theme_editor_off
+import app.citti.ui.resources.theme_editor_on
 import app.citti.ui.resources.tree_root
 import app.citti.ui.resources.week_auto
 import app.citti.ui.theme.CittiTheme
@@ -90,15 +105,20 @@ import kotlinx.datetime.DayOfWeek
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** The actions of Settings › Daily notes and its pickers; the app binds them to a [SettingsController]. */
+/** The actions of Settings › Journal and its pickers; the app binds them to a [SettingsController]. */
 class DailySettingsActions(
     val onOpenJournalPicker: () -> Unit,
     val journalPicker: FolderPickerActions,
-    val onOpenTemplatePicker: () -> Unit,
+    /** Opens the Template picker of the Daily notes ([PeriodKind.DAY]) or of a Periodic note kind. */
+    val onOpenTemplatePicker: (PeriodKind) -> Unit,
     val onTemplateQuery: (String) -> Unit,
     /** A Note's Vault path with `.md`, or `""` for None. */
     val onChooseTemplate: (String) -> Unit,
     val onFormat: (String) -> Unit,
+    /** The title format of a Week, Month, Quarter or Year note. */
+    val onPeriodFormat: (PeriodKind, String) -> Unit,
+    val onShowWeeks: (Boolean) -> Unit,
+    val onShowQuarter: (Boolean) -> Unit,
     val onDateLocale: (String?) -> Unit,
     val onWeekStart: (DayOfWeek?) -> Unit,
     val onImport: () -> Unit,
@@ -121,6 +141,9 @@ fun SettingsController.dailyActions(): DailySettingsActions =
         onTemplateQuery = ::onTemplateQuery,
         onChooseTemplate = ::chooseTemplate,
         onFormat = ::onFormat,
+        onPeriodFormat = ::onPeriodFormat,
+        onShowWeeks = ::setShowWeeks,
+        onShowQuarter = ::setShowQuarter,
         onDateLocale = ::setDateLocale,
         onWeekStart = ::setWeekStart,
         onImport = ::importFromObsidian,
@@ -142,8 +165,9 @@ private val LOCALE_NAMES: List<Pair<String, StringResource>> =
 private fun localeName(code: String): StringResource = LOCALE_NAMES.firstOrNull { it.first == code }?.second ?: Res.string.locale_en
 
 /**
- * Settings › Daily notes (M6 spec §5.4): the guard banner, Journal folder, Template, Date format, Date locale, Week
- * starts on and Import from Obsidian.
+ * Settings › Journal: the guard banner, the Journal folder, the Template and Date format of the Daily notes, a format
+ * and a Template for the Week, Month, Quarter and Year notes, the Calendar's week numbers and quarter chip, the Date
+ * locale, Week starts on and Import from Obsidian.
  */
 @Composable
 internal fun DailyNotesSection(
@@ -159,12 +183,14 @@ internal fun DailyNotesSection(
         Modifier.testTag(TestTags.SETTINGS_JOURNAL_FOLDER),
         onClick = actions.onOpenJournalPicker,
     )
+
+    BasicText(stringResource(kindName(PeriodKind.DAY)), style = CittiTheme.typography.rowTitle.colored())
     ValueRow(
         stringResource(Res.string.settings_template),
         config.template.ifEmpty { stringResource(Res.string.settings_template_none) },
         Modifier.testTag(TestTags.SETTINGS_TEMPLATE),
         detail = if (state.templateLocal) null else stringResource(Res.string.settings_template_unsynced),
-        onClick = actions.onOpenTemplatePicker,
+        onClick = { actions.onOpenTemplatePicker(PeriodKind.DAY) },
     )
 
     CittiTextField(
@@ -180,6 +206,11 @@ internal fun DailyNotesSection(
         stringResource(Res.string.settings_date_format_example, state.formatExample),
         style = CittiTheme.typography.meta.colored(muted = true),
     )
+
+    for (kind in PeriodKind.periodic) PeriodNoteBlock(kind, state, actions)
+
+    ToggleRow(Res.string.settings_show_weeks, config.showWeeks, TestTags.SETTINGS_SHOW_WEEKS, actions.onShowWeeks)
+    ToggleRow(Res.string.settings_show_quarter, config.showQuarter, TestTags.SETTINGS_SHOW_QUARTER, actions.onShowQuarter)
 
     BasicText(stringResource(Res.string.settings_date_locale), style = CittiTheme.typography.meta.colored(muted = true))
     val detected = config.localeDetected?.takeIf { config.locale == null }
@@ -225,7 +256,70 @@ internal fun DailyNotesSection(
     )
 }
 
-/** The Journal folder lies under an Unsynced folder: shown in Settings › Daily notes and in Settings › Exclusions. */
+/** The name of a kind of note, as the headings and the "same title as" error write it. */
+private fun kindName(kind: PeriodKind): StringResource =
+    when (kind) {
+        PeriodKind.DAY -> Res.string.settings_daily_note
+        PeriodKind.WEEK -> Res.string.settings_week_note
+        PeriodKind.MONTH -> Res.string.settings_month_note
+        PeriodKind.QUARTER -> Res.string.settings_quarter_note
+        PeriodKind.YEAR -> Res.string.settings_year_note
+    }
+
+/** The Template and the title format of one kind of Periodic note, with today's title as the example. */
+@Composable
+private fun PeriodNoteBlock(
+    kind: PeriodKind,
+    state: DailyUiState,
+    actions: DailySettingsActions,
+) {
+    val period = state.periods[kind] ?: return
+    val template = state.config.templateOf(kind)
+    BasicText(stringResource(kindName(kind)), style = CittiTheme.typography.rowTitle.colored())
+    ValueRow(
+        stringResource(Res.string.settings_template),
+        template.ifEmpty { stringResource(Res.string.settings_template_none) },
+        Modifier.testTag(TestTags.settingsPeriodTemplate(kind)),
+        detail = if (period.templateLocal) null else stringResource(Res.string.settings_template_unsynced),
+        onClick = { actions.onOpenTemplatePicker(kind) },
+    )
+    CittiTextField(
+        value = period.format,
+        onValueChange = { actions.onPeriodFormat(kind, it) },
+        label = stringResource(Res.string.settings_period_format),
+        modifier = Modifier.testTag(TestTags.settingsPeriodFormat(kind)),
+        keyboardType = KeyboardType.Ascii,
+        error = period.formatError?.let { periodFormatErrorText(it) },
+    )
+    BasicText(
+        stringResource(Res.string.settings_date_format_example, period.example),
+        style = CittiTheme.typography.meta.colored(muted = true),
+    )
+    if (kind == PeriodKind.WEEK && state.weekStartHint) {
+        BasicText(stringResource(Res.string.settings_week_hint), style = CittiTheme.typography.meta.colored(muted = true))
+    }
+}
+
+/** A Calendar switch (Show week numbers, Show quarter). */
+@Composable
+private fun ToggleRow(
+    label: StringResource,
+    checked: Boolean,
+    tag: String,
+    onChange: (Boolean) -> Unit,
+) {
+    SwitchRow(
+        name = stringResource(label),
+        checked = checked,
+        onChange = onChange,
+        overridden = false,
+        onReset = {},
+        stateText = stringResource(if (checked) Res.string.theme_editor_on else Res.string.theme_editor_off),
+        modifier = Modifier.testTag(tag),
+    )
+}
+
+/** The Journal folder lies under an Unsynced folder: shown in Settings › Journal and in Settings › Exclusions. */
 @Composable
 internal fun DailyGuardBanner(journal: String) {
     Banner(stringResource(Res.string.guard_banner, journal), BannerKind.Error, Modifier.testTag(TestTags.SETTINGS_DAILY_GUARD))
@@ -388,4 +482,15 @@ private fun formatErrorText(result: FormatResult): String? =
         FormatResult.RoundTrip -> stringResource(Res.string.format_error_roundtrip)
         is FormatResult.InvalidTitle -> nameErrorText(result.error)
         is FormatResult.Saved -> null
+    }
+
+/** The text of a refused Week, Month, Quarter or Year note format; null for [PeriodFormatResult.Saved]. */
+@Composable
+private fun periodFormatErrorText(result: PeriodFormatResult): String? =
+    when (result) {
+        PeriodFormatResult.Slash -> stringResource(Res.string.format_error_slash)
+        PeriodFormatResult.Ambiguous -> stringResource(Res.string.format_error_ambiguous)
+        is PeriodFormatResult.Collision -> stringResource(Res.string.format_error_collision, stringResource(kindName(result.with)))
+        is PeriodFormatResult.InvalidTitle -> nameErrorText(result.error)
+        is PeriodFormatResult.Saved -> null
     }

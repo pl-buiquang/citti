@@ -1,5 +1,6 @@
 package app.citti.ui
 
+import app.citti.core.daily.PeriodKind
 import app.citti.core.markdown.ToolbarAction
 import app.citti.core.settings.ExclusionKind
 import app.citti.ui.settings.SettingsSection
@@ -126,6 +127,14 @@ object TestTags {
     const val SETTINGS_TEMPLATE_NONE = "settings.daily.template.none"
     const val SETTINGS_DATE_FORMAT = "settings.daily.format"
     const val SETTINGS_IMPORT = "settings.daily.import"
+    const val SETTINGS_SHOW_WEEKS = "settings.daily.weeks"
+    const val SETTINGS_SHOW_QUARTER = "settings.daily.quarter"
+
+    /** The title format field and the Template row of the Week, Month, Quarter or Year note. */
+    fun settingsPeriodFormat(kind: PeriodKind): String = "settings.daily.${kind.name.lowercase()}.format"
+
+    fun settingsPeriodTemplate(kind: PeriodKind): String = "settings.daily.${kind.name.lowercase()}.template"
+
     const val SETTINGS_IMPORT_REPORT = "settings.daily.import.report"
 
     /** A Date locale choice; null is Automatic. */

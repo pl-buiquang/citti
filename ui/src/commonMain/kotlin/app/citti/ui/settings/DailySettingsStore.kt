@@ -4,6 +4,7 @@ import app.citti.core.daily.DailyGuard
 import app.citti.core.daily.DateLocales
 import app.citti.core.daily.ImportReport
 import app.citti.core.daily.ObsidianDailyImport
+import app.citti.core.daily.PeriodKind
 import app.citti.core.note.LinkResolver
 import app.citti.core.note.LinkTarget
 import app.citti.core.note.NameRules
@@ -13,6 +14,7 @@ import app.citti.core.settings.DailySettings
 import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.FolderResult
 import app.citti.core.settings.FormatResult
+import app.citti.core.settings.PeriodFormatResult
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -44,6 +46,22 @@ interface DailySettingsStore {
     suspend fun setLocale(code: String?)
 
     suspend fun setWeekStart(day: DayOfWeek?)
+
+    /** The title format of the [kind] notes ([PeriodKind.periodic] kinds); blank resets it to the default. */
+    suspend fun setPeriodFormat(
+        kind: PeriodKind,
+        format: String,
+    ): PeriodFormatResult
+
+    /** The Template of the [kind] notes: a Vault path, or blank for none. */
+    suspend fun setPeriodTemplate(
+        kind: PeriodKind,
+        path: String,
+    )
+
+    suspend fun setShowWeeks(show: Boolean)
+
+    suspend fun setShowQuarter(show: Boolean)
 
     /** Import from Obsidian on demand; null while signed out. */
     suspend fun importFromObsidian(): ImportReport?
@@ -79,6 +97,20 @@ class CoreDailySettingsStore(
     override suspend fun setLocale(code: String?) = withContext(io) { settings.setLocale(code) }.also { onChanged() }
 
     override suspend fun setWeekStart(day: DayOfWeek?) = withContext(io) { settings.setWeekStart(day) }
+
+    override suspend fun setPeriodFormat(
+        kind: PeriodKind,
+        format: String,
+    ): PeriodFormatResult = withContext(io) { settings.setPeriodFormat(kind, format) }
+
+    override suspend fun setPeriodTemplate(
+        kind: PeriodKind,
+        path: String,
+    ) = withContext(io) { settings.setPeriodTemplate(kind, path) }
+
+    override suspend fun setShowWeeks(show: Boolean) = withContext(io) { settings.setShowWeeks(show) }
+
+    override suspend fun setShowQuarter(show: Boolean) = withContext(io) { settings.setShowQuarter(show) }
 
     override suspend fun importFromObsidian(): ImportReport? = import()?.let { withContext(io) { it.run() } }.also { onChanged() }
 }

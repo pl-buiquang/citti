@@ -7,6 +7,8 @@ import app.citti.core.appearance.ThemeChoice
 import app.citti.core.daily.DateLocales
 import app.citti.core.daily.ImportReport
 import app.citti.core.daily.MomentFormat
+import app.citti.core.daily.Period
+import app.citti.core.daily.PeriodKind
 import app.citti.core.markdown.ToolbarAction
 import app.citti.core.note.NameError
 import app.citti.core.note.Suggestion
@@ -18,6 +20,7 @@ import app.citti.core.settings.ExclusionRepository
 import app.citti.core.settings.FolderResult
 import app.citti.core.settings.FormatResult
 import app.citti.core.settings.ImageSettings
+import app.citti.core.settings.PeriodFormatResult
 import app.citti.core.settings.RemoteImages
 import app.citti.core.settings.SyncNetwork
 import app.citti.core.settings.SyncSettingsRepository
@@ -137,10 +140,14 @@ sealed interface SettingsPage {
         val error: NameError? = null,
     ) : SettingsPage
 
-    /** The Template picker: a search over the local Notes ([suggestions] for [query]) plus "None". */
+    /**
+     * The Template picker of the [kind] notes (Daily by default): a search over the local Notes ([suggestions] for
+     * [query]) plus "None".
+     */
     data class PickTemplate(
         val query: String = "",
         val suggestions: List<Suggestion> = emptyList(),
+        val kind: PeriodKind = PeriodKind.DAY,
     ) : SettingsPage
 
     /** The theme editor (Settings › Appearance › Edit custom theme). */
@@ -174,7 +181,19 @@ sealed interface FolderError {
     ) : FolderError
 }
 
-/** Settings › Daily notes. */
+/** Settings › Journal: one Periodic note kind. */
+data class PeriodUiState(
+    /** The format field: what was typed, or the saved format. */
+    val format: String,
+    /** Why the typed format was not saved; the saved one stays in use. */
+    val formatError: PeriodFormatResult? = null,
+    /** The period of today in the typed format (the saved one while the field is blank). */
+    val example: String = "",
+    /** False when the Template path isn't a Note on this phone ("Not synced; fetched when needed"). */
+    val templateLocal: Boolean = true,
+)
+
+/** Settings › Journal. */
 data class DailyUiState(
     val config: DailyConfig = DailyConfig(),
     /** The Journal folder while it lies under an Unsynced folder: the guard banner. */
@@ -191,6 +210,10 @@ data class DailyUiState(
     val localeInUse: String = DateLocales.en.code,
     /** `{{date:MMMM}}` for today per Date locale choice: null is Automatic, then each code. */
     val monthExamples: Map<String?, String> = emptyMap(),
+    /** The Week, Month, Quarter and Year notes ([PeriodKind.periodic]). */
+    val periods: Map<PeriodKind, PeriodUiState> = emptyMap(),
+    /** Show the hint under the Week note format: its ISO weeks start on Monday and Week starts on says otherwise. */
+    val weekStartHint: Boolean = false,
     /** Import from Obsidian is running. */
     val importing: Boolean = false,
     /** The report dialog of the last Import from Obsidian, until dismissed. */
@@ -238,6 +261,8 @@ private data class Local(
 private data class DailyLocal(
     val formatDraft: String? = null,
     val formatError: FormatResult? = null,
+    val periodDrafts: Map<PeriodKind, String> = emptyMap(),
+    val periodErrors: Map<PeriodKind, PeriodFormatResult> = emptyMap(),
     val importing: Boolean = false,
     val importReport: ImportReport? = null,
 )
@@ -284,10 +309,12 @@ class SettingsController(
 
     private val dailyState: Flow<DailyUiState> =
         combine(
-            daily.config().map { c -> c to (c.template.isEmpty() || daily.isLocalNote(c.template)) },
+            daily.config().map { c ->
+                c to PeriodKind.entries.associateWith { c.templateOf(it).let { path -> path.isEmpty() || daily.isLocalNote(path) } }
+            },
             daily.conflict(),
             dailyLocal,
-        ) { (config, templateLocal), conflict, l -> dailyUiState(config, conflict, templateLocal, l) }
+        ) { (config, templatesLocal), conflict, l -> dailyUiState(config, conflict, templatesLocal, l) }
 
     val state: StateFlow<SettingsUiState> =
         combine(
@@ -559,8 +586,9 @@ class SettingsController(
         }
     }
 
-    fun openTemplatePicker() {
-        local.update { it.copy(page = SettingsPage.PickTemplate(), confirm = null) }
+    /** The Template picker of the Daily notes, or of the [kind] notes. */
+    fun openTemplatePicker(kind: PeriodKind = PeriodKind.DAY) {
+        local.update { it.copy(page = SettingsPage.PickTemplate(kind = kind), confirm = null) }
         searchTemplates("")
     }
 
@@ -581,8 +609,9 @@ class SettingsController(
 
     /** A Note of the picker ([path] with `.md`), or `""` for None. */
     fun chooseTemplate(path: String) {
+        val kind = (local.value.page as? SettingsPage.PickTemplate)?.kind ?: PeriodKind.DAY
         scope.launch {
-            daily.setTemplate(path)
+            if (kind == PeriodKind.DAY) daily.setTemplate(path) else daily.setPeriodTemplate(kind, path)
             up()
         }
     }
@@ -598,6 +627,38 @@ class SettingsController(
                 }
             }
         }
+    }
+
+    /** The title format field of the [kind] notes: saved at once when valid, else the error shows. */
+    fun onPeriodFormat(
+        kind: PeriodKind,
+        text: String,
+    ) {
+        dailyLocal.update { it.copy(periodDrafts = it.periodDrafts + (kind to text), periodErrors = it.periodErrors - kind) }
+        scope.launch {
+            formatLock.withLock {
+                val result = daily.setPeriodFormat(kind, text)
+                dailyLocal.update {
+                    if (it.periodDrafts[kind] != text ||
+                        result is PeriodFormatResult.Saved
+                    ) {
+                        it
+                    } else {
+                        it.copy(periodErrors = it.periodErrors + (kind to result))
+                    }
+                }
+            }
+        }
+    }
+
+    /** Show week numbers: the Calendar's week column. */
+    fun setShowWeeks(show: Boolean) {
+        scope.launch { daily.setShowWeeks(show) }
+    }
+
+    /** Show quarter: the Calendar's quarter chip. */
+    fun setShowQuarter(show: Boolean) {
+        scope.launch { daily.setShowQuarter(show) }
     }
 
     /** A Date locale code, or null for Automatic. */
@@ -630,7 +691,7 @@ class SettingsController(
     private fun dailyUiState(
         config: DailyConfig,
         conflict: String?,
-        templateLocal: Boolean,
+        templatesLocal: Map<PeriodKind, Boolean>,
         l: DailyLocal,
     ): DailyUiState {
         val at = now()
@@ -642,7 +703,7 @@ class SettingsController(
         return DailyUiState(
             config = config,
             conflict = conflict,
-            templateLocal = templateLocal,
+            templateLocal = templatesLocal.getValue(PeriodKind.DAY),
             format = format,
             formatError = l.formatError,
             formatExample = MomentFormat.format(at.date, at.time, example, DateLocales.forCode(code)),
@@ -652,8 +713,30 @@ class SettingsController(
                     put(null, month(config.localeDetected?.takeIf { config.locale == null } ?: phoneDateLocale(phoneLanguage)))
                     DateLocales.all.forEach { put(it.code, month(it.code)) }
                 },
+            periods =
+                PeriodKind.periodic.associateWith { kind ->
+                    val typed = l.periodDrafts[kind] ?: config.formatOf(kind)
+                    PeriodUiState(
+                        format = typed,
+                        formatError = l.periodErrors[kind],
+                        example =
+                            MomentFormat.format(
+                                Period.of(kind, at.date).start,
+                                at.time,
+                                typed.ifBlank { config.formatOf(kind) },
+                                DateLocales.forCode(code),
+                            ),
+                        templateLocal = templatesLocal.getValue(kind),
+                    )
+                },
+            weekStartHint = config.weekStart.let { it != null && it != DayOfWeek.MONDAY } && usesIsoWeeks(config.formatOf(PeriodKind.WEEK)),
             importing = l.importing,
             importReport = l.importReport,
         )
     }
 }
+
+private val LITERAL = Regex("\\[[^\\]]*]")
+
+/** True when [format] writes ISO weeks or week-years (`W`, `WW`, `GGGG`, `GG`), outside its `[literal]` parts. */
+private fun usesIsoWeeks(format: String): Boolean = LITERAL.replace(format, "").let { 'W' in it || 'G' in it }

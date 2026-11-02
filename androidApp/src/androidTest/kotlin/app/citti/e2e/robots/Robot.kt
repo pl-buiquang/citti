@@ -106,7 +106,7 @@ abstract class Robot(
             SettingsSection.IMAGES -> "Images"
             SettingsSection.APPEARANCE -> "Appearance"
             SettingsSection.EDITOR -> "Editor"
-            SettingsSection.DAILY -> "Daily notes"
+            SettingsSection.DAILY -> "Journal"
         }
 
     protected fun button(label: String) = hasText(label, ignoreCase = true) and hasClickAction()

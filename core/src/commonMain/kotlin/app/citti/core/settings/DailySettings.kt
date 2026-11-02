@@ -315,14 +315,20 @@ class DailySettings(
         queries.upsertSetting(periodTemplateKey(kind), normalizeTemplatePath(path))
     }
 
-    fun setShowWeeks(show: Boolean) = setFlag(KEY_DAILY_SHOW_WEEKS, show)
+    fun setShowWeeks(show: Boolean) {
+        setFlag(KEY_DAILY_SHOW_WEEKS, show)
+    }
 
-    fun setShowQuarter(show: Boolean) = setFlag(KEY_DAILY_SHOW_QUARTER, show)
+    fun setShowQuarter(show: Boolean) {
+        setFlag(KEY_DAILY_SHOW_QUARTER, show)
+    }
 
     private fun setFlag(
         key: String,
         on: Boolean,
-    ) = if (on) queries.upsertSetting(key, "1") else queries.deleteSetting(key)
+    ) {
+        if (on) queries.upsertSetting(key, "1") else queries.deleteSetting(key)
+    }
 
     /**
      * The manual Date locale: a code of [DateLocales.all], or null for automatic. A manual choice is also stored as
