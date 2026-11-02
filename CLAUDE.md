@@ -4,17 +4,19 @@ Fast, good-looking note app for Android (iOS later) that syncs with the Nextclou
 
 ## Before starting work
 
-The spec lives in the vault, `~/Nextcloud/Notes/projects/citti/`:
+In this repo:
 
-- `app-description.md`: the spec and its decisions (sync, conflicts, preview, exclusions, Appearance).
-- `design-brief.md`: screen inventory and wireframes.
-- `design-system/`: themes and design tokens (`tokens.json` is the source; Compose, CSS and DTCG outputs are generated).
 - `GLOSSARY.md`: use these terms in code, UI strings and commits (Note, Vault, Folder, Favorite, Unsynced folder, Hidden folder, Custom theme, Mode…).
-- `adr/`: read the ADRs before changing anything they cover.
-- `roadmap.md` and `plan.md`: milestones and the current step.
-- Tickets: the Obsidian tracker rooted there, rules in `~/Nextcloud/Notes/_work/topics/dev_workflow/issue-tracker-obsidian.md`.
+- `docs/adr/`: read the ADRs before changing anything they cover.
 
-`GLOSSARY.md` and `docs/adr/` are in this repo and are the source; the vault only keeps a pointer.
+In the vault, `~/Nextcloud/Notes/projects/citti/`:
+
+- `README.md`: the index, with short summaries of the original spec and design brief (the full, frozen copies are in `archives/`).
+- `design-system/`: themes and design tokens (`tokens.json` is the source; Compose, CSS and DTCG outputs are generated).
+- `roadmap.md` and `plan.md`: milestones and the current step.
+- `security.md`: the audit and its findings.
+- Tickets: the Obsidian tracker rooted there, rules in `~/Nextcloud/Notes/_work/topics/dev_workflow/issue-tracker-obsidian.md`.
+- `scratchpad.md` is the owner's own; never read or edit it.
 
 ## Rules
 
