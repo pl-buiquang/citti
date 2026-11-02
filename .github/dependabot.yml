@@ -5,3 +5,15 @@ updates:
     directory: /
     schedule:
       interval: monthly
+
+  # Reads gradle/libs.versions.toml and the Gradle wrapper. One PR a week for minor and patch updates; a major gets its own PR.
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
