@@ -77,6 +77,10 @@ Raw markdown, ready to type. A note opens in Preview mode; a New note and a just
 The default way of showing a note: the rendered view, with images, links and folded frontmatter.
 _Avoid_: Read mode, view mode
 
+**Format toolbar**:
+The row of formatting buttons above the keyboard in Edit mode. Settings › Editor chooses which buttons show and in what order.
+_Avoid_: Editor bar, markdown bar
+
 **Properties**:
 The frontmatter of a note (the YAML block between `---` lines at the top), shown folded in Preview mode.
 _Avoid_: Metadata, front matter, header
