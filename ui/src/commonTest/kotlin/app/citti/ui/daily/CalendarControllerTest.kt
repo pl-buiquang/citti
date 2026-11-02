@@ -2,6 +2,8 @@ package app.citti.ui.daily
 
 import app.citti.core.daily.DailyEntry
 import app.citti.core.daily.DailyResult
+import app.citti.core.daily.Period
+import app.citti.core.daily.PeriodKind
 import app.citti.core.sync.SyncPhase
 import app.citti.core.sync.SyncStatus
 import app.citti.ui.components.Snack
@@ -44,14 +46,19 @@ private class CalendarDaily(
     var wait: CompletableDeferred<Unit>? = null
     val opened = mutableListOf<LocalDate>()
 
+    /** The local Periodic notes, and every period opened or created (days included). */
+    val localPeriods = mutableMapOf<Period, Long>()
+    val openedPeriods = mutableListOf<Period>()
+
     override fun today(): LocalDate = clock().date
 
-    override suspend fun localNote(date: LocalDate): Long? = local[date]
+    override suspend fun localNote(period: Period): Long? = if (period.kind == PeriodKind.DAY) local[period.start] else localPeriods[period]
 
-    override suspend fun openOrCreate(date: LocalDate): DailyResult? {
-        opened += date
+    override suspend fun openOrCreate(period: Period): DailyResult? {
+        openedPeriods += period
+        if (period.kind == PeriodKind.DAY) opened += period.start
         wait?.await()
-        return result(date)
+        return result(period.start)
     }
 
     override suspend fun viewLine(localId: Long): Int? = null
@@ -71,6 +78,8 @@ class CalendarControllerTest {
         val weekStart: MutableStateFlow<DayOfWeek?>,
         val conflict: MutableStateFlow<String?>,
         val status: MutableStateFlow<SyncStatus?>,
+        val showWeeks: MutableStateFlow<Boolean>,
+        val showQuarter: MutableStateFlow<Boolean>,
         val snacks: MutableList<Snack>,
         val controller: CalendarController,
         /** Moves the clock without virtual time passing (the phone slept, the zone changed). */
@@ -96,6 +105,8 @@ class CalendarControllerTest {
         val weekStart = MutableStateFlow<DayOfWeek?>(null)
         val conflict = MutableStateFlow<String?>(null)
         val status = MutableStateFlow<SyncStatus?>(null)
+        val showWeeks = MutableStateFlow(false)
+        val showQuarter = MutableStateFlow(false)
         val controller =
             CalendarController(
                 scope = backgroundScope,
@@ -108,9 +119,11 @@ class CalendarControllerTest {
                 navigator = navigator,
                 route = route,
                 now = now,
+                showWeeks = showWeeks,
+                showQuarter = showQuarter,
             )
         runCurrent()
-        return Fixture(daily, navigator, notesFlow, weekStart, conflict, status, snacks, controller) { skew += it }
+        return Fixture(daily, navigator, notesFlow, weekStart, conflict, status, showWeeks, showQuarter, snacks, controller) { skew += it }
     }
 
     @Test
@@ -218,7 +231,7 @@ class CalendarControllerTest {
             val f = fixture()
             f.controller.onDay(past)
             runCurrent()
-            assertEquals(past, f.state.confirm)
+            assertEquals(Period.of(PeriodKind.DAY, past), f.state.confirm)
             assertTrue(f.daily.opened.isEmpty())
 
             f.controller.cancelCreate()
@@ -243,7 +256,7 @@ class CalendarControllerTest {
             f.daily.wait = gate
             f.controller.onDay(CAL_TODAY)
             runCurrent()
-            assertEquals(CAL_TODAY, f.state.busy)
+            assertEquals(Period.of(PeriodKind.DAY, CAL_TODAY), f.state.busy)
 
             f.controller.onDay(LocalDate(2026, 11, 2))
             f.controller.onDay(LocalDate(2026, 10, 12))
@@ -255,6 +268,108 @@ class CalendarControllerTest {
             runCurrent()
             assertNull(f.state.busy)
             assertEquals(Route.Note(100, preview = false, focus = true), f.navigator.top)
+        }
+
+    private val october = Period.of(PeriodKind.MONTH, LocalDate(2026, 10, 1))
+    private val september = Period.of(PeriodKind.MONTH, LocalDate(2026, 9, 1))
+
+    @Test
+    fun theCurrentAndFuturePeriodsWithoutANoteOpenOrCreateAtOnce() =
+        runTest {
+            val f = fixture()
+            val week = Period.of(PeriodKind.WEEK, CAL_TODAY)
+            val year = Period.of(PeriodKind.YEAR, CAL_TODAY)
+            val nextQuarter = Period.of(PeriodKind.QUARTER, LocalDate(2027, 1, 5))
+
+            listOf(october, week, year, nextQuarter).forEach {
+                f.controller.onPeriod(it)
+                runCurrent()
+                f.navigator.pop()
+            }
+
+            assertEquals(listOf(october, week, year, nextQuarter), f.daily.openedPeriods)
+            assertNull(f.state.confirm)
+        }
+
+    @Test
+    fun aPastPeriodWithoutANoteAsksFirst() =
+        runTest {
+            val f = fixture()
+            f.controller.onPeriod(september)
+            runCurrent()
+            assertEquals(september, f.state.confirm)
+            assertTrue(f.daily.openedPeriods.isEmpty())
+
+            f.controller.cancelCreate()
+            runCurrent()
+            assertNull(f.state.confirm)
+
+            f.controller.onPeriod(september)
+            runCurrent()
+            f.controller.confirmCreate()
+            runCurrent()
+            assertEquals(listOf(september), f.daily.openedPeriods)
+            assertEquals(Route.Note(100, preview = false, focus = true), f.navigator.top)
+        }
+
+    @Test
+    fun aPastPeriodWithANoteOpensItWithoutAsking() =
+        runTest {
+            val f = fixture()
+            f.daily.localPeriods[september] = 77
+            f.daily.result = { DailyResult.Opened(77) }
+            f.controller.onPeriod(september)
+            runCurrent()
+            assertNull(f.state.confirm)
+            assertEquals(Route.Note(77), f.navigator.top)
+        }
+
+    @Test
+    fun aBusyPeriodBlocksASecondTapOnAnyPeriodOrDay() =
+        runTest {
+            val gate = CompletableDeferred<Unit>()
+            val f = fixture()
+            f.daily.wait = gate
+            f.controller.onPeriod(october)
+            runCurrent()
+            assertEquals(october, f.state.busy)
+
+            f.controller.onPeriod(Period.of(PeriodKind.YEAR, CAL_TODAY))
+            f.controller.onDay(CAL_TODAY)
+            runCurrent()
+            assertEquals(listOf(october), f.daily.openedPeriods)
+
+            gate.complete(Unit)
+            runCurrent()
+            assertNull(f.state.busy)
+        }
+
+    @Test
+    fun anUnsyncedJournalFolderShowsTheSnackbarForAPeriodToo() =
+        runTest {
+            val f = fixture()
+            f.daily.result = { DailyResult.JournalUnsynced }
+            f.conflict.value = "journal"
+            runCurrent()
+            f.controller.onPeriod(september)
+            runCurrent()
+            assertNull(f.state.confirm)
+            assertEquals(listOf<Snack>(Snack.JournalUnsynced), f.snacks)
+        }
+
+    @Test
+    fun theWeekNumbersAndTheQuarterChipFollowTheirSettings() =
+        runTest {
+            val f = fixture()
+            assertFalse(f.state.showWeeks)
+            assertFalse(f.state.showQuarter)
+
+            f.showWeeks.value = true
+            f.showQuarter.value = true
+            runCurrent()
+
+            assertTrue(f.state.showWeeks)
+            assertTrue(f.state.showQuarter)
         }
 
     @Test

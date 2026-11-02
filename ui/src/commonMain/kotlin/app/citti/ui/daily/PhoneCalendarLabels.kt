@@ -15,6 +15,15 @@ interface PhoneCalendarLabels {
     /** The month alone, for the empty state: "October". */
     fun monthName(month: YearMonth): String
 
+    /** The month alone as a title, the header's Month note target: "October". */
+    fun monthTitle(month: YearMonth): String = monthName(month).replaceFirstChar { it.uppercase() }
+
+    /** The year alone, the header's Year note target: "2026". */
+    fun year(month: YearMonth): String = month.year.toString()
+
+    /** True when the phone's locale writes the month before the year ("October 2026"), false for "2026年10月". */
+    val monthFirst: Boolean get() = true
+
     /** A grid column header: "M". */
     fun weekdayInitial(day: DayOfWeek): String
 

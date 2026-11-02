@@ -4,8 +4,9 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.isHeading
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import app.citti.e2e.rules.E2eRules
 import app.citti.ui.TestTags
 
@@ -24,9 +25,43 @@ class CalendarRobot(
         waitFor(hasTestTag(TestTags.CALENDAR_GRID))
     }
 
-    /** The header shows [label] ("October 2026"). */
+    /** The header shows [label] ("October 2026"): the month and the year are two buttons. */
     fun assertMonth(label: String) {
-        waitFor(hasText(label) and isHeading())
+        waitFor(hasTestTag(TestTags.CALENDAR_MONTH_NOTE) and hasText(label.substringBeforeLast(' ')))
+        waitFor(hasTestTag(TestTags.CALENDAR_YEAR_NOTE) and hasText(label.substringAfterLast(' ')))
+    }
+
+    /** The month of the header: its Month note opens, or is created. */
+    fun tapMonth() {
+        waitFor(hasTestTag(TestTags.CALENDAR_MONTH_NOTE)).performClick()
+    }
+
+    /** The year of the header: its Year note opens, or is created. */
+    fun tapYear() {
+        waitFor(hasTestTag(TestTags.CALENDAR_YEAR_NOTE)).performClick()
+    }
+
+    /** The quarter chip of the header ([label] as "Q4"); it is off until Show quarter is on. */
+    fun tapQuarter(label: String) {
+        waitFor(hasTestTag(TestTags.CALENDAR_QUARTER_NOTE) and hasText(label)).performClick()
+    }
+
+    fun assertNoQuarterChip() {
+        waitGone(hasTestTag(TestTags.CALENDAR_QUARTER_NOTE))
+    }
+
+    /** The week number of the row that starts on [firstDay] (an ISO date); it is off until Show week numbers is on. */
+    fun tapWeek(firstDay: String) {
+        waitFor(hasTestTag(TestTags.calendarWeek(firstDay))).performClick()
+    }
+
+    fun assertNoWeekNumbers(firstDay: String) {
+        waitGone(hasTestTag(TestTags.calendarWeek(firstDay)))
+    }
+
+    /** A long press on the day [label] opens the note of its week. */
+    fun longPressDay(label: String) {
+        waitFor(day(label)).performTouchInput { longClick() }
     }
 
     fun previousMonth() {
@@ -49,6 +84,11 @@ class CalendarRobot(
     /** Taps the day [label]: its Daily note opens, or (a past day without one) the Create dialog shows. */
     fun tapDay(label: String) {
         waitFor(day(label)).performClick()
+    }
+
+    /** The Create dialog of a past period, titled [title] ("Create month note for September 2026?"). */
+    fun assertCreatePast(title: String) {
+        waitFor(hasText(title))
     }
 
     /** "Create daily note for [day]?" ([day] as "28 Oct"). */

@@ -2,6 +2,8 @@ package app.citti.ui.daily
 
 import app.citti.core.daily.DailyNotes
 import app.citti.core.daily.DailyResult
+import app.citti.core.daily.Period
+import app.citti.core.daily.PeriodKind
 import app.citti.ui.components.DroppedDaily
 import app.citti.ui.components.Snack
 import app.citti.ui.nav.NoteNotice
@@ -20,11 +22,11 @@ interface DailyGateway {
     /** The device's local date now, read at each call. */
     fun today(): LocalDate
 
-    /** The local Daily note of [date], or null; no network. */
-    suspend fun localNote(date: LocalDate): Long?
+    /** The local note of [period] (a Daily note or a Periodic note), or null; no network. */
+    suspend fun localNote(period: Period): Long?
 
-    /** Opens or creates the Daily note of [date] ([DailyNotes.openOrCreate]); null while signed out. */
-    suspend fun openOrCreate(date: LocalDate): DailyResult?
+    /** Opens or creates the note of [period] ([DailyNotes.openOrCreate]); null while signed out. */
+    suspend fun openOrCreate(period: Period): DailyResult?
 
     /** The Reading position of note [localId] ([Route.Note.startLine]), or null when it has none. */
     suspend fun viewLine(localId: Long): Int?
@@ -45,9 +47,9 @@ class CoreDailyGateway(
 ) : DailyGateway {
     override fun today(): LocalDate = today.invoke()
 
-    override suspend fun localNote(date: LocalDate): Long? = withContext(io) { notes()?.localNote(date) }
+    override suspend fun localNote(period: Period): Long? = withContext(io) { notes()?.localNote(period) }
 
-    override suspend fun openOrCreate(date: LocalDate): DailyResult? = withContext(io) { notes()?.openOrCreate(date) }
+    override suspend fun openOrCreate(period: Period): DailyResult? = withContext(io) { notes()?.openOrCreate(period) }
 
     override suspend fun viewLine(localId: Long): Int? = viewLine.invoke(localId)
 
@@ -58,9 +60,9 @@ class CoreDailyGateway(
 }
 
 /**
- * Opens or creates a Daily note from the Today button, the Calendar and (later) the `citti://daily` deep link: it
- * lives with the signed-in back stack, not with a screen. [busy] is the date being opened (the tapped button shows
- * inline progress); a tap while it is set does nothing. An opened note is pushed as is (caret at the end, no
+ * Opens or creates a Daily or Periodic note from the Today button, the Calendar and (later) the `citti://daily` deep
+ * link: it lives with the signed-in back stack, not with a screen. [busy] is the period being opened (the tapped
+ * button shows inline progress); a tap while it is set does nothing. An opened note is pushed as is (caret at the end, no
  * keyboard); a created one opens focused, with the Template missing banner when its Template was found nowhere. While
  * the Journal folder is an Unsynced folder, nothing is created and a snackbar leads to Settings.
  */
@@ -70,14 +72,14 @@ class TodayAction(
     private val push: (Route) -> Unit,
     private val notify: (Snack) -> Unit,
 ) {
-    private val busyDate = MutableStateFlow<LocalDate?>(null)
-    private val confirmDate = MutableStateFlow<LocalDate?>(null)
+    private val busyPeriod = MutableStateFlow<Period?>(null)
+    private val confirmPeriod = MutableStateFlow<Period?>(null)
 
-    /** The date being opened or created, or null. */
-    val busy: StateFlow<LocalDate?> = busyDate.asStateFlow()
+    /** The period being opened or created, or null. */
+    val busy: StateFlow<Period?> = busyPeriod.asStateFlow()
 
-    /** A past day without a Daily note that waits for "Create daily note for 12 Oct?" ([confirmCreate]), or null. */
-    val confirm: StateFlow<LocalDate?> = confirmDate.asStateFlow()
+    /** A past period without a note that waits for "Create daily note for 12 Oct?" ([confirmCreate]), or null. */
+    val confirm: StateFlow<Period?> = confirmPeriod.asStateFlow()
 
     /** The device's local date now. */
     fun today(): LocalDate = gateway.today()
@@ -96,16 +98,26 @@ class TodayAction(
         date: LocalDate,
         confirmPast: Boolean = false,
         resume: Boolean = false,
+    ) = open(Period.of(PeriodKind.DAY, date), confirmPast, resume)
+
+    /**
+     * Opens or creates the note of [period]. With [confirmPast], a period that is over and has no local note is not
+     * created yet: it goes to [confirm] (the Calendar's tap rule, for days and Periodic notes alike).
+     */
+    fun open(
+        period: Period,
+        confirmPast: Boolean = false,
+        resume: Boolean = false,
     ) {
-        if (!busyDate.compareAndSet(null, date)) return
+        if (!busyPeriod.compareAndSet(null, period)) return
         scope.launch {
             try {
-                if (confirmPast && date < gateway.today() && gateway.localNote(date) == null) {
-                    confirmDate.value = date
+                if (confirmPast && period.isOver(gateway.today()) && gateway.localNote(period) == null) {
+                    confirmPeriod.value = period
                     return@launch
                 }
-                confirmDate.value = null
-                when (val result = gateway.openOrCreate(date)) {
+                confirmPeriod.value = null
+                when (val result = gateway.openOrCreate(period)) {
                     is DailyResult.Opened -> {
                         val line = if (resume) gateway.viewLine(result.localId) else null
                         push(Route.Note(result.localId, startLine = line))
@@ -126,22 +138,22 @@ class TodayAction(
                     }
                 }
             } finally {
-                busyDate.value = null
+                busyPeriod.value = null
             }
         }
     }
 
     /** "Create" in the past day dialog. */
     fun confirmCreate() {
-        val date = confirmDate.value ?: return
-        if (busyDate.value != null) return
-        confirmDate.value = null
-        open(date)
+        val period = confirmPeriod.value ?: return
+        if (busyPeriod.value != null) return
+        confirmPeriod.value = null
+        open(period)
     }
 
     /** "Cancel" in the past day dialog. */
     fun cancelCreate() {
-        confirmDate.value = null
+        confirmPeriod.value = null
     }
 }
 

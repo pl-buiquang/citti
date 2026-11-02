@@ -11,6 +11,21 @@ class MonthGridTest {
     private val october = YearMonth(2026, 10)
 
     @Test
+    fun isoWeekNumbersFollowIso8601() {
+        assertEquals(44, isoWeekNumber(LocalDate(2026, 10, 31)))
+        assertEquals(40, isoWeekNumber(LocalDate(2026, 9, 28)))
+        // 2026 has 53 weeks: 1 January 2027 is its last day.
+        assertEquals(53, isoWeekNumber(LocalDate(2027, 1, 1)))
+        assertEquals(53, isoWeekNumber(LocalDate(2026, 12, 28)))
+        assertEquals(1, isoWeekNumber(LocalDate(2027, 1, 4)))
+        // 2024-12-30 belongs to week 1 of 2025, 2021-01-03 to week 53 of 2020, 2016-01-01 to week 53 of 2015.
+        assertEquals(1, isoWeekNumber(LocalDate(2024, 12, 30)))
+        assertEquals(53, isoWeekNumber(LocalDate(2021, 1, 3)))
+        assertEquals(53, isoWeekNumber(LocalDate(2016, 1, 1)))
+        assertEquals(1, isoWeekNumber(LocalDate(2026, 1, 1)))
+    }
+
+    @Test
     fun weekdaysStartOnTheWeekStart() {
         assertEquals(DayOfWeek.MONDAY, weekdays(DayOfWeek.MONDAY).first())
         assertEquals(DayOfWeek.SUNDAY, weekdays(DayOfWeek.MONDAY).last())

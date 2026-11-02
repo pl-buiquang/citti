@@ -9,6 +9,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import app.citti.core.daily.Period
+import app.citti.core.daily.PeriodKind
 import app.citti.core.settings.MainMode
 import app.citti.ui.TestTags
 import app.citti.ui.browse.BrowseActions
@@ -30,6 +32,8 @@ class CalendarActions(
     val onMonthChange: (YearMonth) -> Unit,
     val onDay: (LocalDate) -> Unit,
     val onRow: (DailyRow) -> Unit,
+    /** The header's month, year and quarter, the week numbers and a long press on a day: a Periodic note. */
+    val onPeriod: (Period) -> Unit,
     val onConfirmCreate: () -> Unit,
     val onCancelCreate: () -> Unit,
 )
@@ -68,7 +72,15 @@ fun CalendarScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(fabRoom),
             ) {
-                CalendarHeader(state.month, state.today.yearMonth, labels, calendar.onMonthChange)
+                CalendarHeader(
+                    state.month,
+                    state.today.yearMonth,
+                    labels,
+                    calendar.onMonthChange,
+                    showQuarter = state.showQuarter,
+                    busy = state.busy,
+                    onPeriod = calendar.onPeriod,
+                )
                 CalendarGrid(
                     month = state.month,
                     today = state.today,
@@ -77,7 +89,10 @@ fun CalendarScreen(
                     labels = labels,
                     onMonthChange = calendar.onMonthChange,
                     onDay = calendar.onDay,
-                    busy = state.busy,
+                    busy = state.busy?.takeIf { it.kind == PeriodKind.DAY }?.start,
+                    showWeeks = state.showWeeks,
+                    busyPeriod = state.busy,
+                    onPeriod = calendar.onPeriod,
                 )
                 when {
                     !state.loaded -> {
@@ -99,5 +114,5 @@ fun CalendarScreen(
             }
         }
     }
-    state.confirm?.let { date -> CreatePastDayDialog(date, labels, calendar.onConfirmCreate, calendar.onCancelCreate) }
+    state.confirm?.let { period -> CreatePastNoteDialog(period, labels, calendar.onConfirmCreate, calendar.onCancelCreate) }
 }

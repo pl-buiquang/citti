@@ -45,6 +45,28 @@ fun monthWeeks(
     }
 }
 
+/** The ISO 8601 week number of [date] (weeks start on Monday, week 1 holds the first Thursday of the year). */
+fun isoWeekNumber(date: LocalDate): Int {
+    val week = (date.dayOfYear - date.dayOfWeek.isoDayNumber + ISO_WEEK_OFFSET) / DAYS_IN_WEEK
+    return when {
+        week < 1 -> isoWeeksIn(date.year - 1)
+        week > isoWeeksIn(date.year) -> 1
+        else -> week
+    }
+}
+
+private const val ISO_WEEK_OFFSET = 10
+
+private const val LONG_ISO_YEAR_WEEKS = 53
+
+private const val SHORT_ISO_YEAR_WEEKS = 52
+
+/** 53 for the years that start on a Thursday, or leap years that start on a Wednesday; 52 for the others. */
+private fun isoWeeksIn(year: Int): Int {
+    fun p(y: Int) = (y + y / 4 - y / 100 + y / 400) % DAYS_IN_WEEK
+    return if (p(year) == 4 || p(year - 1) == 3) LONG_ISO_YEAR_WEEKS else SHORT_ISO_YEAR_WEEKS
+}
+
 /** Years shown either side of the month the pager starts around. */
 const val CALENDAR_YEARS = 10
 

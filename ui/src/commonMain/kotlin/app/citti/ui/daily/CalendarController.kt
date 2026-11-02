@@ -1,6 +1,7 @@
 package app.citti.ui.daily
 
 import app.citti.core.daily.DailyEntry
+import app.citti.core.daily.Period
 import app.citti.core.sync.SyncStatus
 import app.citti.ui.nav.Navigator
 import app.citti.ui.nav.Route
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
@@ -38,10 +40,14 @@ data class CalendarUiState(
     val noteDays: Set<LocalDate> = emptySet(),
     /** The Daily notes of [month], newest first. */
     val entries: List<DailyRow> = emptyList(),
-    /** The day being opened or created: its cell shows a progress ring. */
-    val busy: LocalDate? = null,
-    /** A past day without a Daily note waiting for "Create daily note for 12 Oct?". */
-    val confirm: LocalDate? = null,
+    /** The period being opened or created (a day, or the month, year, week or quarter): its target shows a progress ring. */
+    val busy: Period? = null,
+    /** A past period without a note waiting for "Create daily note for 12 Oct?". */
+    val confirm: Period? = null,
+    /** The week numbers column is shown (Settings › Journal). */
+    val showWeeks: Boolean = false,
+    /** The quarter chip is shown (Settings › Journal). */
+    val showQuarter: Boolean = false,
     /** The Journal folder is an Unsynced folder: day taps create nothing (a snackbar leads to Settings). */
     val journalUnsynced: Boolean = false,
     /** The first sync of the Vault is running: the grid fills in as the notes arrive. */
@@ -69,6 +75,8 @@ class CalendarController(
     private val navigator: Navigator,
     route: Route.Calendar,
     private val now: () -> LocalDateTime,
+    showWeeks: Flow<Boolean> = flowOf(false),
+    showQuarter: Flow<Boolean> = flowOf(false),
 ) {
     private val todayDate = MutableStateFlow(now().date)
     private val month = MutableStateFlow(route.month?.let(::parseMonth) ?: todayDate.value.yearMonth)
@@ -91,8 +99,18 @@ class CalendarController(
     private val tap: Flow<Tap> = combine(today.busy, today.confirm, ::Tap)
 
     private val sync: Flow<Flags> =
-        combine(journalConflict.onStart { emit(null) }, status.onStart { emit(null) }) { conflict, st ->
-            Flags(journalUnsynced = conflict != null, firstSync = st is SyncStatus.Running && st.lastSuccessAt == null)
+        combine(
+            journalConflict.onStart { emit(null) },
+            status.onStart { emit(null) },
+            showWeeks.distinctUntilChanged(),
+            showQuarter.distinctUntilChanged(),
+        ) { conflict, st, weeks, quarter ->
+            Flags(
+                journalUnsynced = conflict != null,
+                firstSync = st is SyncStatus.Running && st.lastSuccessAt == null,
+                showWeeks = weeks,
+                showQuarter = quarter,
+            )
         }
 
     val state: StateFlow<CalendarUiState> =
@@ -107,6 +125,8 @@ class CalendarController(
                 confirm = t.confirm,
                 journalUnsynced = flags.journalUnsynced,
                 firstSync = flags.firstSync,
+                showWeeks = flags.showWeeks,
+                showQuarter = flags.showQuarter,
                 loaded = all != null,
             )
         }.stateIn(scope, SharingStarted.Eagerly, CalendarUiState(month.value, todayDate.value, defaultWeekStart()))
@@ -117,13 +137,15 @@ class CalendarController(
     )
 
     private data class Tap(
-        val busy: LocalDate?,
-        val confirm: LocalDate?,
+        val busy: Period?,
+        val confirm: Period?,
     )
 
     private data class Flags(
         val journalUnsynced: Boolean,
         val firstSync: Boolean,
+        val showWeeks: Boolean,
+        val showQuarter: Boolean,
     )
 
     /** The arrows, a swipe of the grid, the Today chip: shows [m] and keeps it in the route. */
@@ -152,6 +174,16 @@ class CalendarController(
             return
         }
         today.open(d, confirmPast = !state.value.journalUnsynced)
+    }
+
+    /**
+     * The month, year, quarter or week of the header, the week numbers and a long-press on a day: opens the note of
+     * [period], or creates it, with the same rules as a day (a past one asks first, nothing is created while the
+     * Journal folder is an Unsynced folder). A tap while a period is being opened does nothing.
+     */
+    fun onPeriod(period: Period) {
+        if (today.busy.value != null) return
+        today.open(period, confirmPast = !state.value.journalUnsynced)
     }
 
     /** A row under the grid. */

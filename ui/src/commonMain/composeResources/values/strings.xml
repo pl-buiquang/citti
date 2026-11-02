@@ -264,6 +264,15 @@
     <string name="calendar_day_note">%1$s, daily note</string>
     <string name="calendar_day_none">%1$s, no note</string>
     <string name="create_past_title">Create daily note for %1$s?</string>
+    <string name="create_past_week_title">Create week note for week %1$s?</string>
+    <string name="create_past_month_title">Create month note for %1$s?</string>
+    <string name="create_past_quarter_title">Create quarter note for %1$s?</string>
+    <string name="create_past_year_title">Create year note for %1$s?</string>
+    <string name="calendar_month_note">%1$s, month note</string>
+    <string name="calendar_year_note">%1$s, year note</string>
+    <string name="calendar_quarter_note">%1$s, quarter note</string>
+    <string name="calendar_week_note">Week %1$s, week note</string>
+    <string name="calendar_open_week_note">Open the week note</string>
     <string name="template_missing">Template “%1$s” not found</string>
     <string name="open_settings">Settings</string>
     <string name="action_dismiss">Dismiss</string>

@@ -66,6 +66,13 @@ object TestTags {
     const val CALENDAR_BODY = "calendar.body"
     const val CALENDAR_GRID = "calendar.grid"
     const val CALENDAR_TODAY = "calendar.today"
+    const val CALENDAR_MONTH_NOTE = "calendar.month"
+    const val CALENDAR_YEAR_NOTE = "calendar.year"
+    const val CALENDAR_QUARTER_NOTE = "calendar.quarter"
+
+    /** The week number cell of the grid row that starts on [firstDay] (an ISO date). */
+    fun calendarWeek(firstDay: String) = "calendar.week.$firstDay"
+
     const val CALENDAR_ENTRIES = "calendar.entries"
 
     /** The bar at the bottom of the Note screen: the previous and next Daily note, else the previous and next Note of the Folder. */

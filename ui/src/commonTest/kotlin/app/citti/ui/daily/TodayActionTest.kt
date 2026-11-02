@@ -1,6 +1,8 @@
 package app.citti.ui.daily
 
 import app.citti.core.daily.DailyResult
+import app.citti.core.daily.Period
+import app.citti.core.daily.PeriodKind
 import app.citti.core.note.NameError
 import app.citti.ui.components.DroppedDaily
 import app.citti.ui.components.Snack
@@ -33,12 +35,12 @@ private class FakeDaily : DailyGateway {
 
     override fun today(): LocalDate = today
 
-    override suspend fun localNote(date: LocalDate): Long? = local[date]
+    override suspend fun localNote(period: Period): Long? = local[period.start]
 
-    override suspend fun openOrCreate(date: LocalDate): DailyResult? {
-        opened += date
+    override suspend fun openOrCreate(period: Period): DailyResult? {
+        opened += period.start
         wait?.await()
-        return result(date)
+        return result(period.start)
     }
 
     override suspend fun viewLine(localId: Long): Int? = viewLines[localId]
@@ -197,7 +199,7 @@ class TodayActionTest {
                 }
             f.action.openToday()
             runCurrent()
-            assertEquals(TODAY, f.action.busy.value)
+            assertEquals(Period.of(PeriodKind.DAY, TODAY), f.action.busy.value)
             f.action.openToday()
             f.action.open(LocalDate(2026, 11, 2))
             runCurrent()
@@ -228,7 +230,7 @@ class TodayActionTest {
             val f = fixture { result = { DailyResult.Created(9, null) } }
             f.action.open(past, confirmPast = true)
             runCurrent()
-            assertEquals(past, f.action.confirm.value)
+            assertEquals(Period.of(PeriodKind.DAY, past), f.action.confirm.value)
             assertTrue(f.daily.opened.isEmpty())
             assertNull(f.action.busy.value)
 

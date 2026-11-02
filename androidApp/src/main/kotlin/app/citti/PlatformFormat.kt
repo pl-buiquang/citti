@@ -65,6 +65,10 @@ class JavaTimeDateTimeFormatter(
 class JavaTimeCalendarLabels(
     private val locale: Locale = Locale.getDefault(),
 ) : PhoneCalendarLabels {
+    private companion object {
+        const val CHECK_YEAR = 2026
+    }
+
     private val monthYear = DateTimeFormatter.ofPattern("LLLL yyyy", locale)
     private val monthName = DateTimeFormatter.ofPattern("LLLL", locale)
     private val shortDate = DateTimeFormatter.ofPattern("EEE d MMM", locale)
@@ -74,6 +78,11 @@ class JavaTimeCalendarLabels(
     override fun monthYear(month: YearMonth): String = monthYear.format(month.toJavaYearMonth()).replaceFirstChar { it.titlecase(locale) }
 
     override fun monthName(month: YearMonth): String = monthName.format(month.toJavaYearMonth())
+
+    override fun monthTitle(month: YearMonth): String = monthName(month).replaceFirstChar { it.titlecase(locale) }
+
+    // "octobre 2026" writes the month first, "2026年10月" the year.
+    override val monthFirst: Boolean = !monthYear.format(java.time.YearMonth.of(CHECK_YEAR, 10)).startsWith(CHECK_YEAR.toString())
 
     override fun weekdayInitial(day: DayOfWeek): String = day.toJavaDayOfWeek().getDisplayName(TextStyle.NARROW_STANDALONE, locale)
 

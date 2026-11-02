@@ -43,6 +43,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import app.citti.core.appearance.MAX_THEME_FILE_BYTES
+import app.citti.core.daily.Period
+import app.citti.core.daily.PeriodKind
 import app.citti.core.settings.ExclusionKind
 import app.citti.core.settings.MainMode
 import app.citti.core.settings.RemoteImages
@@ -429,6 +431,8 @@ class MainActivity : ComponentActivity() {
                     scope = scope,
                     notes = container.dailyEntries(),
                     weekStartSetting = container.dailySettings.configFlow().map { it.weekStart },
+                    showWeeks = container.dailySettings.configFlow().map { it.showWeeks },
+                    showQuarter = container.dailySettings.configFlow().map { it.showQuarter },
                     defaultWeekStart = calendarLabels::defaultWeekStart,
                     journalConflict = container.dailyGuard.conflict(),
                     status = container.syncStatus,
@@ -604,12 +608,13 @@ class MainActivity : ComponentActivity() {
                         onMonthChange = controller::showMonth,
                         onDay = controller::onDay,
                         onRow = controller::onRow,
+                        onPeriod = controller::onPeriod,
                         onConfirmCreate = controller::confirmCreate,
                         onCancelCreate = controller::cancelCreate,
                     )
                 },
             newNoteBusy = newNoteBusy,
-            todayBusy = state.busy != null && state.busy == state.today,
+            todayBusy = state.busy != null && state.busy == Period.of(PeriodKind.DAY, state.today),
         )
     }
 
