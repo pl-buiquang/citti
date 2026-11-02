@@ -181,6 +181,7 @@ fun NoteScreen(
                 actions.onViewLine(editor.document.lineOf(it.start))
             }
         } else {
+            editor.hideKeyboard()
             scrollPreviewTo = editor.firstVisibleOffset()
             actions.onViewLine(editor.document.lineOf(scrollPreviewTo!!.coerceIn(0, editor.document.length)))
         }

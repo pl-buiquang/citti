@@ -322,6 +322,11 @@ internal class CittiEditText(
         }
     }
 
+    override fun hideKeyboard() {
+        context.getSystemService(InputMethodManager::class.java)?.hideSoftInputFromWindow(windowToken, 0)
+        clearFocus()
+    }
+
     /** Runs [action] now, or after the first layout when the text has no [layout] yet. */
     private fun whenLaidOut(action: () -> Unit) {
         if (layout != null && height > 0) {

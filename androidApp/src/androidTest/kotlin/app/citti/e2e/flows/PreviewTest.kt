@@ -63,6 +63,7 @@ class PreviewTest {
         note.assertEditorFocused()
         note.doubleTapEditor()
         note.assertPreviewMode()
+        note.assertKeyboardHidden()
     }
 
     @Test

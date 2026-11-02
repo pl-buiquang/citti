@@ -1,5 +1,6 @@
 package app.citti.e2e.robots
 
+import android.os.ParcelFileDescriptor
 import android.view.View
 import android.widget.EditText
 import androidx.compose.ui.semantics.Role
@@ -27,6 +28,7 @@ import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.hasFocus
 import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
 import androidx.test.espresso.matcher.ViewMatchers.withText
+import androidx.test.platform.app.InstrumentationRegistry
 import app.citti.e2e.rules.E2eRules
 import app.citti.ui.TestTags
 import org.hamcrest.Matcher
@@ -56,6 +58,21 @@ class NoteRobot(
 
     fun assertPreviewMode() {
         waitFor(hasTestTag(TestTags.NOTE_PREVIEW))
+    }
+
+    /** The software keyboard is closed (polled: the IME hides a moment after the request). */
+    fun assertKeyboardHidden() {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        repeat(20) {
+            val dump =
+                ParcelFileDescriptor
+                    .AutoCloseInputStream(automation.executeShellCommand("dumpsys input_method"))
+                    .bufferedReader()
+                    .readText()
+            if (!dump.contains("mInputShown=true")) return
+            Thread.sleep(250)
+        }
+        throw AssertionError("The keyboard is still shown")
     }
 
     /** Preview mode; a Note opens in it by default, so this only switches when the Edit mode is up. */

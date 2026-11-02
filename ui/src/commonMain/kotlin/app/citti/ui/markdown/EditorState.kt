@@ -50,6 +50,9 @@ interface EditorHost {
     /** Takes the focus and raises the keyboard. */
     fun focusAndShowKeyboard() = Unit
 
+    /** Drops the focus and closes the keyboard. */
+    fun hideKeyboard() = Unit
+
     /**
      * A [Marker] at the caret that the view moves with its own edits (Android: a zero-length span). Null when the
      * view has none; [EditorState] tracks its markers itself either way, the view's one wins while it is attached.
@@ -233,6 +236,12 @@ class EditorState(
     fun requestFocus() {
         val h = host
         if (h == null) pendingFocus = true else h.focusAndShowKeyboard()
+    }
+
+    /** Drops the focus and closes the keyboard (the view is about to leave, as when switching to Preview). */
+    fun hideKeyboard() {
+        pendingFocus = false
+        host?.hideKeyboard()
     }
 
     /** Applies [edit] as one undo step: to the view, or to the text alone while no view is attached. */
