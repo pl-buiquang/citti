@@ -98,8 +98,8 @@ fun MarkdownPreview(
     onLink: (LinkRef) -> Unit,
     modifier: Modifier = Modifier,
     images: ImageEnv? = null,
-    /** A double tap on block [Int] (an index of [Doc.blocks]); null: the Preview ignores double taps. */
-    onDoubleTap: ((Int) -> Unit)? = null,
+    /** A double tap on block [Int] (an index of [Doc.blocks]), or on the empty space (null); null: the Preview ignores double taps. */
+    onDoubleTap: ((Int?) -> Unit)? = null,
 ) {
     val colors = CittiTheme.colors
     val doubleTap by rememberUpdatedState(onDoubleTap)
@@ -126,7 +126,7 @@ fun MarkdownPreview(
                         val hit =
                             listState.layoutInfo.visibleItemsInfo
                                 .firstOrNull { down.position.y >= it.offset && down.position.y < it.offset + it.size }
-                        hit?.let { doubleTap?.invoke(it.index) }
+                        doubleTap?.invoke(hit?.index)
                     } else {
                         lastUp = up.uptimeMillis
                         lastAt = up.position
