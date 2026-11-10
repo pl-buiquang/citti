@@ -82,7 +82,12 @@ class TodayActionTest {
         val daily = FakeDaily().apply(setup)
         val navigator = Navigator(listOf(Route.List()))
         val snacks = mutableListOf<Snack>()
-        return Fixture(daily, navigator, snacks, TodayAction(backgroundScope, daily, navigator::push, { snacks += it }))
+        return Fixture(
+            daily,
+            navigator,
+            snacks,
+            TodayAction(backgroundScope, daily, navigator::push, { snacks += it }) { navigator.reset(listOf(it)) },
+        )
     }
 
     @Test
@@ -94,6 +99,15 @@ class TodayActionTest {
             assertEquals(listOf(TODAY), f.daily.opened)
             assertEquals(Route.Note(5), f.navigator.top)
             assertNull(f.action.busy.value)
+        }
+
+    @Test
+    fun anEntryOpensTheNoteAsTheWholeBackStack() =
+        runTest {
+            val f = fixture { result = { DailyResult.Opened(5) } }
+            f.action.openToday(entry = true)
+            runCurrent()
+            assertEquals(listOf<Route>(Route.Note(5)), f.navigator.stack.value)
         }
 
     @Test

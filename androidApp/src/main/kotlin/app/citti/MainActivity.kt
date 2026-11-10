@@ -294,22 +294,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Resets the stack to the root and the link's target. The open Notes are flushed first (text and Reading position). */
+    /** Resets the stack to the link's target alone. The open Notes are flushed first (text and Reading position). */
     private fun applyDeepLink(
         target: DeepLinkTarget,
         navigator: Navigator,
-        root: Route,
         today: TodayAction,
     ) {
         routes.controllers<NoteController>().forEach { it.onLeave() }
         when (target) {
             is DeepLinkTarget.OpenNote -> {
-                navigator.reset(listOf(root, Route.Note(target.localId, startLine = target.line)))
+                // The Note is the whole stack: Back leaves the app, back to the widget's screen.
+                navigator.reset(listOf(Route.Note(target.localId, startLine = target.line)))
             }
 
             is DeepLinkTarget.Today -> {
-                navigator.reset(listOf(root))
-                today.openToday(resume = target.resume)
+                today.openToday(resume = target.resume, entry = true)
             }
         }
     }
@@ -350,11 +349,14 @@ class MainActivity : ComponentActivity() {
         }
         BackHandler(enabled = stack.size > 1) { navigator.pop() }
         // With the back stack, not a screen: the Today button, the Calendar and a citti://daily link.
-        val today = remember(navigator) { TodayAction(container.appScope, dailyGateway, navigator::push, snackbars::show) }
+        val today =
+            remember(
+                navigator,
+            ) { TodayAction(container.appScope, dailyGateway, navigator::push, snackbars::show) { navigator.reset(listOf(it)) } }
         // A widget or adb link: after the navigator exists, whether the app was cold-started or was already open.
         LaunchedEffect(navigator) {
             pendingDeepLink.filterNotNull().collect { target ->
-                applyDeepLink(target, navigator, root, today)
+                applyDeepLink(target, navigator, today)
                 pendingDeepLink.value = null
             }
         }
@@ -666,8 +668,8 @@ class MainActivity : ComponentActivity() {
         }
         val leave = {
             controller.onLeave()
-            navigator.pop()
-            Unit
+            // A Note opened from a widget is the root: Back leaves the app.
+            if (!navigator.pop()) finish()
         }
         BackHandler(onBack = leave)
         BackHandler(enabled = state.menuOpen || state.dialog != null, onBack = { controller.back() })

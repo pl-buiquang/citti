@@ -71,7 +71,7 @@ class FavoritesWidgetTest {
         intent.restore()
         note.assertTitle("todo")
         note.assertText("Buy milk")
-        // Back from a widget-opened Note lands on the root, not on whatever was open before.
+        // A widget-opened Note is the whole stack: Back leaves the app.
         note.pressBack()
     }
 

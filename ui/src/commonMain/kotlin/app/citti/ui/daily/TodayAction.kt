@@ -71,6 +71,8 @@ class TodayAction(
     private val gateway: DailyGateway,
     private val push: (Route) -> Unit,
     private val notify: (Snack) -> Unit,
+    /** Makes the route the whole back stack (a widget entry: Back then leaves the app). */
+    private val reset: (Route) -> Unit = push,
 ) {
     private val busyPeriod = MutableStateFlow<Period?>(null)
     private val confirmPeriod = MutableStateFlow<Period?>(null)
@@ -86,9 +88,12 @@ class TodayAction(
 
     /**
      * The Today button: today's Daily note. With [resume] (the Daily note widget), an existing note opens at its Reading
-     * position; a created one still opens focused.
+     * position; a created one still opens focused. With [entry], the note becomes the whole back stack.
      */
-    fun openToday(resume: Boolean = false) = open(gateway.today(), resume = resume)
+    fun openToday(
+        resume: Boolean = false,
+        entry: Boolean = false,
+    ) = open(Period.of(PeriodKind.DAY, gateway.today()), resume = resume, entry = entry)
 
     /**
      * Opens or creates [date]'s Daily note. With [confirmPast], a past day without a local Daily note is not created
@@ -108,7 +113,9 @@ class TodayAction(
         period: Period,
         confirmPast: Boolean = false,
         resume: Boolean = false,
+        entry: Boolean = false,
     ) {
+        val show = if (entry) reset else push
         if (!busyPeriod.compareAndSet(null, period)) return
         scope.launch {
             try {
@@ -120,12 +127,12 @@ class TodayAction(
                 when (val result = gateway.openOrCreate(period)) {
                     is DailyResult.Opened -> {
                         val line = if (resume) gateway.viewLine(result.localId) else null
-                        push(Route.Note(result.localId, startLine = line))
+                        show(Route.Note(result.localId, startLine = line))
                     }
 
                     is DailyResult.Created -> {
                         val notice = result.templateMissing?.let { NoteNotice.TemplateMissing(it) }
-                        push(Route.Note(result.localId, preview = false, focus = true, notice = notice))
+                        show(Route.Note(result.localId, preview = false, focus = true, notice = notice))
                     }
 
                     DailyResult.JournalUnsynced -> {

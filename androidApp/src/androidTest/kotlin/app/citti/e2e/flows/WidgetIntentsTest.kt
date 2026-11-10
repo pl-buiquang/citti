@@ -2,7 +2,9 @@ package app.citti.e2e.flows
 
 import android.content.Intent
 import android.net.Uri
+import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso
 import app.citti.MainActivity
 import app.citti.core.fake.Endpoint
 import app.citti.e2e.E2e
@@ -73,6 +75,11 @@ class WidgetIntentsTest {
         e2e.compose.waitForIdle()
     }
 
+    private fun assertBackLeavesTheApp() {
+        Espresso.pressBackUnconditionally()
+        e2e.compose.waitUntil(TIMEOUT_MILLIS) { running.state == Lifecycle.State.DESTROYED }
+    }
+
     @Test
     fun aNoteLinkOpensTheNoteAtTheLineWhenTheAppStarts() {
         list.assertRow("Ideas")
@@ -80,8 +87,8 @@ class WidgetIntentsTest {
         note.assertTitle("long")
         // Opens in Preview, on the block that holds the line.
         note.assertPreviewShows("Line 100:")
-        note.pressBack()
-        list.assertRow("Ideas")
+        // The Note is the whole stack: Back leaves the app.
+        assertBackLeavesTheApp()
     }
 
     @Test
@@ -90,9 +97,8 @@ class WidgetIntentsTest {
         sendToRunningApp(DeepLink.noteUri(e2e.setup.localId("long"), 40))
         note.assertTitle("long")
         note.assertPreviewShows("Line 40:")
-        // The link resets the stack to [root, Note]: Back lands on the root.
-        note.pressBack()
-        list.assertRow("Ideas")
+        // The link resets the stack to the Note alone: Back leaves the app.
+        assertBackLeavesTheApp()
     }
 
     @Test
@@ -127,12 +133,10 @@ class WidgetIntentsTest {
         // The link starts the app, so the Activity under recreation holds the link's own intent.
         startAppWith(DeepLink.noteUri(e2e.setup.localId("todo"), 2))
         note.assertTitle("todo")
-        note.pressBack()
-        list.assertRow("Ideas")
         e2e.compose.waitForIdle()
         checkNotNull(scenario).recreate()
         e2e.compose.waitForIdle()
-        list.assertRow("Ideas")
+        note.assertTitle("todo")
     }
 
     @Test
