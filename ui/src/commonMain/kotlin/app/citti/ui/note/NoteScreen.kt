@@ -227,7 +227,13 @@ private fun NoteColumn(
     Column(Modifier.fillMaxSize()) {
         NoteTopBar(state, showHistory = !state.preview && !state.loading && focused, actions = actions, onToggle = toggle)
         NoteBanner(state, actions)
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        val swipe =
+            Modifier.swipeToNeighbor(
+                if (state.loading) null else state.noteNav,
+                childrenFirst = state.preview,
+                onOpen = actions.onOpenNeighbor,
+            )
+        Box(Modifier.weight(1f).fillMaxWidth().then(swipe)) {
             when {
                 state.loading -> {
                     if (state.title.isNotEmpty() || state.offline) {
