@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,8 +54,10 @@ import app.citti.ui.image.ImageEnv
 import app.citti.ui.image.PickSource
 import app.citti.ui.markdown.EditorState
 import app.citti.ui.markdown.FormatToolbar
+import app.citti.ui.markdown.LocalSwipeGuard
 import app.citti.ui.markdown.MarkdownEditor
 import app.citti.ui.markdown.MarkdownPreview
+import app.citti.ui.markdown.SwipeGuard
 import app.citti.ui.nav.NoteNotice
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.action_back
@@ -227,42 +230,41 @@ private fun NoteColumn(
     Column(Modifier.fillMaxSize()) {
         NoteTopBar(state, showHistory = !state.preview && !state.loading && focused, actions = actions, onToggle = toggle)
         NoteBanner(state, actions)
-        val swipe =
-            Modifier.swipeToNeighbor(
-                if (state.loading) null else state.noteNav,
-                childrenFirst = state.preview,
-                onOpen = actions.onOpenNeighbor,
-            )
-        Box(Modifier.weight(1f).fillMaxWidth().then(swipe)) {
-            when {
-                state.loading -> {
-                    if (state.title.isNotEmpty() || state.offline) {
-                        Gutter {
-                            BasicText(
-                                stringResource(if (state.offline) Res.string.note_not_downloaded else Res.string.note_downloading),
-                                style = CittiTheme.typography.meta.colored(muted = true),
+        val guard = remember { SwipeGuard() }
+        // Preview only: in Edit mode a horizontal drag belongs to the text.
+        val swipe = Modifier.swipeToNeighbor(if (state.loading || !state.preview) null else state.noteNav, guard, actions.onOpenNeighbor)
+        CompositionLocalProvider(LocalSwipeGuard provides guard) {
+            Box(Modifier.weight(1f).fillMaxWidth().then(swipe)) {
+                when {
+                    state.loading -> {
+                        if (state.title.isNotEmpty() || state.offline) {
+                            Gutter {
+                                BasicText(
+                                    stringResource(if (state.offline) Res.string.note_not_downloaded else Res.string.note_downloading),
+                                    style = CittiTheme.typography.meta.colored(muted = true),
+                                )
+                            }
+                        }
+                    }
+
+                    state.preview -> {
+                        if (doc != null) {
+                            MarkdownPreview(
+                                doc = doc,
+                                links = state.links,
+                                listState = previewListState,
+                                readonly = state.readonly,
+                                onTask = actions.onTask,
+                                onLink = actions.onLink,
+                                images = images,
+                                onDoubleTap = if (state.readonly) null else switchMode,
                             )
                         }
                     }
-                }
 
-                state.preview -> {
-                    if (doc != null) {
-                        MarkdownPreview(
-                            doc = doc,
-                            links = state.links,
-                            listState = previewListState,
-                            readonly = state.readonly,
-                            onTask = actions.onTask,
-                            onLink = actions.onLink,
-                            images = images,
-                            onDoubleTap = if (state.readonly) null else switchMode,
-                        )
+                    else -> {
+                        MarkdownEditor(editor, Modifier.fillMaxSize().testTag(TestTags.NOTE_EDITOR), editable = !state.readonly)
                     }
-                }
-
-                else -> {
-                    MarkdownEditor(editor, Modifier.fillMaxSize().testTag(TestTags.NOTE_EDITOR), editable = !state.readonly)
                 }
             }
         }

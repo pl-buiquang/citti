@@ -336,13 +336,15 @@ private fun PreviewScope.QuoteBlock(block: Block.Quote) {
 private fun PreviewScope.CodeBlock(block: Block.Code) {
     val colors = CittiTheme.colors
     val shape = RoundedCornerShape(CittiTheme.shape.control)
+    val scroll = rememberScrollState()
     Indented(block.depth) {
         Box(
             Modifier
                 .then(if (block.continued) Modifier else Modifier.padding(top = NotesSpacing.space2))
                 .fillMaxWidth()
                 .background(colors.surfaceRaised, shape)
-                .horizontalScroll(rememberScrollState())
+                .blocksSwipe(scroll)
+                .horizontalScroll(scroll)
                 .padding(NotesSpacing.space3),
         ) {
             SelectionContainer {
@@ -361,12 +363,14 @@ private fun PreviewScope.TableBlock(block: Block.Table) {
     val colors = CittiTheme.colors
     val columns = block.header.size
     val body = CittiTheme.typography.body
+    val scroll = rememberScrollState()
     Box(
         Modifier
             .padding(vertical = NotesSpacing.space2)
             .fillMaxWidth()
             .border(Dp.Hairline, colors.line)
-            .horizontalScroll(rememberScrollState()),
+            .blocksSwipe(scroll)
+            .horizontalScroll(scroll),
     ) {
         Column {
             val rows = listOf(block.header) + block.rows
