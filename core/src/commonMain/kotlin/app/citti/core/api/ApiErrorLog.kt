@@ -7,6 +7,7 @@ fun ApiError.logText(): String =
         is ApiError.Server -> "Server(http $status)"
         ApiError.NotFound -> "NotFound(http 404)"
         is ApiError.Http -> "Http(http $status)"
+        ApiError.Unreadable -> "Unreadable"
         is ApiError.BadResponse -> "BadResponse"
         ApiError.NotesAppMissing -> "NotesAppMissing"
         ApiError.InvalidUrl -> "InvalidUrl"

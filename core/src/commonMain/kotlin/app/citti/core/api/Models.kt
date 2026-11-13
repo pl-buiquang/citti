@@ -20,6 +20,11 @@ data class RemoteNote(
     /** Relative to the server's notes folder. */
     val internalPath: String? = null,
     val content: String? = null,
+    /**
+     * True when the server could not read the file (locked, storage error): [content] then holds an error message,
+     * not the Note's text, and [etag] is still the file's. [NotesApi.getNote] turns it into [ApiError.Unreadable].
+     */
+    val error: Boolean = false,
 ) {
     val isStub: Boolean get() = etag == null && modified == null && title == null
 }
@@ -108,6 +113,12 @@ sealed interface ApiError {
 
     /** 404 where the resource was expected to exist. */
     data object NotFound : ApiError
+
+    /**
+     * The server could not read the Note right now: 423 Locked, or a 200 whose `error` is true. Transient; the
+     * text is fetched again later.
+     */
+    data object Unreadable : ApiError
 
     /** Any other unexpected status. */
     data class Http(

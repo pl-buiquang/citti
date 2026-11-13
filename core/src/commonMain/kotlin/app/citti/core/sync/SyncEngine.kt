@@ -475,6 +475,7 @@ class SyncEngine(
             is ApiError.Http -> "Unexpected response (HTTP ${error.status})"
             is ApiError.BadResponse -> error.message ?: "Unreadable response"
             ApiError.NotFound -> "Not found"
+            ApiError.Unreadable -> "Note locked on the server"
             else -> error.toString()
         }
 

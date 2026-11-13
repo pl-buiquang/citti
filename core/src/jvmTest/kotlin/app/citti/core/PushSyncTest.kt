@@ -11,6 +11,7 @@ import app.citti.core.fake.FakeFailure
 import app.citti.core.fake.FakeNotesServer
 import app.citti.core.sync.Dropped
 import app.citti.core.sync.PendingChanges
+import app.citti.core.sync.PushFailure
 import app.citti.core.sync.PushResult
 import app.citti.core.sync.PushSync
 import kotlinx.coroutines.test.runTest
@@ -393,6 +394,29 @@ class PushSyncTest {
             assertEquals("Plan (conflict 2026-10-31)", onServer.title)
             assertEquals("server text", server.note(remote)!!.content)
             assertEquals(0, PendingChanges(db).count())
+        }
+
+    @Test
+    fun conflictWithAnUnreadableServerNoteKeepsTheLocalEditQueued() =
+        runTest {
+            val (local, remote) = synced("Plan", "base")
+            notes.markDirty("local text", 5, local)
+            server.editOnServer(remote, content = "server text")
+            server.setUnreadable(remote)
+
+            val result = done()
+
+            // No Conflict copy, and the server's error message does not replace the local text.
+            assertTrue(result.conflicts.isEmpty())
+            assertEquals(listOf(PushFailure(local, ApiError.Unreadable)), result.failures)
+            val row = notes.selectByLocalId(local).executeAsOne()
+            assertEquals("local text", row.content)
+            assertEquals("DIRTY", row.sync_state)
+
+            server.setUnreadable(remote, false)
+            val retried = done()
+            assertEquals("server text", notes.selectByLocalId(local).executeAsOne().content)
+            assertEquals("local text", notes.selectByLocalId(retried.conflicts.single()).executeAsOne().content)
         }
 
     @Test

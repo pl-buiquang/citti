@@ -34,7 +34,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 enum class HeaderCasing { LOWERCASE, CANONICAL }
 
 /** A failure injected with [FakeNotesServer.failNext]; consumed by the next request(s). */
-enum class FakeFailure { NETWORK_ERROR, SERVER_ERROR, UNAUTHORIZED }
+enum class FakeFailure { NETWORK_ERROR, SERVER_ERROR, UNAUTHORIZED, LOCKED }
 
 enum class Endpoint {
     LIST,
@@ -296,6 +296,17 @@ class FakeNotesServer(
 
     fun clearFailures() = locked { failures.clear() }
 
+    private val unreadable = mutableSetOf<Long>()
+
+    /**
+     * While set, the Note's file cannot be read, like a locked file on the real server: a response with content
+     * says `error: true`, `readonly: true` and carries an error message as `content`, with the file's etag.
+     */
+    fun setUnreadable(
+        id: Long,
+        value: Boolean = true,
+    ) = locked { if (value) unreadable += id else unreadable -= id }
+
     /**
      * Queues [times] failures, applied to the next requests in order. With an [endpoint], only requests to
      * that endpoint consume them (other requests pass through untouched).
@@ -367,6 +378,7 @@ class FakeNotesServer(
                     FakeFailure.NETWORK_ERROR -> throw recordedIOException("fake network error", ::record)
                     FakeFailure.UNAUTHORIZED -> text(HttpStatusCode.Unauthorized, "unauthorized")
                     FakeFailure.SERVER_ERROR -> text(HttpStatusCode.InternalServerError, "boom")
+                    FakeFailure.LOCKED -> text(HttpStatusCode.Locked, "locked")
                     null -> if (authorized(request, endpoint)) null else text(HttpStatusCode.Unauthorized, "unauthorized")
                 }
             }
@@ -819,16 +831,17 @@ class FakeNotesServer(
         buildJsonObject {
             put("id", n.id)
             put("etag", n.etag)
-            put("readonly", n.readonly)
-            if (withContent) put("content", n.content)
+            val broken = withContent && n.id in unreadable
+            put("readonly", n.readonly || broken)
+            if (withContent) put("content", if (broken) "Error: OCP\\Lock\\LockedException" else n.content)
             put("title", n.title)
             put("category", n.category)
             put("favorite", n.favorite)
             put("modified", n.modified)
             put("internalPath", (if (n.category.isEmpty()) "" else n.category + "/") + n.title + fileSuffix)
             put("isShared", false)
-            put("error", false)
-            put("errorType", "")
+            put("error", broken)
+            put("errorType", if (broken) "OCP\\Lock\\LockedException" else "")
         }
 
     private fun bodyText(request: HttpRequestData): String =

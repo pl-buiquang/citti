@@ -115,7 +115,10 @@ class NotesApi(
     suspend fun getNote(id: Long): ApiResult<RemoteNote> =
         call("GET /notes/{id}", { client.get(notesUrl("/notes/$id")) }) { response ->
             if (!response.status.isOk()) return@call fail(response)
-            parse { decode(response, RemoteNote.serializer()) }
+            when (val parsed = parse { decode(response, RemoteNote.serializer()) }) {
+                is ApiResult.Success -> if (parsed.value.error) ApiResult.Failure(ApiError.Unreadable) else parsed
+                is ApiResult.Failure -> parsed
+            }
         }
 
     suspend fun createNote(note: NewNote): ApiResult<RemoteNote> =
@@ -230,6 +233,7 @@ class NotesApi(
             when (val code = response.status.value) {
                 401, 403 -> ApiError.Auth(code)
                 404 -> ApiError.NotFound
+                423 -> ApiError.Unreadable
                 in 500..599 -> ApiError.Server(code)
                 else -> ApiError.Http(code)
             },

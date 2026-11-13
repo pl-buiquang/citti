@@ -923,6 +923,7 @@ class NoteController(
             is ApiError.Server -> Snack.UploadFailed("HTTP $status")
             is ApiError.Http -> Snack.UploadFailed("HTTP $status")
             ApiError.NotFound -> Snack.UploadFailed("HTTP 404")
+            ApiError.Unreadable -> Snack.UploadFailed("HTTP 423")
             is ApiError.BadResponse -> Snack.UploadFailed(message ?: "bad response")
             ApiError.NotesAppMissing, ApiError.InvalidUrl, ApiError.InsecureUrl -> Snack.UploadFailed(toString())
         }

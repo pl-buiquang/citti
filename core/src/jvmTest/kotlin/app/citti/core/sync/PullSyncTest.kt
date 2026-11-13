@@ -333,6 +333,44 @@ class PullSyncTest {
         }
 
     @Test
+    fun anUnreadableNoteKeepsNoTextAndIsFetchedAgainNextSync() =
+        runTest {
+            val id = server.addNote("A", "real text")
+            server.setUnreadable(id)
+
+            val pulled = assertIs<PullResult.Pulled>(pullSync().pull())
+
+            // The server's error message never becomes the Note's text; the Note waits for its text instead.
+            assertEquals(listOf(ContentFailure(id, ApiError.Unreadable)), pulled.failures)
+            assertEquals(listOf(500L, 1500L), sleeps)
+            assertNull(byRemote(id)!!.content)
+            // The list etag is not kept, so the next Sync lists again instead of getting a 304.
+            assertNull(
+                db.syncStateQueries
+                    .select("list-plain")
+                    .executeAsOneOrNull()
+                    ?.etag,
+            )
+
+            server.setUnreadable(id, false)
+            assertIs<PullResult.Pulled>(pullSync().pull())
+            assertEquals("real text", byRemote(id)!!.content)
+        }
+
+    @Test
+    fun aLockedNoteIsRetried() =
+        runTest {
+            val id = server.addNote("A", "real text")
+            server.failNext(FakeFailure.LOCKED, endpoint = Endpoint.GET_NOTE)
+
+            val pulled = assertIs<PullResult.Pulled>(pullSync().pull())
+
+            assertTrue(pulled.failures.isEmpty())
+            assertEquals(listOf(500L), sleeps)
+            assertEquals("real text", byRemote(id)!!.content)
+        }
+
+    @Test
     fun retriesStopAfterTwoAndTheNoteCountsAsFailed() =
         runTest {
             val id = server.addNote("A", "a")

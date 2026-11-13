@@ -208,7 +208,7 @@ class PullSync(
         }
     }
 
-    private fun ApiError.isRetryable() = this is ApiError.Network || this is ApiError.Server
+    private fun ApiError.isRetryable() = this is ApiError.Network || this is ApiError.Server || this == ApiError.Unreadable
 
     private suspend fun downloadContent(onProgress: (Progress) -> Unit): Downloaded {
         val targets = notes.selectNeedingContent().executeAsList()
