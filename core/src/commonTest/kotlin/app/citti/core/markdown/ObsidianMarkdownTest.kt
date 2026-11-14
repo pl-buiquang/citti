@@ -162,6 +162,17 @@ class ObsidianMarkdownTest {
     }
 
     @Test
+    fun anImageOnItsOwnLineUnderTextIsABlock() {
+        val src = "- course HOKA \n![](Pasted%20image.png)"
+        val blocks = parse(src)
+        val item = assertIs<Block.ListItem>(blocks.first())
+        val image = blocks.filterIsInstance<Block.ImageBlock>().single()
+        assertEquals("Pasted%20image.png", image.images.single().src)
+        assertEquals("![](Pasted%20image.png)", src.substring(image.start, image.end))
+        assertTrue(blocks.indexOf(image) > blocks.indexOf(item))
+    }
+
+    @Test
     fun highlight() {
         assertEquals(Inline.Highlight(listOf(Inline.Text("hot"))), inlines("a ==hot== b")[1])
     }

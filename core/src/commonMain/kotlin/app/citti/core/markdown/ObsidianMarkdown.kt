@@ -278,13 +278,71 @@ object ObsidianMarkdown {
                 out += Block.ImageBlock(n.s(), n.e(), images.filterIsInstance<Inline.Image>(), depth)
                 return
             }
-            // Long paragraphs: cut at line breaks, with the source range of each chunk.
-            val breaks = inl.count { it == Inline.LineBreak }
-            if (breaks < CHUNK_LINES) {
-                out += Block.Paragraph(n.s(), n.e(), inl, depth)
+            val raw = n.raw()
+            val rows = inl.splitLines()
+            val imageRows =
+                rows.map { row ->
+                    row.filterNot { it is Inline.Text && it.text.isBlank() }.let {
+                        it.isNotEmpty() &&
+                            it.all { i -> i is Inline.Image }
+                    }
+                }
+            if (imageRows.any { it } && !imageRows.all { it }) {
+                // An Image on a line of its own, next to text: the text stays a paragraph, the Images are drawn as blocks.
+                val starts =
+                    ArrayList<Int>().apply {
+                        add(0)
+                        raw.forEachIndexed { i, c -> if (c == '\n') add(i + 1) }
+                    }
+                var i = 0
+                while (i < rows.size) {
+                    var j = i
+                    while (j + 1 < rows.size && imageRows[j + 1] == imageRows[i]) j++
+                    val from = n.s() + starts[i.coerceAtMost(starts.size - 1)]
+                    val to = if (j + 1 < starts.size) n.s() + starts[j + 1] - 1 else n.e()
+                    val run = rows.subList(i, j + 1)
+                    if (imageRows[i]) {
+                        out += Block.ImageBlock(from, to, run.flatten().filterIsInstance<Inline.Image>(), depth)
+                    } else {
+                        val joined = run.flatMapIndexed { k, r -> if (k == 0) r else listOf(Inline.LineBreak) + r }.trimEdges()
+                        chunked(joined, raw.substring(starts[i], to - n.s()), from, to, depth, out)
+                    }
+                    i = j + 1
+                }
                 return
             }
-            val raw = n.raw()
+            chunked(inl, raw, n.s(), n.e(), depth, out)
+        }
+
+        private fun List<Inline>.splitLines(): List<List<Inline>> {
+            val rows = ArrayList<List<Inline>>()
+            var cur = ArrayList<Inline>()
+            for (x in this) {
+                if (x == Inline.LineBreak) {
+                    rows += cur
+                    cur = ArrayList()
+                } else {
+                    cur += x
+                }
+            }
+            rows += cur
+            return rows
+        }
+
+        /** Long paragraphs: cut at line breaks, with the source range of each chunk. [raw] starts at offset [base]. */
+        private fun chunked(
+            inl: List<Inline>,
+            raw: String,
+            base: Int,
+            end: Int,
+            depth: Int,
+            out: MutableList<Block>,
+        ) {
+            val breaks = inl.count { it == Inline.LineBreak }
+            if (breaks < CHUNK_LINES) {
+                out += Block.Paragraph(base, end, inl, depth)
+                return
+            }
             val lineStarts =
                 ArrayList<Int>().apply {
                     add(0)
@@ -300,8 +358,8 @@ object ObsidianMarkdown {
                     line++
                     seen++
                     if (seen == CHUNK_LINES) {
-                        val endOffset = n.s() + lineStarts[line] - 1
-                        out += Block.Paragraph(n.s() + lineStarts[chunkStartLine], endOffset, chunk.toList(), depth)
+                        val endOffset = base + lineStarts[line] - 1
+                        out += Block.Paragraph(base + lineStarts[chunkStartLine], endOffset, chunk.toList(), depth)
                         chunk.clear()
                         chunkStartLine = line
                         seen = 0
@@ -311,7 +369,7 @@ object ObsidianMarkdown {
                 }
                 chunk += item
             }
-            out += Block.Paragraph(n.s() + lineStarts[from.coerceAtMost(lineStarts.size - 1)], n.e(), chunk.toList(), depth)
+            out += Block.Paragraph(base + lineStarts[from.coerceAtMost(lineStarts.size - 1)], end, chunk.toList(), depth)
         }
 
         private fun list(
@@ -335,7 +393,7 @@ object ObsidianMarkdown {
                         else -> rest += c
                     }
                 }
-                val end =
+                var end =
                     first?.e()
                         ?: item.children
                             .lastOrNull {
@@ -343,8 +401,37 @@ object ObsidianMarkdown {
                                     it !in rest
                             }?.e()
                         ?: item.e()
-                val inl = first?.let { inlines(it.children).trimEdges() }.orEmpty()
+                var inl = first?.let { inlines(it.children).trimEdges() }.orEmpty()
+                // Images on lines of their own under the item's first line are drawn as blocks, after the item.
+                val images = ArrayList<Block>()
+                if (first != null) {
+                    val rows = inl.splitLines()
+                    var keep = rows.size
+
+                    fun isImageRow(r: List<Inline>) =
+                        r.filterNot { it is Inline.Text && it.text.isBlank() }.let { it.isNotEmpty() && it.all { i -> i is Inline.Image } }
+                    while (keep > 1 && isImageRow(rows[keep - 1])) keep--
+                    if (keep < rows.size) {
+                        val raw = first.raw()
+                        val starts =
+                            ArrayList<Int>().apply {
+                                add(0)
+                                raw.forEachIndexed { i, c -> if (c == '\n') add(i + 1) }
+                            }
+                        if (starts.size == rows.size) {
+                            for (k in keep until rows.size) {
+                                val from = first.s() + starts[k]
+                                val to = if (k + 1 < starts.size) first.s() + starts[k + 1] - 1 else first.e()
+                                images += Block.ImageBlock(from, to, rows[k].filterIsInstance<Inline.Image>(), depth + 1)
+                            }
+                            end = first.s() + starts[keep] - 1
+                            inl =
+                                rows.subList(0, keep).flatMapIndexed { k, r -> if (k == 0) r else listOf(Inline.LineBreak) + r }.trimEdges()
+                        }
+                    }
+                }
                 out += Block.ListItem(item.s(), end, depth, ordered, number, task, inl)
+                out += images
                 for (c in rest) {
                     if (c.type == MarkdownElementTypes.UNORDERED_LIST ||
                         c.type == MarkdownElementTypes.ORDERED_LIST
