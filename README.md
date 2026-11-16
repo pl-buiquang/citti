@@ -23,6 +23,7 @@ The screenshots come from the end-to-end tests, against a fake server and a made
 - **Search** over the full text of every synced Note, accent-insensitive, with the match highlighted.
 - **Preview and Edit.** Notes open as rendered markdown: images (fetched over WebDAV and resolved the way Obsidian does), `|width`, tappable `[[wikilinks]]` and checkboxes, folded frontmatter. Double tap to edit the raw markdown, which citti never rewrites. Insert an image from the camera or the gallery.
 - **Daily notes.** A Today button and a Calendar over your journal Folder, created from an Obsidian-style Template (`{{date:…}}`, Moment.js tokens). The Journal folder, Template and date format can be imported from Obsidian.
+- **Agenda blocks.** ```` ```agenda ```` blocks, as written for the Obsidian CalDAV Agenda plugin, show the day's events from your Nextcloud calendars in Preview mode, with the same options and Event template. They use the account you signed in with, and keep the events of the Notes you viewed for offline reading.
 - **Widgets.** One Note, ready to read and edit; your Favorites with today's Daily note first; today's Daily note.
 - **Exclusions.** An Unsynced folder is never downloaded or searched; a Hidden folder is synced and searchable but not listed.
 - **Appearance.** Three themes (Signal, Paper, Index), each light and dark, Dynamic color, and one Custom theme made of a base theme plus your overrides (colors, fonts, density, shapes), with import and export.
