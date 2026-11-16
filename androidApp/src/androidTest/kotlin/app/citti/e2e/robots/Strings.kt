@@ -7,6 +7,7 @@ object Strings {
     const val USE_BROWSER = "Sign in with browser instead"
     const val SIGN_IN = "Sign in"
     const val CANCEL = "Cancel"
+    const val AGENDA_PAST = "Ended"
     const val WAITING_BROWSER = "Approve the sign-in in your browser, then come back to citti."
     const val ERROR_INVALID_URL = "This is not a usable server address."
     const val ERROR_NOTES_MISSING = "The Notes app is not installed or enabled on this server."

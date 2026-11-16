@@ -107,6 +107,7 @@ abstract class Robot(
             SettingsSection.APPEARANCE -> "Appearance"
             SettingsSection.EDITOR -> "Editor"
             SettingsSection.DAILY -> "Journal"
+            SettingsSection.AGENDA -> "Agenda"
         }
 
     protected fun button(label: String) = hasText(label, ignoreCase = true) and hasClickAction()
