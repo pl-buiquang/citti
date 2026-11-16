@@ -12,12 +12,13 @@ suspend fun signOut(
     wipeLocalData(db)
 }
 
-/** Deletes every Note, the sync state, the settings and the exclusions; keeps `meta`. */
+/** Deletes every Note, the sync state, the settings, the exclusions and the cached events; keeps `meta`. */
 fun wipeLocalData(db: CittiDatabase) {
     db.transaction {
         db.accountQueries.deleteAllNotes()
         db.accountQueries.deleteAllSyncState()
         db.accountQueries.deleteAllSettings()
         db.accountQueries.deleteAllFolderExclusions()
+        db.accountQueries.deleteAllAgendaCache()
     }
 }

@@ -404,7 +404,7 @@ class NoteQueriesTest {
         upgraded.syncStateQueries.upsert("k", null, 0, null)
         upgraded.settingQueries.insertExclusion("p", "HIDDEN")
         assertEquals(1, upgraded.noteQueries.countNotes().executeAsOne())
-        assertEquals(5, CittiDatabase.Schema.version)
+        assertEquals(6, CittiDatabase.Schema.version)
     }
 
     /** The v2 schema as 1.sqm leaves it, which is what databases/2.db holds. */
@@ -451,7 +451,7 @@ class NoteQueriesTest {
         // and the triggers keep it current
         migrated.updateContent("Une journée d'été", "e1b", migrated.selectByRemoteId(1).executeAsOne().local_id)
         assertEquals(listOf("1"), driver.strings("$found '\"ete*\" \"journee*\"'"))
-        assertEquals(5, CittiDatabase.Schema.version)
+        assertEquals(6, CittiDatabase.Schema.version)
     }
 
     @Test
@@ -470,6 +470,17 @@ class NoteQueriesTest {
         val fresh = migrated.selectByLocalId(migrated.lastInsertedLocalId().executeAsOne()).executeAsOne()
         assertEquals("", fresh.created_from)
         assertEquals(1L, migrated.dropIfUntouched(fresh.local_id).value)
+    }
+
+    @Test
+    fun migrationFiveAddsTheAgendaCache() {
+        val driver = v2Driver()
+        CittiDatabase.Schema.migrate(driver, 2, 5)
+        assertFalse("agenda_cache" in driver.strings("SELECT name FROM sqlite_master WHERE type = 'table'"))
+        CittiDatabase.Schema.migrate(driver, 5, CittiDatabase.Schema.version)
+        val agenda = CittiDatabase(driver).agendaQueries
+        agenda.upsertRange("/c/", "2026-11-16", 1, "Europe/Paris", "[]", 1, 1)
+        assertEquals(1L, agenda.countRows().executeAsOne())
     }
 
     @Test

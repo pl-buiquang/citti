@@ -1,0 +1,39 @@
+-- The events an Agenda block of a viewed Note asked for (ADR 0012): one row per Event calendar and range. Not part
+-- of Sync; pruned by age and count; wiped at sign-out.
+CREATE TABLE agenda_cache (
+    calendar TEXT NOT NULL,
+    first_day TEXT NOT NULL,
+    days INTEGER NOT NULL,
+    zone TEXT NOT NULL,
+    -- JSON list of CalEvent.
+    events TEXT NOT NULL,
+    -- Epoch milliseconds.
+    fetched_at INTEGER NOT NULL,
+    viewed_at INTEGER NOT NULL,
+    PRIMARY KEY (calendar, first_day, days, zone)
+);
+
+selectRange:
+SELECT calendar, events, fetched_at FROM agenda_cache
+WHERE first_day = :firstDay AND days = :days AND zone = :zone AND calendar IN :calendars;
+
+upsertRange:
+INSERT OR REPLACE INTO agenda_cache(calendar, first_day, days, zone, events, fetched_at, viewed_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+touchRange:
+UPDATE agenda_cache SET viewed_at = :viewedAt
+WHERE first_day = :firstDay AND days = :days AND zone = :zone AND calendar IN :calendars;
+
+pruneUnviewed:
+DELETE FROM agenda_cache WHERE viewed_at < ?;
+
+-- Keeps the :keep most recently viewed rows.
+pruneToCount:
+DELETE FROM agenda_cache WHERE rowid NOT IN (SELECT rowid FROM agenda_cache ORDER BY viewed_at DESC LIMIT :keep);
+
+deleteCalendars:
+DELETE FROM agenda_cache WHERE calendar IN ?;
+
+countRows:
+SELECT COUNT(*) FROM agenda_cache;

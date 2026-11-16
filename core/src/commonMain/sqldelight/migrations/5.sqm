@@ -1,0 +1,11 @@
+-- The events of the Agenda blocks of viewed Notes (ADR 0012).
+CREATE TABLE agenda_cache (
+    calendar TEXT NOT NULL,
+    first_day TEXT NOT NULL,
+    days INTEGER NOT NULL,
+    zone TEXT NOT NULL,
+    events TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    viewed_at INTEGER NOT NULL,
+    PRIMARY KEY (calendar, first_day, days, zone)
+);

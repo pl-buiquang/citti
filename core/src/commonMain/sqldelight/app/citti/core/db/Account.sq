@@ -11,3 +11,6 @@ DELETE FROM setting WHERE key NOT LIKE 'appearance.%';
 
 deleteAllFolderExclusions:
 DELETE FROM folder_exclusion;
+
+deleteAllAgendaCache:
+DELETE FROM agenda_cache;
