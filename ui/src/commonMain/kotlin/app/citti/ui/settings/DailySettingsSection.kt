@@ -302,7 +302,7 @@ private fun PeriodNoteBlock(
 
 /** A Calendar switch (Show week numbers, Show quarter). */
 @Composable
-private fun ToggleRow(
+internal fun ToggleRow(
     label: StringResource,
     checked: Boolean,
     tag: String,

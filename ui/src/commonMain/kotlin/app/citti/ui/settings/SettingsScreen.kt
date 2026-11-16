@@ -56,6 +56,7 @@ import app.citti.ui.resources.Res
 import app.citti.ui.resources.exclusion_journal_refused
 import app.citti.ui.resources.settings_account
 import app.citti.ui.resources.settings_add_folder
+import app.citti.ui.resources.settings_agenda
 import app.citti.ui.resources.settings_appearance
 import app.citti.ui.resources.settings_back
 import app.citti.ui.resources.settings_cancel
@@ -162,6 +163,9 @@ fun SettingsScreen(
     /** The line under the menu: the release and the commit it was built from. */
     appVersion: String,
     actions: SettingsActions,
+    /** Settings › Agenda; null: the page is empty. */
+    agenda: AgendaUiState? = null,
+    agendaController: AgendaSettingsController? = null,
 ) {
     Box(
         Modifier
@@ -175,7 +179,7 @@ fun SettingsScreen(
             }
 
             is SettingsPage.Section -> {
-                SettingsSectionPage(page.section, state, nowSeconds, actions)
+                SettingsSectionPage(page.section, state, nowSeconds, actions, agenda, agendaController)
             }
 
             is SettingsPage.PickFolder -> {
@@ -246,6 +250,7 @@ private fun SettingsSection.title(): StringResource =
         SettingsSection.APPEARANCE -> Res.string.settings_appearance
         SettingsSection.EDITOR -> Res.string.settings_editor
         SettingsSection.DAILY -> Res.string.settings_daily
+        SettingsSection.AGENDA -> Res.string.settings_agenda
     }
 
 @Composable
@@ -296,15 +301,41 @@ private fun SettingsSectionPage(
     state: SettingsUiState,
     nowSeconds: () -> Long,
     actions: SettingsActions,
+    agenda: AgendaUiState?,
+    agendaController: AgendaSettingsController?,
 ) {
     when (section) {
-        SettingsSection.ACCOUNT -> AccountPage(state, actions)
-        SettingsSection.SYNC -> SyncPage(state, nowSeconds, actions)
-        SettingsSection.EXCLUSIONS -> ExclusionsPage(state, actions)
-        SettingsSection.IMAGES -> ImagesPage(state, actions)
-        SettingsSection.APPEARANCE -> SectionPage(section, actions) { AppearanceSection(state.appearance, actions.appearance) }
-        SettingsSection.EDITOR -> EditorPage(state, actions)
-        SettingsSection.DAILY -> SectionPage(section, actions) { DailyNotesSection(state.daily, actions.daily) }
+        SettingsSection.ACCOUNT -> {
+            AccountPage(state, actions)
+        }
+
+        SettingsSection.SYNC -> {
+            SyncPage(state, nowSeconds, actions)
+        }
+
+        SettingsSection.EXCLUSIONS -> {
+            ExclusionsPage(state, actions)
+        }
+
+        SettingsSection.IMAGES -> {
+            ImagesPage(state, actions)
+        }
+
+        SettingsSection.APPEARANCE -> {
+            SectionPage(section, actions) { AppearanceSection(state.appearance, actions.appearance) }
+        }
+
+        SettingsSection.EDITOR -> {
+            EditorPage(state, actions)
+        }
+
+        SettingsSection.DAILY -> {
+            SectionPage(section, actions) { DailyNotesSection(state.daily, actions.daily) }
+        }
+
+        SettingsSection.AGENDA -> {
+            SectionPage(section, actions) { if (agenda != null && agendaController != null) AgendaSection(agenda, agendaController) }
+        }
     }
 }
 

@@ -157,4 +157,19 @@ object TestTags {
         kind: ExclusionKind,
         path: String,
     ): String = "settings.${kind.name.lowercase()}.remove.$path"
+
+    const val SETTINGS_AGENDA_DISCOVER = "settings.agenda.discover"
+    const val SETTINGS_AGENDA_TEMPLATE = "settings.agenda.template"
+    const val SETTINGS_AGENDA_TIME_FORMAT = "settings.agenda.time-format"
+    const val SETTINGS_AGENDA_DAY_FORMAT = "settings.agenda.day-format"
+    const val SETTINGS_AGENDA_DAYS = "settings.agenda.days"
+    const val SETTINGS_AGENDA_ALLDAY = "settings.agenda.allday"
+    const val SETTINGS_AGENDA_HIDE_CANCELLED = "settings.agenda.hide-cancelled"
+
+    /** The row of one Event calendar in Settings › Agenda, by href; its switch is the row's toggle. */
+    fun settingsAgendaCalendar(href: String): String = "settings.agenda.calendar.$href"
+
+    fun settingsAgendaCalendarName(href: String): String = "settings.agenda.calendar.$href.name"
+
+    fun settingsAgendaCalendarColor(href: String): String = "settings.agenda.calendar.$href.color"
 }

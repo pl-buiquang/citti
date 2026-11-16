@@ -4,6 +4,7 @@ import app.citti.core.appearance.AccentSource
 import app.citti.core.appearance.Appearance
 import app.citti.core.appearance.ModeChoice
 import app.citti.core.appearance.ThemeChoice
+import app.citti.core.daily.DateLocale
 import app.citti.core.daily.DateLocales
 import app.citti.core.daily.ImportReport
 import app.citti.core.daily.MomentFormat
@@ -118,7 +119,7 @@ class CoreSettingsStore(
 }
 
 /** The pages the Settings menu opens, in menu order. */
-enum class SettingsSection { ACCOUNT, SYNC, EXCLUSIONS, IMAGES, APPEARANCE, EDITOR, DAILY }
+enum class SettingsSection { ACCOUNT, SYNC, EXCLUSIONS, IMAGES, APPEARANCE, EDITOR, DAILY, AGENDA }
 
 /** Where Settings is: the menu, a section page, the folder picker for one list, or a picker of Settings › Daily notes. */
 sealed interface SettingsPage {
@@ -297,8 +298,15 @@ class SettingsController(
     private val now: () -> LocalDateTime,
     remoteImages: Flow<RemoteImages> = flowOf(RemoteImages.ASK),
     toolbar: Flow<ToolbarLayout> = flowOf(ToolbarLayout.DEFAULT),
+    /** Settings › Agenda; null: the page is empty. */
+    agendaStore: AgendaSettingsStore? = null,
+    /** The Date locale of the Agenda examples. */
+    agendaLocale: () -> DateLocale = { DateLocales.en },
 ) {
     private val local = MutableStateFlow(Local())
+
+    /** The state holder of Settings › Agenda. */
+    val agenda: AgendaSettingsController? = agendaStore?.let { AgendaSettingsController(scope, it, now, agendaLocale) }
 
     /** The theme editor's state holder; it starts afresh every time the editor opens. */
     val themeEditor = ThemeEditorController(scope, appearance)

@@ -100,7 +100,9 @@ class AgendaSettings(
     fun setEnabled(
         href: String,
         enabled: Boolean,
-    ) = update(href) { it.copy(enabled = enabled) }
+    ) {
+        update(href) { it.copy(enabled = enabled) }
+    }
 
     /** A blank [name] goes back to the server's name. */
     fun rename(
@@ -148,13 +150,21 @@ class AgendaSettings(
         )
 
     /** Clamped to 1–366. */
-    fun setDays(days: Int) = queries.upsertSetting(KEY_AGENDA_DAYS, days.coerceIn(1, MAX_AGENDA_DAYS).toString())
+    fun setDays(days: Int) {
+        queries.upsertSetting(KEY_AGENDA_DAYS, days.coerceIn(1, MAX_AGENDA_DAYS).toString())
+    }
 
-    fun setPast(mode: PastMode) = queries.upsertSetting(KEY_AGENDA_PAST, mode.name.lowercase())
+    fun setPast(mode: PastMode) {
+        queries.upsertSetting(KEY_AGENDA_PAST, mode.name.lowercase())
+    }
 
-    fun setShowAllDay(show: Boolean) = queries.upsertSetting(KEY_AGENDA_ALL_DAY, if (show) "1" else "0")
+    fun setShowAllDay(show: Boolean) {
+        queries.upsertSetting(KEY_AGENDA_ALL_DAY, if (show) "1" else "0")
+    }
 
-    fun setHideCancelled(hide: Boolean) = queries.upsertSetting(KEY_AGENDA_HIDE_CANCELLED, if (hide) "1" else "0")
+    fun setHideCancelled(hide: Boolean) {
+        queries.upsertSetting(KEY_AGENDA_HIDE_CANCELLED, if (hide) "1" else "0")
+    }
 
     private fun update(
         href: String,
@@ -171,7 +181,9 @@ class AgendaSettings(
     private fun setOrClear(
         key: String,
         value: String?,
-    ) = if (value == null) queries.deleteSetting(key) else queries.upsertSetting(key, value)
+    ) {
+        if (value == null) queries.deleteSetting(key) else queries.upsertSetting(key, value)
+    }
 
     private fun parse(values: Map<String, String>): AgendaConfig {
         val defaults = AgendaDisplay()
