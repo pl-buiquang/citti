@@ -2,6 +2,7 @@ package app.citti.e2e.flows
 
 import app.citti.core.fake.Endpoint
 import app.citti.e2e.E2e
+import app.citti.e2e.Smoke
 import app.citti.e2e.robots.AgendaRobot
 import app.citti.e2e.robots.ListRobot
 import app.citti.e2e.robots.NoteRobot
@@ -59,6 +60,8 @@ class AgendaTest {
     private val personal get() = E2e.server.calendarHref("personal")
     private val work get() = E2e.server.calendarHref("work")
 
+    // Smoke: the cached events are @Serializable (a sealed EventTime), which R8 must keep.
+    @Smoke
     @Test
     fun aBlockShowsTheEnabledCalendarsAndWorksOffline() {
         // Nothing asks for calendars until Discover is tapped.
