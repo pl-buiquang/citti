@@ -255,6 +255,19 @@ class ObsidianMarkdownTest {
     }
 
     @Test
+    fun aLongAgendaBlockStaysInOnePiece() {
+        val body = (1..60).joinToString("\n") { "# comment $it" }
+        val agenda = parse("```agenda\n$body\n```").map { assertIs<Block.Code>(it) }
+        assertEquals(1, agenda.size)
+        assertTrue(agenda.single().isAgenda)
+        assertEquals(body, agenda.single().text)
+
+        assertEquals(2, parse("```agendax\n$body\n```").size)
+        assertEquals(2, parse("```kotlin\n$body\n```").size)
+        assertTrue(parse("```Agenda\ndays: 2\n```").map { assertIs<Block.Code>(it) }.none { it.isAgenda })
+    }
+
+    @Test
     fun aNineThousandItemListAndALongFenceAreChunked() {
         val list = (1..9_000).joinToString("\n") { "- [link $it](https://x.example/$it)" }
         val items = parse(list)

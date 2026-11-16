@@ -12,6 +12,11 @@ import org.intellij.markdown.parser.MarkdownParser
 /** A long code block or paragraph is cut into chunks of at most this many lines, so a lazy list stays smooth. */
 const val CHUNK_LINES = 40
 
+/** The info string of an Agenda block's fence, as in the Obsidian plugin (exact, lowercase). */
+const val AGENDA_INFO = "agenda"
+
+internal fun isAgendaInfo(info: String?): Boolean = info?.substringBefore(' ') == AGENDA_INFO
+
 private val IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "heic")
 private val OBSIDIAN_INLINE = Regex("""(!?)\[\[([^\[\]\n]*)\]\]|==([^=\n][^\n]*?)==""")
 private val SIZE = Regex("""^(\d+)(?:x(\d+))?$""")
@@ -476,7 +481,7 @@ object ObsidianMarkdown {
                         o += it.length + 1
                     }
                 }
-            if (body.size <= CHUNK_LINES) {
+            if (body.size <= CHUNK_LINES || (isFence && isAgendaInfo(info))) {
                 out +=
                     Block.Code(
                         n.s(),

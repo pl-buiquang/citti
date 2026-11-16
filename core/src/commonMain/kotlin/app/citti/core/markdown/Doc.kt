@@ -132,7 +132,10 @@ sealed interface Block {
         val text: String,
         val depth: Int = 0,
         val continued: Boolean = false,
-    ) : Block
+    ) : Block {
+        /** An Agenda block: never split into chunks, so its options are always read whole. */
+        val isAgenda: Boolean get() = isAgendaInfo(info)
+    }
 
     data class Table(
         override val start: Int,
