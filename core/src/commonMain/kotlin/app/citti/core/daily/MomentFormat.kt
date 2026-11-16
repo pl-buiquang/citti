@@ -9,12 +9,13 @@ import kotlinx.datetime.number
  * Moment.js date formatting and strict parsing, for Daily note titles and Template dates (Obsidian formats dates with
  * Moment).
  *
- * The tokens are `YYYY YY GGGG GG gggg gg MMMM MMM MM M DD D dddd ddd d ww w WW W Q HH mm ss`, longest first.
+ * The tokens are `YYYY YY GGGG GG gggg gg MMMM MMM MM M DD D dddd ddd d ww w WW W Q HH H hh h A a mm ss`, longest first.
  * `[literal]` and a backslash before a token are escapes, as in Moment; every other character is kept as is.
  * `ww`/`w` follow the [DateLocale]'s week rule, `WW`/`W` are ISO weeks, and `YYYY`/`YY` are calendar years, so
  * `2027-01-01` in fr gives `2027-W53` with `YYYY-[W]WW`, exactly like Moment. The week-year tokens give the year the
  * week belongs to (`GGGG`/`GG` for the ISO weeks, `gggg`/`gg` for the locale's weeks): `2027-01-01` gives `2026-W53`
- * with `GGGG-[W]WW`. `Q` is the quarter 1–4 and `d` the weekday number with 0 = Sunday.
+ * with `GGGG-[W]WW`. `Q` is the quarter 1–4 and `d` the weekday number with 0 = Sunday. `hh`/`h` are 12-hour clock
+ * hours and `A`/`a` give `AM`/`PM` or `am`/`pm` (Moment's default, which every citti Date locale keeps).
  */
 object MomentFormat {
     /** [date] and [time] in [pattern], with [locale]'s names and week rule. */
@@ -62,7 +63,7 @@ object MomentFormat {
                 Token.MONTH_SHORT -> month = locale.monthsShortFor(pattern).indexOfIgnoreCase(value) + 1
                 Token.MONTH_2, Token.MONTH -> month = value.toInt()
                 Token.DAY_2, Token.DAY -> day = value.toInt()
-                Token.HOUR_2 -> hour = value.toInt()
+                Token.HOUR_2, Token.HOUR -> hour = value.toInt()
                 Token.MINUTE_2 -> minute = value.toInt()
                 Token.SECOND_2 -> second = value.toInt()
                 else -> Unit
@@ -166,10 +167,17 @@ object MomentFormat {
             Token.WEEK_YEAR_2 -> (weekOfYear(date, locale.dow, locale.doy).year % 100).pad(2)
             Token.QUARTER -> ((month - 1) / 3 + 1).toString()
             Token.HOUR_2 -> time.hour.pad(2)
+            Token.HOUR -> time.hour.toString()
+            Token.HOUR_12_2 -> time.hour12().pad(2)
+            Token.HOUR_12 -> time.hour12().toString()
+            Token.MERIDIEM -> if (time.hour < 12) "AM" else "PM"
+            Token.MERIDIEM_LOWER -> if (time.hour < 12) "am" else "pm"
             Token.MINUTE_2 -> time.minute.pad(2)
             Token.SECOND_2 -> time.second.pad(2)
         }
     }
+
+    private fun LocalTime.hour12(): Int = (hour + 11) % 12 + 1
 
     private fun Int.pad(width: Int): String = toString().padStart(width, '0')
 
@@ -221,6 +229,11 @@ object MomentFormat {
         ISO_WEEK("W"),
         QUARTER("Q"),
         HOUR_2("HH"),
+        HOUR("H"),
+        HOUR_12_2("hh"),
+        HOUR_12("h"),
+        MERIDIEM("A"),
+        MERIDIEM_LOWER("a"),
         MINUTE_2("mm"),
         SECOND_2("ss"),
     }
@@ -317,10 +330,12 @@ object MomentFormat {
 
             Token.QUARTER -> "[1-4]"
 
-            Token.MONTH, Token.DAY, Token.WEEK, Token.ISO_WEEK -> """\d{1,2}"""
+            Token.MERIDIEM, Token.MERIDIEM_LOWER -> "AM|PM"
+
+            Token.MONTH, Token.DAY, Token.WEEK, Token.ISO_WEEK, Token.HOUR, Token.HOUR_12 -> """\d{1,2}"""
 
             Token.YEAR_2, Token.ISO_WEEK_YEAR_2, Token.WEEK_YEAR_2, Token.MONTH_2, Token.DAY_2, Token.WEEK_2,
-            Token.ISO_WEEK_2, Token.HOUR_2, Token.MINUTE_2, Token.SECOND_2,
+            Token.ISO_WEEK_2, Token.HOUR_2, Token.HOUR_12_2, Token.MINUTE_2, Token.SECOND_2,
             -> """\d{2}"""
         }
 

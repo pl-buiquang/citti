@@ -27,6 +27,18 @@ class MomentFormatTest {
     }
 
     @Test
+    fun twelveHourTokensMatchMoment() {
+        // moment("2026-10-31T<t>").format("H h hh A a") in en.
+        val en = DateLocales.en
+        val day = LocalDate(2026, 10, 31)
+        assertEquals("0 12 12 AM am", MomentFormat.format(day, LocalTime(0, 5), "H h hh A a", en))
+        assertEquals("9 9 09 AM am", MomentFormat.format(day, LocalTime(9, 0), "H h hh A a", en))
+        assertEquals("12 12 12 PM pm", MomentFormat.format(day, LocalTime(12, 30), "H h hh A a", en))
+        assertEquals("14 2 02 PM pm", MomentFormat.format(day, LocalTime(14, 5), "H h hh A a", en))
+        assertEquals("2:05 PM", MomentFormat.format(day, LocalTime(14, 5), "h:mm A", en))
+    }
+
+    @Test
     fun weeksAroundYearEndsMatchMoment() {
         val failures =
             expectedWeeks.mapNotNull { row ->
