@@ -708,6 +708,7 @@ class MainActivity : ComponentActivity() {
                     onDismissNotice = controller::dismissNotice,
                     onViewLine = controller::onViewLine,
                     onOpenNeighbor = controller::openNeighbor,
+                    onAgendaRefresh = controller::onAgendaRefresh,
                 ),
             images = images,
             folders = pickerFolders,
@@ -764,6 +765,7 @@ class MainActivity : ComponentActivity() {
         }
         BackHandler { if (!controller.onBack()) navigator.pop() }
         val editor by controller.themeEditor.state.collectAsState()
+        val agenda = controller.agenda?.state?.collectAsState()
         DisposableEffect(controller) {
             themeEditor = controller.themeEditor
             onDispose { if (themeEditor === controller.themeEditor) themeEditor = null }
@@ -774,6 +776,8 @@ class MainActivity : ComponentActivity() {
             nowSeconds = { container.config.nowSeconds() },
             folders = pickerFolders,
             appVersion = "${BuildConfig.VERSION_NAME} · ${BuildConfig.GIT_SHA}",
+            agenda = agenda?.value,
+            agendaController = controller.agenda,
             actions =
                 SettingsActions(
                     onBack = { if (!controller.onBack()) navigator.pop() },
@@ -852,6 +856,7 @@ class MainActivity : ComponentActivity() {
         creation = noteCreation,
         droppedDaily = { folder, title -> dailyGateway.droppedDaily(folder, title, calendarLabels) },
         noteNav = { id, folder, title -> container.noteNav(id, folder, title, titleCollator) },
+        agendaSource = container.agendaSource,
     )
 
     private fun newScope() = CoroutineScope(SupervisorJob(container.appScope.coroutineContext[Job]) + Dispatchers.Default)
@@ -891,6 +896,8 @@ class MainActivity : ComponentActivity() {
             },
             remoteImages = container.remoteImages,
             toolbar = container.editorSettings.toolbarFlow(),
+            agendaStore = container.agendaSettingsStore,
+            agendaLocale = container::agendaLocale,
         )
 
     private fun newLoginController() =

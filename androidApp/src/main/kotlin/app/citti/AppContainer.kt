@@ -4,6 +4,9 @@ import android.content.Context
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
+import app.citti.core.agenda.AgendaRepository
+import app.citti.core.agenda.AgendaRequest
+import app.citti.core.agenda.AgendaSnapshot
 import app.citti.core.api.ApiError
 import app.citti.core.api.NotesApi
 import app.citti.core.api.NotesApiConfig
@@ -20,6 +23,8 @@ import app.citti.core.daily.DailyGuard
 import app.citti.core.daily.DailyIndex
 import app.citti.core.daily.DailyNeighbor
 import app.citti.core.daily.DailyNotes
+import app.citti.core.daily.DateLocale
+import app.citti.core.daily.DateLocales
 import app.citti.core.daily.ImportReport
 import app.citti.core.daily.LocaleDetector
 import app.citti.core.daily.ObsidianDailyImport
@@ -27,6 +32,7 @@ import app.citti.core.daily.PeriodIndex
 import app.citti.core.daily.PeriodKind
 import app.citti.core.daily.TemplateSource
 import app.citti.core.daily.neighborsOf
+import app.citti.core.dav.CalDavClient
 import app.citti.core.dav.DavClient
 import app.citti.core.dav.DavSetup
 import app.citti.core.dav.ImageResolver
@@ -44,6 +50,9 @@ import app.citti.core.note.NoteEditor
 import app.citti.core.note.Sibling
 import app.citti.core.note.siblingsAround
 import app.citti.core.search.NoteSearch
+import app.citti.core.settings.AgendaConfig
+import app.citti.core.settings.AgendaSettings
+import app.citti.core.settings.DailyConfig
 import app.citti.core.settings.DailySettings
 import app.citti.core.settings.EditorSettings
 import app.citti.core.settings.ExclusionKind
@@ -71,17 +80,21 @@ import app.citti.ui.image.ImageUpload
 import app.citti.ui.image.VaultImageFetcherFactory
 import app.citti.ui.image.VaultImageKeyer
 import app.citti.ui.image.seedImageCache
+import app.citti.ui.note.AgendaSource
 import app.citti.ui.note.CoreNoteMenu
 import app.citti.ui.note.NeighborLink
 import app.citti.ui.note.NoteGateway
 import app.citti.ui.note.NoteMenuGateway
 import app.citti.ui.note.NoteNav
 import app.citti.ui.settings.AccountInfo
+import app.citti.ui.settings.AgendaSettingsStore
 import app.citti.ui.settings.AppearanceStore
+import app.citti.ui.settings.CoreAgendaSettingsStore
 import app.citti.ui.settings.CoreAppearanceStore
 import app.citti.ui.settings.CoreDailySettingsStore
 import app.citti.ui.settings.CoreSettingsStore
 import app.citti.ui.settings.DailySettingsStore
+import app.citti.ui.settings.dateLocale
 import app.citti.widget.DailyWidgetState
 import app.citti.widget.FavoriteRow
 import app.citti.widget.NoteWidgetRow
@@ -122,6 +135,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import okio.Path.Companion.toOkioPath
 import java.util.Locale
+import kotlin.time.Instant
 
 /**
  * The app's object graph, held by [CittiApp]. Everything is built lazily on first use.
@@ -219,6 +233,46 @@ class AppContainer(
     @OptIn(ExperimentalCoroutinesApi::class)
     fun dailyEntries(): Flow<Map<LocalDate, DailyEntry>> = dailySettings.configFlow().flatMapLatest(dailyIndex::flow)
 
+    /** The events of the Agenda blocks of viewed Notes (ADR 0012); requests only while signed in. */
+    val agendaRepository: AgendaRepository by lazy {
+        AgendaRepository(database, { stack.value?.calDav }, appScope, config.clock, Dispatchers.IO)
+    }
+
+    /** Settings › Agenda; a calendar that stops being enabled loses its cached events. */
+    val agendaSettings: AgendaSettings by lazy { AgendaSettings(database, Dispatchers.IO) { agendaRepository.forget(it) } }
+
+    val agendaSettingsStore: AgendaSettingsStore by lazy {
+        CoreAgendaSettingsStore(
+            agendaSettings,
+            { stack.value?.calDav },
+            Dispatchers.IO,
+        )
+    }
+
+    private val dailyConfig: StateFlow<DailyConfig> by lazy {
+        dailySettings.configFlow().stateIn(appScope, SharingStarted.Eagerly, DailyConfig())
+    }
+
+    /** The Date locale of the Agenda blocks' day names: the Daily notes one, else the phone's language. */
+    fun agendaLocale(): DateLocale = DateLocales.forCode(dailyConfig.value.dateLocale(Locale.getDefault().language))
+
+    /** What the Agenda blocks of a Note read. */
+    val agendaSource: AgendaSource by lazy {
+        object : AgendaSource {
+            override fun config(): Flow<AgendaConfig> = agendaSettings.configFlow()
+
+            override fun events(request: AgendaRequest): Flow<AgendaSnapshot> = agendaRepository.observe(request)
+
+            override fun refresh(request: AgendaRequest) = agendaRepository.refresh(request)
+
+            override fun now(): Instant = config.clock.now()
+
+            override fun zone(): TimeZone = TimeZone.of(config.timeZone().id)
+
+            override fun locale(): DateLocale = agendaLocale()
+        }
+    }
+
     val settingsStore: CoreSettingsStore by lazy { CoreSettingsStore(syncSettings, exclusions, imageSettings, editorSettings) }
 
     // The Image cache lives in the cache dir (the system may empty it). Its limit is read when the app starts.
@@ -281,6 +335,7 @@ class AppContainer(
         val actions: NoteActions,
         val dailyImport: ObsidianDailyImport,
         val dailyNotes: DailyNotes,
+        val calDav: CalDavClient,
     )
 
     private val stackLock = Mutex()
@@ -645,7 +700,9 @@ class AppContainer(
                     zone = { TimeZone.of(config.timeZone().id) },
                     onCreated = { widgets.updateDaily() },
                 )
-            SyncStack(client, engine, afterEdit, dav, images, creator, uploader, actions, dailyImport, dailyNotes)
+            // The Account's calendars, on the same client: the Agenda blocks never ask for another login (ADR 0012).
+            val calDav = CalDavClient(client, { davSetup.root() }, AndroidSyncLog, api.stats)
+            SyncStack(client, engine, afterEdit, dav, images, creator, uploader, actions, dailyImport, dailyNotes, calDav)
                 .also { stack.value = it }
         }
 
