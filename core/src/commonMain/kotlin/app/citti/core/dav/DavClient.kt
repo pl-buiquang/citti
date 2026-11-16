@@ -86,7 +86,8 @@ private const val OC_ETAG = "OC-ETag"
 
 /**
  * Authenticated WebDAV access to the Vault, over the app's one HTTP client (Basic auth and User-Agent are set
- * there). Outcomes are values, never exceptions. Nothing outside this class builds a WebDAV URL.
+ * there). Outcomes are values, never exceptions. Nothing outside this class builds a WebDAV file URL; calendar URLs
+ * belong to [CalDavClient].
  */
 class DavClient(
     private val client: HttpClient,

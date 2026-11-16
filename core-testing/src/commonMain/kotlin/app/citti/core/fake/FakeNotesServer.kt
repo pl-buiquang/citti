@@ -53,6 +53,12 @@ enum class Endpoint {
     /** WebDAV `MKCOL`: 201, 405 when something is there, 409 when the parent folder is missing. */
     DAV_MKCOL,
 
+    /** CalDAV `PROPFIND` of the calendar home: lists the calendars (and an inbox, as Nextcloud does). */
+    CALDAV_PROPFIND,
+
+    /** CalDAV `REPORT` calendar-query on one calendar: the events in the time range. Needs `<c:expand>`. */
+    CALDAV_REPORT,
+
     /** `POST /index.php/login/v2`: starts Login Flow v2. */
     LOGIN_START,
 
@@ -193,6 +199,33 @@ class FakeNotesServer(
     fun fileEtag(vaultPath: String): String? = locked { files["$notesPath/$vaultPath"]?.let { hash("${it.first.size}/${it.second}") } }
 
     var fileSuffix: String = ".md"
+
+    /** A calendar of the fake's user; [events] are VEVENT blocks with UTC `DTSTART`/`DTEND`. */
+    data class FakeCalendar(
+        val slug: String,
+        val name: String,
+        val color: String,
+        val components: List<String>,
+        val events: List<String>,
+    )
+
+    private val calendarMap = LinkedHashMap<String, FakeCalendar>()
+
+    /** Adds (or replaces) the calendar `<slug>` under the user's calendar home. */
+    fun addCalendar(
+        slug: String,
+        name: String,
+        color: String = "#0082c9",
+        events: List<String> = emptyList(),
+        components: List<String> = listOf("VEVENT"),
+    ) = locked { calendarMap[slug] = FakeCalendar(slug, name, color, components, events) }
+
+    fun removeCalendar(slug: String) {
+        locked { calendarMap.remove(slug) }
+    }
+
+    /** The href of a calendar, as the server lists it. */
+    fun calendarHref(slug: String): String = "$basePath$DAV_CALENDARS$userId/$slug/"
 
     val engine: MockEngine = MockEngine { request -> handle(request) }
 
@@ -435,6 +468,14 @@ class FakeNotesServer(
                 Endpoint.LOGIN_POLL
             }
 
+            rest.startsWith(DAV_CALENDARS) && method.value == "PROPFIND" -> {
+                Endpoint.CALDAV_PROPFIND
+            }
+
+            rest.startsWith(DAV_CALENDARS) && method.value == "REPORT" -> {
+                Endpoint.CALDAV_REPORT
+            }
+
             rest.startsWith(DAV_FILES) && method == HttpMethod.Get -> {
                 Endpoint.DAV_GET
             }
@@ -576,6 +617,14 @@ class FakeNotesServer(
                 davMkcol(path)
             }
 
+            Endpoint.CALDAV_PROPFIND -> {
+                calendarsPropfind(request, path)
+            }
+
+            Endpoint.CALDAV_REPORT -> {
+                calendarReport(request, path, body)
+            }
+
             Endpoint.LOGIN_START -> {
                 val origin = request.url.protocolWithAuthority + basePath
                 login = LoginState.Pending
@@ -665,6 +714,85 @@ class FakeNotesServer(
         headers.name("Content-Type", "application/octet-stream")
         return respond(bytes, HttpStatusCode.OK, headers.build())
     }
+
+    private fun MockRequestHandleScope.multistatus(responses: String): HttpResponseData {
+        val headers = HeadersBuilder()
+        headers.name("Content-Type", "application/xml; charset=utf-8")
+        val xml =
+            """<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav" xmlns:x1="http://apple.com/ns/ical/">$responses</d:multistatus>"""
+        return respond(xml, HttpStatusCode.MultiStatus, headers.build())
+    }
+
+    private fun xmlEscape(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    private fun MockRequestHandleScope.calendarsPropfind(
+        request: HttpRequestData,
+        path: String,
+    ): HttpResponseData {
+        val home = "$basePath$DAV_CALENDARS$userId/"
+        if (percentDecodeForFake(path) != home) return text(HttpStatusCode.NotFound, "no such calendar home")
+        if (request.headers["Depth"] != "1") return text(HttpStatusCode.BadRequest, "Depth 1 expected")
+        val ok = "<d:status>HTTP/1.1 200 OK</d:status>"
+        val missing = "<d:propstat><d:prop><d:displayname/></d:prop><d:status>HTTP/1.1 404 Not Found</d:status></d:propstat>"
+        val rows =
+            buildString {
+                append(
+                    "<d:response><d:href>$home</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop>$ok</d:propstat>$missing</d:response>",
+                )
+                append(
+                    "<d:response><d:href>${home}inbox/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/><cal:schedule-inbox/>" +
+                        "</d:resourcetype></d:prop>$ok</d:propstat></d:response>",
+                )
+                calendarMap.values.forEach { c ->
+                    val comps = c.components.joinToString("") { "<cal:comp name=\"$it\"/>" }
+                    append(
+                        "<d:response><d:href>$home${c.slug}/</d:href><d:propstat><d:prop>" +
+                            "<d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>" +
+                            "<d:displayname>${xmlEscape(c.name)}</d:displayname><x1:calendar-color>${c.color}FF</x1:calendar-color>" +
+                            "<cal:supported-calendar-component-set>$comps</cal:supported-calendar-component-set></d:prop>$ok</d:propstat></d:response>",
+                    )
+                }
+            }
+        return multistatus(rows)
+    }
+
+    private fun MockRequestHandleScope.calendarReport(
+        request: HttpRequestData,
+        path: String,
+        body: String,
+    ): HttpResponseData {
+        val rest = percentDecodeForFake(path.removePrefix(basePath).removePrefix(DAV_CALENDARS)).trimEnd('/')
+        if (rest.substringBefore('/') != userId) return text(HttpStatusCode.NotFound, "no such user")
+        val calendar = calendarMap[rest.substringAfter('/', "")] ?: return text(HttpStatusCode.NotFound, "no such calendar")
+        if (request.headers["Depth"] != "1") return text(HttpStatusCode.BadRequest, "Depth 1 expected")
+        // The app relies on the server expanding recurrences.
+        if ("<c:expand" !in body) return text(HttpStatusCode.BadRequest, "expand expected")
+        val range = Regex("""<c:time-range start="(\w+)" end="(\w+)"/>""").find(body) ?: return text(HttpStatusCode.BadRequest, "no range")
+        val (from, to) = range.destructured
+        val rows =
+            calendar.events
+                .filter { ev ->
+                    val start = Regex("""DTSTART[^:]*:(\w+)""").find(ev)?.groupValues?.get(1) ?: return@filter false
+                    val end = Regex("""DTEND[^:]*:(\w+)""").find(ev)?.groupValues?.get(1) ?: start
+                    val s = utcKey(start)
+                    val e = maxOf(utcKey(end), s)
+                    if (e == s) s >= utcKey(from) && s < utcKey(to) else s < utcKey(to) && e > utcKey(from)
+                }.mapIndexed { i, ev ->
+                    val ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//fake//EN\r\n${ev.trim().replace(
+                        "\n",
+                        "\r\n",
+                    )}\r\nEND:VCALENDAR\r\n"
+                    "<d:response><d:href>${calendarHref(calendar.slug)}event-$i.ics</d:href><d:propstat><d:prop>" +
+                        "<cal:calendar-data>${xmlEscape(
+                            ics,
+                        )}</cal:calendar-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"
+                }
+        return multistatus(rows.joinToString(""))
+    }
+
+    /** A sortable key of an iCalendar date or UTC time (`20261116` or `20261116T090000Z`). */
+    private fun utcKey(t: String): String = if ('T' in t) t.removeSuffix("Z") else "${t}T000000"
 
     /** The file key (`Notes/media/a.png`) of a DAV URL, or null for another user. */
     private fun davKey(path: String): String? {
@@ -863,6 +991,7 @@ class FakeNotesServer(
         const val CAPABILITIES = "/ocs/v2.php/cloud/capabilities"
         const val CLOUD_USER = "/ocs/v2.php/cloud/user"
         const val DAV_FILES = "/remote.php/dav/files/"
+        const val DAV_CALENDARS = "/remote.php/dav/calendars/"
         const val LOGIN_V2 = "/index.php/login/v2"
         const val LOGIN_TOKEN = "fake-login-token"
     }
