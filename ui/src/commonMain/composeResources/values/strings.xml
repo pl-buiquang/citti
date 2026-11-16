@@ -431,4 +431,24 @@
     <string name="theme_sheet_reset">Reset</string>
     <string name="theme_sheet_done">Done</string>
     <string name="theme_sheet_selected">Selected</string>
+    <string name="agenda_all_day">All day</string>
+    <string name="agenda_no_title">(no title)</string>
+    <string name="agenda_empty">No events</string>
+    <string name="agenda_past">Ended</string>
+    <string name="agenda_loading">Loading events…</string>
+    <string name="agenda_updated">Updated %1$s</string>
+    <string name="agenda_offline_updated">Offline · updated %1$s</string>
+    <string name="agenda_cant_load">Offline, can't load events</string>
+    <string name="agenda_refresh">Refresh</string>
+    <string name="agenda_invalid_date">Invalid date "%1$s". Use YYYY-MM-DD, today, tomorrow, yesterday or +N/-N.</string>
+    <string name="agenda_no_calendar">No calendar enabled. Settings › Agenda › Discover calendars.</string>
+    <string name="agenda_no_match">No enabled calendar named %1$s.</string>
+    <string name="agenda_not_ready">Events show once the Account is ready.</string>
+    <string name="agenda_auth">Sign in again in Settings › Account to load events.</string>
+    <string name="agenda_calendar_not_found">%1$s: calendar not found. Discover calendars again in Settings › Agenda.</string>
+    <string name="agenda_calendar_failed">%1$s: couldn't load events.</string>
+    <string name="agenda_option_no_colon">Ignored line without "key: value": %1$s</string>
+    <string name="agenda_option_bad_days">days must be a whole number between 1 and 366, got "%1$s"</string>
+    <string name="agenda_option_bad_past">past must be show, dim or hide, got "%1$s"</string>
+    <string name="agenda_option_unknown">Unknown option "%1$s"</string>
 </resources>

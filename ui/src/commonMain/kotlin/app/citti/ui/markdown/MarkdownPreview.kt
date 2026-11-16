@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import app.citti.core.agenda.AgendaRequest
 import app.citti.core.markdown.Align
 import app.citti.core.markdown.Block
 import app.citti.core.markdown.Doc
@@ -74,6 +75,7 @@ import app.citti.ui.TestTags
 import app.citti.ui.components.colored
 import app.citti.ui.image.ImageEnv
 import app.citti.ui.image.VaultImage
+import app.citti.ui.note.AgendaBlockState
 import app.citti.ui.note.LinkRef
 import app.citti.ui.resources.Res
 import app.citti.ui.resources.properties
@@ -100,12 +102,15 @@ fun MarkdownPreview(
     images: ImageEnv? = null,
     /** A double tap on block [Int] (an index of [Doc.blocks]), or on the empty space (null); null: the Preview ignores double taps. */
     onDoubleTap: ((Int?) -> Unit)? = null,
+    /** The Agenda blocks by start offset; a block without a state shows as a code block. */
+    agendas: Map<Int, AgendaBlockState> = emptyMap(),
+    onAgendaRefresh: (AgendaRequest) -> Unit = {},
 ) {
     val colors = CittiTheme.colors
     val doubleTap by rememberUpdatedState(onDoubleTap)
     val viewConfiguration = LocalViewConfiguration.current
     val styles = remember(colors, links, onLink) { InlineStyles(colors, links, onLink) }
-    val scope = PreviewScope(styles, readonly, onTask, images)
+    val scope = PreviewScope(styles, readonly, onTask, images, agendas, onAgendaRefresh)
     LazyColumn(
         modifier
             .fillMaxSize()
@@ -149,17 +154,19 @@ fun MarkdownPreview(
     }
 }
 
-private class PreviewScope(
+internal class PreviewScope(
     val styles: InlineStyles,
     val readonly: Boolean,
     val onTask: (Task) -> Unit,
     val images: ImageEnv?,
+    val agendas: Map<Int, AgendaBlockState> = emptyMap(),
+    val onAgendaRefresh: (AgendaRequest) -> Unit = {},
 )
 
 private val MONO = FontFamily.Monospace
 
 @Composable
-private fun PreviewScope.Block(
+internal fun PreviewScope.Block(
     block: Block,
     muted: Boolean,
 ) {
@@ -195,7 +202,8 @@ private fun PreviewScope.Block(
         }
 
         is Block.Code -> {
-            CodeBlock(block)
+            val agenda = if (block.isAgenda) agendas[block.start] else null
+            if (agenda != null) AgendaBlock(block, agenda) else CodeBlock(block)
         }
 
         is Block.Table -> {
@@ -212,7 +220,7 @@ private fun PreviewScope.Block(
 private fun bodyStyle(muted: Boolean): TextStyle = CittiTheme.typography.body.colored(muted)
 
 @Composable
-private fun Indented(
+internal fun Indented(
     depth: Int,
     content: @Composable () -> Unit,
 ) {

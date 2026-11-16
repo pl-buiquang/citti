@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import app.citti.core.agenda.AgendaRequest
 import app.citti.core.markdown.Task
 import app.citti.core.markdown.ToolbarAction
 import app.citti.core.settings.ToolbarLayout
@@ -117,6 +118,8 @@ class NoteActions(
     val onViewLine: (Int) -> Unit = {},
     /** The Daily note bar: open the previous or next Daily note. */
     val onOpenNeighbor: (NeighborLink) -> Unit = {},
+    /** The Refresh action of an Agenda block. */
+    val onAgendaRefresh: (AgendaRequest) -> Unit = {},
 )
 
 private const val VIEW_LINE_MS = 300L
@@ -258,6 +261,8 @@ private fun NoteColumn(
                                 onLink = actions.onLink,
                                 images = images,
                                 onDoubleTap = if (state.readonly) null else switchMode,
+                                agendas = state.agendas,
+                                onAgendaRefresh = actions.onAgendaRefresh,
                             )
                         }
                     }

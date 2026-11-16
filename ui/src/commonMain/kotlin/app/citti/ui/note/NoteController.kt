@@ -1,5 +1,6 @@
 package app.citti.ui.note
 
+import app.citti.core.agenda.AgendaRequest
 import app.citti.core.api.ApiError
 import app.citti.core.dav.UploadResult
 import app.citti.core.markdown.Doc
@@ -105,6 +106,8 @@ data class NoteUiState(
     val startOffset: Int? = null,
     /** The previous and next Daily note, when this Note is a Daily note. */
     val noteNav: NoteNav? = null,
+    /** The Agenda blocks of [doc], by their start offset; empty without an [AgendaSource]. */
+    val agendas: Map<Int, AgendaBlockState> = emptyMap(),
 )
 
 /**
@@ -140,6 +143,8 @@ class NoteController(
     private val droppedDaily: suspend (folder: String, title: String) -> DroppedDaily? = { _, _ -> null },
     /** The Notes before and after the Note [localId] of this [folder] and [title] (a Daily note's days, else its Folder). */
     private val noteNav: (localId: Long, folder: String, title: String) -> Flow<NoteNav?> = { _, _, _ -> flowOf(null) },
+    /** The events of the Agenda blocks; null: they show as code blocks. */
+    private val agendaSource: AgendaSource? = null,
 ) {
     private val localId = route.localId
 
@@ -179,6 +184,7 @@ class NoteController(
         /** The source offset of `Route.Note.startLine`, cleared by the first [onViewLine]. */
         val startOffset: Int? = null,
         val noteNav: NoteNav? = null,
+        val agendas: Map<Int, AgendaBlockState> = emptyMap(),
     )
 
     private val model = MutableStateFlow(Model())
@@ -188,6 +194,9 @@ class NoteController(
 
     // Which parse the Preview model on show is for; a newer one drops the older.
     private var parseJob: Job? = null
+
+    // Follows the Agenda blocks of the shown Preview model; cancelled with it (Edit mode, a new parse, leaving).
+    private var agendaJob: Job? = null
 
     private val effectivePreview: Flow<Boolean> =
         combine(
@@ -223,6 +232,7 @@ class NoteController(
                 notice = r.notice,
                 startOffset = m.startOffset,
                 noteNav = m.noteNav,
+                agendas = m.agendas,
             )
         }.stateIn(scope, SharingStarted.Eagerly, NoteUiState())
 
@@ -244,7 +254,14 @@ class NoteController(
         scope.launch {
             combine(effectivePreview, model.map { it.ready }.distinctUntilChanged()) { p, ready -> p && ready }
                 .distinctUntilChanged()
-                .collect { shown -> if (shown) parse() else model.update { it.copy(doc = null) } }
+                .collect { shown ->
+                    if (shown) {
+                        parse()
+                    } else {
+                        agendaJob?.cancel()
+                        model.update { it.copy(doc = null, agendas = emptyMap()) }
+                    }
+                }
         }
         scope.launch {
             combine(this@NoteController.route, model.map { it.ready }.distinctUntilChanged()) { r, ready -> r.focus && ready }
@@ -791,8 +808,29 @@ class NoteController(
             scope.launch {
                 val doc = withContext(parseDispatcher) { ObsidianMarkdown.parse(text) }
                 model.update { it.copy(doc = doc) }
+                followAgendas(doc)
                 resolveLinks(doc)
             }
+    }
+
+    /** Only the blocks of the shown Note are asked for, only while it is shown in Preview mode (ADR 0012). */
+    private fun followAgendas(doc: Doc) {
+        agendaJob?.cancel()
+        val source = agendaSource
+        if (source == null || agendaBlocks(doc).isEmpty()) {
+            model.update { it.copy(agendas = emptyMap()) }
+            return
+        }
+        val title =
+            model.value.row
+                ?.title
+                .orEmpty()
+        agendaJob = scope.launch { agendaStates(doc, title, source).collect { states -> model.update { it.copy(agendas = states) } } }
+    }
+
+    /** The Refresh action of an Agenda block. */
+    fun onAgendaRefresh(request: AgendaRequest) {
+        agendaSource?.refresh(request)
     }
 
     private suspend fun resolveLinks(doc: Doc) {

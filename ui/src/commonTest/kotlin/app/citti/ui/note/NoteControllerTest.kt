@@ -1,6 +1,11 @@
 package app.citti.ui.note
 
+import app.citti.core.agenda.AgendaRequest
+import app.citti.core.agenda.AgendaSnapshot
+import app.citti.core.agenda.CalendarEvents
 import app.citti.core.api.ApiError
+import app.citti.core.daily.DateLocale
+import app.citti.core.daily.DateLocales
 import app.citti.core.dav.UploadResult
 import app.citti.core.dav.VaultPath
 import app.citti.core.markdown.Block
@@ -18,6 +23,8 @@ import app.citti.core.note.NoteCreator.Check
 import app.citti.core.note.NoteEditor.SaveResult
 import app.citti.core.note.NoteInfo
 import app.citti.core.note.RenameResult
+import app.citti.core.settings.AgendaConfig
+import app.citti.core.settings.EventCalendar
 import app.citti.core.sync.SyncStatus
 import app.citti.ui.components.DroppedDaily
 import app.citti.ui.components.MenuItem
@@ -40,12 +47,17 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -53,6 +65,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 private class FakeGateway : NoteGateway {
     val row = MutableStateFlow<EditorDoc?>(null)
@@ -250,6 +263,7 @@ class NoteControllerTest {
         creation: NoteCreation? = null,
         droppedDaily: suspend (String, String) -> DroppedDaily? = { _, _ -> null },
         noteNav: (Long, String, String) -> Flow<NoteNav?> = { _, _, _ -> flowOf(null) },
+        agendaSource: AgendaSource? = null,
         setup: FakeGateway.() -> Unit = {},
     ): Fixture {
         val gateway =
@@ -276,6 +290,7 @@ class NoteControllerTest {
                 creation = creation,
                 droppedDaily = droppedDaily,
                 noteNav = noteNav,
+                agendaSource = agendaSource,
             )
         runCurrent()
         return Fixture(this, gateway, navigator, snacks, controller)
@@ -428,6 +443,123 @@ class NoteControllerTest {
             val f = open(row = doc("a\nb"))
             assertEquals(3, f.controller.editor.selection.start)
             assertNull(f.controller.state.value.startOffset)
+        }
+
+    private class FakeAgendaSource : AgendaSource {
+        val config =
+            MutableStateFlow(
+                AgendaConfig(
+                    listOf(
+                        EventCalendar("/c/personal/", "Personal"),
+                        EventCalendar("/c/work/", "Work", enabled = false),
+                    ),
+                ),
+            )
+        val asked = mutableListOf<AgendaRequest>()
+        var collecting = 0
+        val snapshot = MutableStateFlow<AgendaSnapshot?>(null)
+        val refreshed = mutableListOf<AgendaRequest>()
+
+        override fun config(): Flow<AgendaConfig> = config
+
+        override fun events(request: AgendaRequest): Flow<AgendaSnapshot> =
+            flow {
+                asked += request
+                collecting++
+                try {
+                    emitAll(snapshot.filterNotNull())
+                } finally {
+                    collecting--
+                }
+            }
+
+        override fun refresh(request: AgendaRequest) {
+            refreshed += request
+        }
+
+        override fun now(): Instant = Instant.parse("2026-11-16T08:00:00Z")
+
+        override fun zone(): TimeZone = TimeZone.of("Europe/Paris")
+
+        override fun locale(): DateLocale = DateLocales.en
+    }
+
+    private val agendaText = "Today\n\n```agenda\ndays: 2\n```\n"
+
+    @Test
+    fun anAgendaBlockAsksForItsEventsOnlyInPreviewMode() =
+        runTest {
+            val source = FakeAgendaSource()
+            val f = open(doc(agendaText), agendaSource = source)
+            val request = AgendaRequest(listOf("/c/personal/"), LocalDate(2026, 11, 16), 2, "Europe/Paris")
+            val block =
+                f.controller.state.value.agendas.values
+                    .single()
+            assertEquals(request, block.request)
+            assertNull(block.snapshot)
+            assertEquals(listOf(request), source.asked)
+
+            val snapshot = AgendaSnapshot(mapOf("/c/personal/" to CalendarEvents(emptyList(), null, null)), refreshing = false)
+            source.snapshot.value = snapshot
+            runCurrent()
+            assertEquals(
+                snapshot,
+                f.controller.state.value.agendas.values
+                    .single()
+                    .snapshot,
+            )
+
+            f.controller.onAgendaRefresh(request)
+            assertEquals(listOf(request), source.refreshed)
+
+            // Edit mode stops following the events.
+            f.controller.togglePreview()
+            runCurrent()
+            f.controller.show(f.navigator.top as Route.Note)
+            runCurrent()
+            assertEquals(emptyMap(), f.controller.state.value.agendas)
+            assertEquals(0, source.collecting)
+            assertEquals(1, source.asked.size)
+        }
+
+    @Test
+    fun aNoteOpenedInEditModeAsksForNothing() =
+        runTest {
+            val source = FakeAgendaSource()
+            open(doc(agendaText), route = Route.Note(1, preview = false), agendaSource = source)
+            assertEquals(emptyList(), source.asked)
+        }
+
+    @Test
+    fun anAgendaBlockWithoutAMatchingCalendarAsksForNothing() =
+        runTest {
+            val source = FakeAgendaSource()
+            val f = open(doc("```agenda\ncalendars: Work, Nope\n```"), agendaSource = source)
+            val block =
+                f.controller.state.value.agendas.values
+                    .single()
+            assertEquals(AgendaProblem.NoMatch(listOf("Work", "Nope")), block.problem)
+            assertNull(block.request)
+            assertEquals(emptyList(), source.asked)
+
+            // Enabling Work in Settings › Agenda follows at once.
+            source.config.value = AgendaConfig(listOf(EventCalendar("/c/work/", "Work")))
+            runCurrent()
+            assertEquals(
+                listOf("/c/work/"),
+                f.controller.state.value.agendas.values
+                    .single()
+                    .request
+                    ?.calendars,
+            )
+        }
+
+    @Test
+    fun withoutASourceAnAgendaBlockIsACodeBlock() =
+        runTest {
+            val f = open(doc(agendaText))
+            assertNotNull(f.controller.state.value.doc)
+            assertEquals(emptyMap(), f.controller.state.value.agendas)
         }
 
     @Test

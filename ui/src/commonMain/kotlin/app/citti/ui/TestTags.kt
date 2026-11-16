@@ -25,6 +25,12 @@ object TestTags {
     /** The blocks of Preview mode. */
     const val NOTE_PREVIEW = "note.preview"
 
+    /** An Agenda block in Preview mode, one of its events, its status line and its Refresh action. */
+    const val AGENDA_BLOCK = "agenda.block"
+    const val AGENDA_ITEM = "agenda.item"
+    const val AGENDA_STATUS = "agenda.status"
+    const val AGENDA_REFRESH = "agenda.refresh"
+
     /** The New note button; Index's label and the dialog title both read "New note". */
     const val NEW_NOTE_BUTTON = "browse.newNote"
     const val TREE_SORT = "browse.treeSort"
