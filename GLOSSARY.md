@@ -48,7 +48,7 @@ _Avoid_: Snippet, boilerplate
 
 **Calendar**:
 The third main view, next to List and Tree mode, that shows which days have a Daily note and opens or creates one. Its month, year and (when shown) quarter, its week numbers and a long press on a day open or create the Periodic notes.
-_Avoid_: Agenda, date picker
+_Avoid_: Agenda (that is an Agenda block), date picker
 
 **Today button**:
 The button next to New note that opens or creates today's Daily note.
@@ -59,8 +59,22 @@ The pattern, in Moment.js tokens, that turns a date into a Daily note's title. A
 _Avoid_: Date pattern, file name format
 
 **Date locale**:
-The language used for month and weekday names when a Template is filled in; detected from the journal unless set by hand.
+The language used for month and weekday names when a Template is filled in, and for the day names of an Agenda block; detected from the journal unless set by hand.
 _Avoid_: Locale (alone), language
+
+## Agenda
+
+**Agenda block**:
+A ```` ```agenda ```` fenced block in a note that Preview mode shows as the events of the Event calendars for one or more days. Its text stays as typed; Edit mode shows it raw.
+_Avoid_: Calendar (that is the Daily notes view), events widget
+
+**Event calendar**:
+One of the Account's Nextcloud calendars whose events an Agenda block can show; enabled, renamed and recolored in Settings › Agenda.
+_Avoid_: Calendar (alone), CalDAV collection
+
+**Event template**:
+The line pattern with `{{field}}` placeholders that turns one event into Markdown in an Agenda block.
+_Avoid_: Template (that is a note that starts new notes)
 
 ## Visibility
 
