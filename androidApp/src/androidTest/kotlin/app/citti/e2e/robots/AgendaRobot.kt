@@ -56,6 +56,12 @@ class AgendaRobot(
         assertEquals(if (dimmed) Strings.AGENDA_PAST else null, row.config.getOrNull(SemanticsProperties.StateDescription), summary)
     }
 
+    /** Taps the Agenda item of [summary] (its text, which the item's tap covers). */
+    fun openEvent(summary: String) {
+        // A tappable item merges its texts: they are the item's own.
+        waitFor(hasTestTag(TestTags.AGENDA_ITEM) and hasText(summary, substring = true)).performClick()
+    }
+
     fun assertNoEvent(summary: String) {
         assertEquals(false, exists(itemText(summary), unmerged = true), "$summary is listed")
     }
