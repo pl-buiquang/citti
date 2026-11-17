@@ -48,6 +48,7 @@ import app.citti.ui.resources.agenda_no_match
 import app.citti.ui.resources.agenda_no_title
 import app.citti.ui.resources.agenda_not_ready
 import app.citti.ui.resources.agenda_offline_updated
+import app.citti.ui.resources.agenda_open
 import app.citti.ui.resources.agenda_option_bad_days
 import app.citti.ui.resources.agenda_option_bad_past
 import app.citti.ui.resources.agenda_option_no_colon
@@ -113,11 +114,19 @@ internal fun PreviewScope.AgendaBlock(
                     }
                     day.items.forEachIndexed { i, item ->
                         val pastLabel = stringResource(Res.string.agenda_past)
+                        val openLabel = stringResource(Res.string.agenda_open)
+                        val open = onAgendaOpen
                         Row(
                             Modifier
                                 .fillMaxWidth()
                                 .testTag(TestTags.AGENDA_ITEM)
-                                .semantics { if (item.dimmed) stateDescription = pastLabel },
+                                .then(
+                                    if (open == null) {
+                                        Modifier
+                                    } else {
+                                        Modifier.clickable(onClickLabel = openLabel, role = Role.Button) { open(item.occurrence) }
+                                    },
+                                ).semantics { if (item.dimmed) stateDescription = pastLabel },
                             horizontalArrangement = Arrangement.spacedBy(NotesSpacing.space2),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

@@ -21,4 +21,5 @@
     <string name="widget_daily_guard">The Journal folder is an Unsynced folder</string>
     <string name="theme_file_export_failed">Could not save the theme file</string>
     <string name="theme_file_import_failed">Could not read the theme file</string>
+    <string name="agenda_no_calendar_app">No calendar app can open this event.</string>
 </resources>

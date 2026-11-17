@@ -1,6 +1,7 @@
 package app.citti
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -42,6 +43,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import app.citti.agenda.CalendarEventOpener
+import app.citti.core.agenda.AgendaOccurrence
 import app.citti.core.appearance.MAX_THEME_FILE_BYTES
 import app.citti.core.daily.Period
 import app.citti.core.daily.PeriodKind
@@ -168,6 +171,58 @@ class MainActivity : ComponentActivity() {
     // POST_NOTIFICATIONS: asked once, never blocks anything; the sync works without it.
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    /** The Agenda item tapped while READ_CALENDAR was being asked for. */
+    private var pendingAgendaOpen: AgendaOccurrence? = null
+
+    // READ_CALENDAR: asked on the first tap on an Agenda item; refused, the item opens the calendar at its time.
+    private val calendarPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            pendingAgendaOpen?.let {
+                pendingAgendaOpen = null
+                openOccurrence(it, granted)
+            }
+        }
+
+    /** A tap on an Agenda item: its event in the calendar app (ADR 0013). */
+    private fun openAgendaOccurrence(occurrence: AgendaOccurrence) {
+        if (checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED) {
+            openOccurrence(occurrence, readable = true)
+        } else {
+            pendingAgendaOpen = occurrence
+            calendarPermission.launch(Manifest.permission.READ_CALENDAR)
+        }
+    }
+
+    private fun openOccurrence(
+        occurrence: AgendaOccurrence,
+        readable: Boolean,
+    ) {
+        container.appScope.launch {
+            val instance =
+                if (readable) {
+                    withContext(Dispatchers.IO) {
+                        // A provider that refuses the query (no calendar app, a revoked permission) is not found.
+                        runCatching {
+                            CalendarEventOpener.pick(
+                                CalendarEventOpener.instancesAround(contentResolver, occurrence),
+                                occurrence,
+                            )
+                        }.getOrNull()
+                    }
+                } else {
+                    null
+                }
+            val intent = instance?.let(CalendarEventOpener::eventIntent) ?: CalendarEventOpener.timeIntent(occurrence)
+            runOnUiThread {
+                try {
+                    startActivity(intent)
+                } catch (_: ActivityNotFoundException) {
+                    toastOnMain(R.string.agenda_no_calendar_app)
+                }
+            }
+        }
+    }
 
     /** The theme editor of the open Settings route, for the file picker results. */
     private var themeEditor: ThemeEditorController? = null
@@ -709,6 +764,7 @@ class MainActivity : ComponentActivity() {
                     onViewLine = controller::onViewLine,
                     onOpenNeighbor = controller::openNeighbor,
                     onAgendaRefresh = controller::onAgendaRefresh,
+                    onAgendaOpen = ::openAgendaOccurrence,
                 ),
             images = images,
             folders = pickerFolders,

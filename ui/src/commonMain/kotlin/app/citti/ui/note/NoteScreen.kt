@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import app.citti.core.agenda.AgendaOccurrence
 import app.citti.core.agenda.AgendaRequest
 import app.citti.core.markdown.Task
 import app.citti.core.markdown.ToolbarAction
@@ -120,6 +121,8 @@ class NoteActions(
     val onOpenNeighbor: (NeighborLink) -> Unit = {},
     /** The Refresh action of an Agenda block. */
     val onAgendaRefresh: (AgendaRequest) -> Unit = {},
+    /** A tap on an Agenda item; null: items are not tappable. */
+    val onAgendaOpen: ((AgendaOccurrence) -> Unit)? = null,
 )
 
 private const val VIEW_LINE_MS = 300L
@@ -263,6 +266,7 @@ private fun NoteColumn(
                                 onDoubleTap = if (state.readonly) null else switchMode,
                                 agendas = state.agendas,
                                 onAgendaRefresh = actions.onAgendaRefresh,
+                                onAgendaOpen = actions.onAgendaOpen,
                             )
                         }
                     }

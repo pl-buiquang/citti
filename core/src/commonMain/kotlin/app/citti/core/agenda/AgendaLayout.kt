@@ -51,12 +51,25 @@ data class AgendaDayView(
     val empty: String?,
 )
 
+/**
+ * One occurrence of an event, as an Agenda item shows it: what a calendar app needs to find it again (the
+ * iCalendar [uid] and the occurrence's times; a recurring event has one per day).
+ */
+data class AgendaOccurrence(
+    val uid: String,
+    val summary: String,
+    val start: Instant,
+    val end: Instant,
+    val allDay: Boolean,
+)
+
 data class AgendaItemView(
     val markdown: String,
     /** Ended already, and the block dims past events. */
     val dimmed: Boolean,
     val color: String,
     val allDay: Boolean,
+    val occurrence: AgendaOccurrence,
 )
 
 /** The texts the layout needs that come from the UI's strings. */
@@ -120,6 +133,7 @@ object AgendaLayout {
                                 dimmed = ended && past == PastMode.DIM,
                                 color = ce.color,
                                 allDay = ce.event.allDay,
+                                occurrence = AgendaOccurrence(ce.event.uid, ce.event.summary, span.start, span.end, ce.event.allDay),
                             )
                         }
                 AgendaDayView(

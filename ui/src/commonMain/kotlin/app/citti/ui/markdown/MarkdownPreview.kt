@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import app.citti.core.agenda.AgendaOccurrence
 import app.citti.core.agenda.AgendaRequest
 import app.citti.core.markdown.Align
 import app.citti.core.markdown.Block
@@ -105,12 +106,14 @@ fun MarkdownPreview(
     /** The Agenda blocks by start offset; a block without a state shows as a code block. */
     agendas: Map<Int, AgendaBlockState> = emptyMap(),
     onAgendaRefresh: (AgendaRequest) -> Unit = {},
+    /** A tap on an Agenda item: open that occurrence in the calendar app; null: items are not tappable. */
+    onAgendaOpen: ((AgendaOccurrence) -> Unit)? = null,
 ) {
     val colors = CittiTheme.colors
     val doubleTap by rememberUpdatedState(onDoubleTap)
     val viewConfiguration = LocalViewConfiguration.current
     val styles = remember(colors, links, onLink) { InlineStyles(colors, links, onLink) }
-    val scope = PreviewScope(styles, readonly, onTask, images, agendas, onAgendaRefresh)
+    val scope = PreviewScope(styles, readonly, onTask, images, agendas, onAgendaRefresh, onAgendaOpen)
     LazyColumn(
         modifier
             .fillMaxSize()
@@ -161,6 +164,7 @@ internal class PreviewScope(
     val images: ImageEnv?,
     val agendas: Map<Int, AgendaBlockState> = emptyMap(),
     val onAgendaRefresh: (AgendaRequest) -> Unit = {},
+    val onAgendaOpen: ((AgendaOccurrence) -> Unit)? = null,
 )
 
 private val MONO = FontFamily.Monospace

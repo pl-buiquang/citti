@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Agenda items open their event in the calendar app: the event is looked up by its UID (ADR 0013). -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
 
     <application
         android:name=".CittiApp"

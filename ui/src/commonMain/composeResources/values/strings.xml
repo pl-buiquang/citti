@@ -440,6 +440,7 @@
     <string name="agenda_offline_updated">Offline · updated %1$s</string>
     <string name="agenda_cant_load">Offline, can't load events</string>
     <string name="agenda_refresh">Refresh</string>
+    <string name="agenda_open">Open in calendar</string>
     <string name="agenda_invalid_date">Invalid date "%1$s". Use YYYY-MM-DD, today, tomorrow, yesterday or +N/-N.</string>
     <string name="agenda_no_calendar">No calendar enabled. Settings › Agenda › Discover calendars.</string>
     <string name="agenda_no_match">No enabled calendar named %1$s.</string>

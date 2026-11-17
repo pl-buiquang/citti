@@ -58,6 +58,14 @@ class AgendaLayoutTest {
         assertEquals(listOf("All day holiday", "09:00–10:00 early", "14:00–15:00 late"), view.days[0].items.map { it.markdown })
         assertEquals(listOf(false, true, false), view.days[0].items.map { it.dimmed })
         assertEquals(listOf("09:00–09:30 tomorrow"), view.days[1].items.map { it.markdown })
+        val standup = view.days[0].items[1].occurrence
+        assertEquals(AgendaOccurrence("early", "early", at(16, 9).instant, at(16, 10).instant, allDay = false), standup)
+        assertEquals(
+            true,
+            view.days[0]
+                .items[0]
+                .occurrence.allDay,
+        )
         assertEquals(listOf("Monday 16 November", "Tuesday 17 November"), view.days.map { it.header })
         assertNull(view.empty)
     }
