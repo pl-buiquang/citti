@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.glance.appwidget.testing.unit.hasStartActivityClickAction
 import androidx.glance.appwidget.testing.unit.runGlanceAppWidgetUnitTest
 import androidx.glance.testing.unit.hasText
+import androidx.glance.testing.unit.hasTextEqualTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.citti.R
@@ -28,7 +29,8 @@ class FavoritesWidgetTest {
             provideComposable { FavoritesContent(FavoritesState.Loaded(rows, TODAY)) }
 
             onNode(hasText("Groceries")).assertExists()
-            onNode(hasText(context.getString(R.string.widget_root_folder))).assertExists()
+            // The root Folder label and the header both read "Notes".
+            onAllNodes(hasTextEqualTo(context.getString(R.string.widget_root_folder))).assertCountEquals(2)
             onNode(hasText("Trip plan")).assertExists()
             onNode(hasText("personal/trips")).assertExists()
             onNode(hasStartActivityClickAction(WidgetIntents.note(context, 7))).assertExists()
@@ -36,13 +38,13 @@ class FavoritesWidgetTest {
         }
 
     @Test
-    fun theHeaderOpensTheApp() =
+    fun theHeaderSaysNotesAndOpensTheMainModeRoot() =
         runGlanceAppWidgetUnitTest {
             setContext(context)
             provideComposable { FavoritesContent(FavoritesState.Loaded(emptyList(), TODAY)) }
 
-            onNode(hasText(context.getString(R.string.widget_favorites_name))).assertExists()
-            onNode(hasStartActivityClickAction(WidgetIntents.app(context))).assertExists()
+            onNode(hasTextEqualTo(context.getString(R.string.widget_favorites_header))).assertExists()
+            onNode(hasStartActivityClickAction(WidgetIntents.home(context))).assertExists()
         }
 
     @Test
@@ -62,7 +64,7 @@ class FavoritesWidgetTest {
 
             onNode(hasText(context.getString(R.string.widget_signed_out))).assertExists()
             onNode(hasStartActivityClickAction(WidgetIntents.app(context))).assertExists()
-            onNode(hasText(context.getString(R.string.widget_favorites_name))).assertDoesNotExist()
+            onNode(hasTextEqualTo(context.getString(R.string.widget_favorites_header))).assertDoesNotExist()
         }
 
     @Test

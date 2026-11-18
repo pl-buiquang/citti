@@ -108,13 +108,13 @@ fun FavoritesContent(state: FavoritesState) {
         Row(
             GlanceModifier
                 .fillMaxWidth()
-                .clickable(actionStartActivity(WidgetIntents.app(context)))
+                .clickable(actionStartActivity(WidgetIntents.home(context)))
                 .padding(horizontal = NotesSpacing.space4, vertical = NotesSpacing.space3),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("★", style = WidgetText.star)
             Spacer(GlanceModifier.width(NotesSpacing.space2))
-            Text(WidgetText.label(context.getString(R.string.widget_favorites_name)), style = WidgetText.header)
+            Text(WidgetText.label(context.getString(R.string.widget_favorites_header)), style = WidgetText.header)
         }
         val loaded = state as FavoritesState.Loaded
         val rows = loaded.rows

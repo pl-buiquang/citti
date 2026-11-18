@@ -70,7 +70,7 @@ class AppearanceWidgetTest {
     }
 
     private companion object {
-        const val HEADER = "Favorites"
+        const val HEADER = "Notes"
         const val ATTEMPTS = 20
         const val SETTLE_MS = 1_000L
         const val TOLERANCE = 3

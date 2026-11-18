@@ -18,6 +18,13 @@ class DeepLinkTest {
         assertEquals("citti://note/5", DeepLink.noteUri(5, null))
         assertEquals("citti://daily", DeepLink.dailyUri(false))
         assertEquals("citti://daily?resume=1", DeepLink.dailyUri(true))
+        assertEquals("citti://home", DeepLink.homeUri())
+    }
+
+    @Test
+    fun theHomeLinkParses() {
+        assertEquals(DeepLinkTarget.Home, DeepLink.parse(DeepLink.homeUri()))
+        assertNull(DeepLink.parse("citti://home/1"))
     }
 
     @Test

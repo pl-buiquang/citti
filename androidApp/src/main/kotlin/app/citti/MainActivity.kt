@@ -354,6 +354,7 @@ class MainActivity : ComponentActivity() {
         target: DeepLinkTarget,
         navigator: Navigator,
         today: TodayAction,
+        root: Route,
     ) {
         routes.controllers<NoteController>().forEach { it.onLeave() }
         when (target) {
@@ -364,6 +365,10 @@ class MainActivity : ComponentActivity() {
 
             is DeepLinkTarget.Today -> {
                 today.openToday(resume = target.resume, entry = true)
+            }
+
+            DeepLinkTarget.Home -> {
+                navigator.reset(listOf(root))
             }
         }
     }
@@ -411,7 +416,7 @@ class MainActivity : ComponentActivity() {
         // A widget or adb link: after the navigator exists, whether the app was cold-started or was already open.
         LaunchedEffect(navigator) {
             pendingDeepLink.filterNotNull().collect { target ->
-                applyDeepLink(target, navigator, today)
+                applyDeepLink(target, navigator, today, root)
                 pendingDeepLink.value = null
             }
         }

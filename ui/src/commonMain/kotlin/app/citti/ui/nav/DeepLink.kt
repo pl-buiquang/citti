@@ -12,9 +12,12 @@ sealed interface DeepLinkTarget {
     data class Today(
         val resume: Boolean,
     ) : DeepLinkTarget
+
+    /** Open the root of the main mode (List, Tree or Calendar). */
+    data object Home : DeepLinkTarget
 }
 
-/** Parses and builds the `citti://note/<id>[?line=<n>]` and `citti://daily[?resume=1]` links the widgets use. */
+/** Parses and builds the `citti://note/<id>[?line=<n>]` and `citti://daily[?resume=1]` and `citti://home` links the widgets use. */
 object DeepLink {
     private const val SCHEME = "citti://"
 
@@ -24,6 +27,8 @@ object DeepLink {
     ): String = "${SCHEME}note/$localId" + if (line != null) "?line=$line" else ""
 
     fun dailyUri(resume: Boolean): String = "${SCHEME}daily" + if (resume) "?resume=1" else ""
+
+    fun homeUri(): String = "${SCHEME}home"
 
     /** The target of [uri], or null when it is not a link of ours (the app then opens normally). */
     fun parse(uri: String): DeepLinkTarget? {
@@ -41,6 +46,10 @@ object DeepLink {
 
             "daily" -> {
                 if (segments.size == 1) DeepLinkTarget.Today(resume = query["resume"] == "1") else null
+            }
+
+            "home" -> {
+                if (segments.size == 1) DeepLinkTarget.Home else null
             }
 
             else -> {

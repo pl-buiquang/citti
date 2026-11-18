@@ -20,6 +20,9 @@ object WidgetIntents {
         resume: Boolean,
     ): Intent = view(context, DeepLink.dailyUri(resume))
 
+    /** The root of the main mode (List, Tree or Calendar), the stack reset. */
+    fun home(context: Context): Intent = view(context, DeepLink.homeUri())
+
     /** The Note picker of one widget. The data makes the PendingIntent distinct per widget (extras are ignored for that). */
     fun picker(
         context: Context,
