@@ -7,8 +7,13 @@ import app.citti.core.search.foldedText
 import app.citti.core.sync.categoryMatchesAny
 
 sealed interface LinkTarget {
+    /**
+     * [ambiguous]: a bare name (no folder) that several Notes outside the current folder share; [localId] is the most
+     * recently modified of them.
+     */
     data class Note(
         val localId: Long,
+        val ambiguous: Boolean = false,
     ) : LinkTarget
 
     /** The target lies under an Unsynced folder: it exists on the server but not on this device. */
@@ -46,16 +51,18 @@ class LinkResolver(
             val folder = t.substringBeforeLast('/').trim('/')
             return byPath(folder, t.substringAfterLast('/'))
         }
-        notes.selectByFolderAndTitle(currentFolder, t).executeAsOneOrNull()?.let { return LinkTarget.Note(it) }
-        val all = notes.selectByTitle(t).executeAsList()
-        // The unique match, or the most recently modified of the duplicates (the query is ordered).
-        return all.firstOrNull()?.let { LinkTarget.Note(it.local_id) } ?: LinkTarget.Missing
+        return byName(currentFolder, t)
     }
 
-    /** A markdown link to a `.md` file: relative to [currentFolder] first, then as a path from the Vault root. */
+    /**
+     * A markdown link to a `.md` file: relative to [currentFolder] first, then as a path from the Vault root. With
+     * [byName], a bare file name found at neither is looked up by title in the whole Vault, as Obsidian does (it
+     * writes the shortest unique path, often the name alone).
+     */
     fun resolveMarkdownLink(
         currentFolder: String,
         url: String,
+        byName: Boolean = true,
     ): LinkTarget {
         val path = url.substringBefore('#').substringBefore('?')
         var firstUnsynced: LinkTarget? = null
@@ -65,7 +72,24 @@ class LinkResolver(
             if (found is LinkTarget.Note) return found
             if (found is LinkTarget.Unsynced && firstUnsynced == null) firstUnsynced = found
         }
+        if (byName && '/' !in path) {
+            val title = clean(path)
+            if (title.isNotEmpty()) (byName(currentFolder, title) as? LinkTarget.Note)?.let { return it }
+        }
         return firstUnsynced ?: LinkTarget.Missing
+    }
+
+    /**
+     * A bare name: the Note in [currentFolder], else the unique match in the Vault, else the most recently modified of
+     * the duplicates (the query is ordered), flagged [LinkTarget.Note.ambiguous].
+     */
+    private fun byName(
+        currentFolder: String,
+        title: String,
+    ): LinkTarget {
+        notes.selectByFolderAndTitle(currentFolder, title).executeAsOneOrNull()?.let { return LinkTarget.Note(it) }
+        val all = notes.selectByTitle(title).executeAsList()
+        return all.firstOrNull()?.let { LinkTarget.Note(it.local_id, ambiguous = all.size > 1) } ?: LinkTarget.Missing
     }
 
     private fun byPath(

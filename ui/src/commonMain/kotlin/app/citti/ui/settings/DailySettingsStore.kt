@@ -88,7 +88,10 @@ class CoreDailySettingsStore(
 
     override suspend fun setTemplate(path: String) = withContext(io) { settings.setTemplate(path) }
 
-    override suspend fun isLocalNote(path: String): Boolean = withContext(io) { links.resolveMarkdownLink("", path) is LinkTarget.Note }
+    override suspend fun isLocalNote(path: String): Boolean =
+        withContext(io) {
+            links.resolveMarkdownLink("", path, byName = false) is LinkTarget.Note
+        }
 
     override suspend fun suggest(query: String): List<Suggestion> = withContext(io) { links.suggest(query) }
 

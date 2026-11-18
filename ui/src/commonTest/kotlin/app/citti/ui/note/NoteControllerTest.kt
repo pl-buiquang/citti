@@ -898,6 +898,21 @@ class NoteControllerTest {
         }
 
     @Test
+    fun anAmbiguousLinkOpensTheNoteAndWarns() =
+        runTest {
+            val f =
+                open(doc("[[Plan]] [x](x.md)"), route = Route.Note(1, preview = true)) {
+                    targets[LinkRef.Wiki("Plan")] = LinkTarget.Note(5, ambiguous = true)
+                    targets[LinkRef.Markdown("x.md")] = LinkTarget.Note(6, ambiguous = true)
+                }
+            f.controller.onLink(LinkRef.Wiki("Plan"))
+            f.controller.onLink(LinkRef.Markdown("x.md"))
+            runCurrent()
+            assertEquals(Route.Note(6), f.navigator.top)
+            assertEquals(listOf<Snack>(Snack.LinkAmbiguous("Plan"), Snack.LinkAmbiguous("x")), f.snacks)
+        }
+
+    @Test
     fun createOnAnUnresolvedLinkFlushesThenOpensTheNewNoteDialogPrefilled() =
         runTest {
             val creation = LinkCreation()

@@ -30,6 +30,7 @@ import app.citti.ui.resources.dropped_snackbar
 import app.citti.ui.resources.dropped_today
 import app.citti.ui.resources.guard_snackbar
 import app.citti.ui.resources.import_done
+import app.citti.ui.resources.link_ambiguous
 import app.citti.ui.resources.link_create
 import app.citti.ui.resources.link_missing
 import app.citti.ui.resources.link_unsynced
@@ -80,6 +81,11 @@ sealed interface Snack {
     ) : Snack
 
     data object LinkUnsynced : Snack
+
+    /** A tap on a bare-name link that several Notes share: the most recently modified one opened. */
+    data class LinkAmbiguous(
+        val name: String,
+    ) : Snack
 
     /** The automatic Import from Obsidian read the Daily notes settings (shown only when it read something). */
     data object DailyImported : Snack
@@ -145,6 +151,7 @@ fun SnackbarHost(
             Snack.JournalUnsynced -> stringResource(Res.string.guard_snackbar)
             is Snack.LinkMissing -> stringResource(Res.string.link_missing, shown.name)
             Snack.LinkUnsynced -> stringResource(Res.string.link_unsynced)
+            is Snack.LinkAmbiguous -> stringResource(Res.string.link_ambiguous, shown.name)
             Snack.DailyImported -> stringResource(Res.string.import_done)
             Snack.FavoriteAdded -> stringResource(Res.string.toast_favorite_added)
             Snack.FavoriteRemoved -> stringResource(Res.string.toast_favorite_removed)

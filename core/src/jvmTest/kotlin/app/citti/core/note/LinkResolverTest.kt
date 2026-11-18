@@ -46,7 +46,7 @@ class LinkResolverTest {
         add("Plan", "home", modified = 9)
         val unique = add("Only", "deep/er")
         assertEquals(note(here), resolver.resolve("work", "Plan"))
-        // Not in the current folder: the most recent duplicate.
+        // Not in the current folder: the most recent duplicate, flagged ambiguous.
         assertEquals(
             LinkTarget.Note(
                 notes
@@ -54,6 +54,7 @@ class LinkResolverTest {
                     .executeAsList()
                     .first()
                     .local_id,
+                ambiguous = true,
             ),
             resolver.resolve("none", "plan"),
         )
@@ -80,6 +81,29 @@ class LinkResolverTest {
         assertEquals(note(far), resolver.resolveMarkdownLink("x/y", "../../a/b/deep.md#h"))
         assertEquals(note(root), resolver.resolveMarkdownLink("work", "/readme.md"))
         assertEquals(LinkTarget.Missing, resolver.resolveMarkdownLink("work", "../../../x.md"))
+    }
+
+    @Test
+    fun aBareMarkdownFileNameIsFoundAnywhereInTheVault() {
+        val far = add("cybeats-clean-next-release", "work/cybeats")
+        val spaced = add("My Note", "a/b")
+        assertEquals(note(far), resolver.resolveMarkdownLink("journal", "cybeats-clean-next-release.md"))
+        assertEquals(note(far), resolver.resolveMarkdownLink("journal", "cybeats-clean-next-release.md#h"))
+        assertEquals(note(spaced), resolver.resolveMarkdownLink("journal", "My%20Note.md"))
+        // A path is a path: no lookup by name.
+        assertEquals(LinkTarget.Missing, resolver.resolveMarkdownLink("journal", "sub/cybeats-clean-next-release.md"))
+        assertEquals(LinkTarget.Missing, resolver.resolveMarkdownLink("journal", "../cybeats-clean-next-release.md"))
+        // The Template check keeps paths only.
+        assertEquals(LinkTarget.Missing, resolver.resolveMarkdownLink("", "cybeats-clean-next-release.md", byName = false))
+    }
+
+    @Test
+    fun aBareMarkdownNameSharedByNotesIsAmbiguousUnlessOneIsInTheCurrentFolder() {
+        val old = add("Plan", "home", modified = 1)
+        val recent = add("Plan", "work", modified = 9)
+        assertEquals(LinkTarget.Note(recent, ambiguous = true), resolver.resolveMarkdownLink("journal", "Plan.md"))
+        assertEquals(note(old), resolver.resolveMarkdownLink("home", "Plan.md"))
+        assertEquals(note(recent), resolver.resolve("work", "Plan"))
     }
 
     @Test

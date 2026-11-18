@@ -899,6 +899,7 @@ class NoteController(
             when (target) {
                 is LinkTarget.Note -> {
                     if (target.localId != localId) navigator.push(Route.Note(target.localId))
+                    if (target.ambiguous) notify(Snack.LinkAmbiguous(ref.displayName()))
                 }
 
                 is LinkTarget.Unsynced -> {
