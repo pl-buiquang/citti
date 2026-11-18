@@ -1,7 +1,6 @@
 package app.citti.e2e.flows
 
 import androidx.compose.ui.graphics.toArgb
-import androidx.glance.appwidget.updateAll
 import app.citti.core.appearance.ModeChoice
 import app.citti.core.appearance.ThemeChoice
 import app.citti.e2e.AppIntent
@@ -14,6 +13,7 @@ import app.citti.e2e.rules.Setup
 import app.citti.ui.theme.ThemeFamily
 import app.citti.ui.theme.notesColors
 import app.citti.widget.FavoritesWidget
+import app.citti.widget.refreshAll
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -37,7 +37,7 @@ class AppearanceWidgetTest {
         intent.finish()
     }
 
-    private val widget = WidgetRobot(WidgetStrings.FAVORITES_RECEIVER) { FavoritesWidget().updateAll(it) }
+    private val widget = WidgetRobot(WidgetStrings.FAVORITES_RECEIVER) { FavoritesWidget().refreshAll(it) }
 
     /** Polls the screenshot until the widget background is [expected] (the redraw is debounced 500 ms). */
     private fun assertBackground(expected: Int) {

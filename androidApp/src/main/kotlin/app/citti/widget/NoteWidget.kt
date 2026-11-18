@@ -70,8 +70,13 @@ class NoteWidget : GlanceAppWidget() {
     ) {
         val prefs = getAppWidgetState<Preferences>(context, id)
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
-        val state = loadNoteState(context, prefs[NOTE_WIDGET_LOCAL_ID], appWidgetId)
-        provideContent { WidgetThemeHost(context) { NoteContent(state) } }
+        val initial = loadNoteState(context, prefs[NOTE_WIDGET_LOCAL_ID], appWidgetId)
+        provideContent {
+            // The picker rebinds the widget through refresh: the load reads the Note id again.
+            val state =
+                rememberWidgetState(initial, prefs[WIDGET_REFRESH]) { loadNoteState(context, it[NOTE_WIDGET_LOCAL_ID], appWidgetId) }
+            WidgetThemeHost(context) { NoteContent(state) }
+        }
     }
 }
 

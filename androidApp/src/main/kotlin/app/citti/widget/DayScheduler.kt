@@ -6,7 +6,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.glance.appwidget.GlanceAppWidgetManager
-import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -77,8 +76,8 @@ class DayChangeReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
-                FavoritesWidget().updateAll(context)
-                DailyNoteWidget().updateAll(context)
+                FavoritesWidget().refreshAll(context)
+                DailyNoteWidget().refreshAll(context)
             } finally {
                 pending.finish()
             }

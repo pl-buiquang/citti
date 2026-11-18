@@ -1,6 +1,5 @@
 package app.citti.e2e.flows
 
-import androidx.glance.appwidget.updateAll
 import app.citti.core.fake.Endpoint
 import app.citti.e2e.AppIntent
 import app.citti.e2e.E2e
@@ -13,6 +12,7 @@ import app.citti.e2e.rules.E2eRules
 import app.citti.e2e.rules.Setup
 import app.citti.widget.FavoritesWidget
 import app.citti.widget.dateLabel
+import app.citti.widget.refreshAll
 import kotlinx.datetime.LocalDate
 import org.junit.After
 import org.junit.Ignore
@@ -31,7 +31,7 @@ class FavoritesWidgetTest {
     @After
     fun finishApp() = intent.finish()
 
-    private val widget = WidgetRobot(WidgetStrings.FAVORITES_RECEIVER) { FavoritesWidget().updateAll(it) }
+    private val widget = WidgetRobot(WidgetStrings.FAVORITES_RECEIVER) { FavoritesWidget().refreshAll(it) }
     private val note = NoteRobot(e2e)
     private val server = ServerAssert()
 
@@ -106,9 +106,6 @@ class FavoritesWidgetTest {
         server.assertRequests(Endpoint.CREATE, 1)
     }
 
-    @Ignore(
-        "A redraw after the first draw (WidgetRefresher after a sync) never shows on the launcher within 10 s on api36Google; suspected test WorkManager (E2eApp SynchronousExecutor) not running the second Glance SessionWorker. Not verified on a real device.",
-    )
     @Test
     fun aSyncThatChangesTheFavoritesRedrawsTheWidget() {
         widget.place()

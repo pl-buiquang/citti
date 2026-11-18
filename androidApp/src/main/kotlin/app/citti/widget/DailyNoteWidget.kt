@@ -63,8 +63,12 @@ class DailyNoteWidget : GlanceAppWidget() {
         id: GlanceId,
     ) {
         DayScheduler.schedule(context)
-        val state = loadDailyState(context)
-        provideContent { WidgetThemeHost(context) { DailyNoteContent(state) } }
+        val loadedAt = refreshKey(context, id)
+        val initial = loadDailyState(context)
+        provideContent {
+            val state = rememberWidgetState(initial, loadedAt) { loadDailyState(context) }
+            WidgetThemeHost(context) { DailyNoteContent(state) }
+        }
     }
 }
 

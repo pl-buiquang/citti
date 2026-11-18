@@ -21,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.glance.appwidget.GlanceAppWidgetManager
-import androidx.glance.appwidget.state.updateAppWidgetState
 import app.citti.AndroidSyncLog
 import app.citti.AppContainer
 import app.citti.CittiApp
@@ -149,8 +148,7 @@ class NotePickerActivity : ComponentActivity() {
     private fun pick(localId: Long) {
         scope.launch {
             val glanceId = GlanceAppWidgetManager(this@NotePickerActivity).getGlanceIdBy(appWidgetId)
-            updateAppWidgetState(this@NotePickerActivity, glanceId) { it[NOTE_WIDGET_LOCAL_ID] = localId }
-            NoteWidget().update(this@NotePickerActivity, glanceId)
+            NoteWidget().refresh(this@NotePickerActivity, glanceId) { it[NOTE_WIDGET_LOCAL_ID] = localId }
             setResult(RESULT_OK, result())
             finish()
         }

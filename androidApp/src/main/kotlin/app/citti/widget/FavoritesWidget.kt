@@ -53,8 +53,12 @@ class FavoritesWidget : GlanceAppWidget() {
         id: GlanceId,
     ) {
         DayScheduler.schedule(context)
-        val state = loadFavoritesState(context)
-        provideContent { WidgetThemeHost(context) { FavoritesContent(state) } }
+        val loadedAt = refreshKey(context, id)
+        val initial = loadFavoritesState(context)
+        provideContent {
+            val state = rememberWidgetState(initial, loadedAt) { loadFavoritesState(context) }
+            WidgetThemeHost(context) { FavoritesContent(state) }
+        }
     }
 }
 

@@ -3,7 +3,6 @@ package app.citti.widget
 import android.content.Context
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.getAppWidgetState
-import androidx.glance.appwidget.updateAll
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import app.citti.AndroidSyncLog
 import app.citti.core.api.ApiError
@@ -42,9 +41,9 @@ class WidgetRefresher(
     /** All three widgets: sign-in, sign-out, favorites, titles, folders and Hidden folders changed. */
     fun updateAll() =
         launch("all") {
-            FavoritesWidget().updateAll(context)
-            NoteWidget().updateAll(context)
-            DailyNoteWidget().updateAll(context)
+            FavoritesWidget().refreshAll(context)
+            NoteWidget().refreshAll(context)
+            DailyNoteWidget().refreshAll(context)
         }
 
     private var appearanceJob: Job? = null
@@ -66,16 +65,16 @@ class WidgetRefresher(
             val widget = NoteWidget()
             manager.getGlanceIds(NoteWidget::class.java).forEach { id ->
                 val bound = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)[NOTE_WIDGET_LOCAL_ID]
-                if (bound == localId) widget.update(context, id)
+                if (bound == localId) widget.refresh(context, id)
             }
-            if (todayNote() == localId) DailyNoteWidget().updateAll(context)
+            if (todayNote() == localId) DailyNoteWidget().refreshAll(context)
         }
 
     /** The Daily note widgets and the Favorites widgets (the Today row's date). */
     fun updateDaily() =
         launch("daily") {
-            DailyNoteWidget().updateAll(context)
-            FavoritesWidget().updateAll(context)
+            DailyNoteWidget().refreshAll(context)
+            FavoritesWidget().refreshAll(context)
         }
 
     private fun launch(

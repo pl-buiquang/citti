@@ -1,7 +1,6 @@
 package app.citti.e2e.flows
 
 import android.content.Intent
-import androidx.glance.appwidget.updateAll
 import app.citti.core.fake.Endpoint
 import app.citti.e2e.AppIntent
 import app.citti.e2e.E2e
@@ -18,6 +17,7 @@ import app.citti.e2e.setViewLine
 import app.citti.widget.DailyNoteWidget
 import app.citti.widget.DayChangeReceiver
 import app.citti.widget.dateLabel
+import app.citti.widget.refreshAll
 import kotlinx.datetime.LocalDate
 import org.junit.After
 import org.junit.Ignore
@@ -36,13 +36,10 @@ class DailyWidgetTest {
     @After
     fun finishApp() = intent.finish()
 
-    private val widget = WidgetRobot(WidgetStrings.DAILY_RECEIVER) { DailyNoteWidget().updateAll(it) }
+    private val widget = WidgetRobot(WidgetStrings.DAILY_RECEIVER) { DailyNoteWidget().refreshAll(it) }
     private val note = NoteRobot(e2e)
     private val server = ServerAssert()
 
-    @Ignore(
-        "The tap creates the note, but the redraw after the creation (updateDaily) never shows the new text on the launcher within 10 s on api36Google; a redraw after the first draw does not seem to reach the launcher in the emulator.",
-    )
     @Test
     fun withoutANoteTodayTheWidgetSaysSoAndATapCreatesItFromTheTemplate() {
         moveTo(DailyNotesTest.OCT_31)
@@ -84,9 +81,6 @@ class DailyWidgetTest {
         server.assertRequests(Endpoint.CREATE, 0)
     }
 
-    @Ignore(
-        "The redraw triggered by DayChangeReceiver does not show the new date on the launcher within 10 s on api36Google; a redraw after the first draw does not seem to reach the launcher in the emulator.",
-    )
     @Test
     fun afterMidnightTheWidgetShowsTheNewDayAndATapOpensIt() {
         widget.place()
